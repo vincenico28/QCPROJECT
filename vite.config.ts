@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [
     tanstackStart({
       server: {
+        // @ts-expect-error - preset is valid in nitro/vinxi but missing in beta types
+        preset: "vercel",
         entry: "src/server.ts"
       }
     }),
