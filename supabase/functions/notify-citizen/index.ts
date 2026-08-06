@@ -1,8 +1,9 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const TWILIO_MOCK = true;
 
-serve(async (req) => {
+serve(async (req: Request) => {
   try {
     const payload = await req.json();
     const { type, record } = payload;
