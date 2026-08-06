@@ -11,17 +11,17 @@ import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
 export const Route = createFileRoute("/lookup")({
   head: () => ({
     meta: [
-      { title: "Citation Lookup · QC Traffic Ops" },
+      { title: "Citation Lookup · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Check the status and amount due of a Quezon City traffic citation using your plate number and citation reference.",
+          "Check the status and amount due of a Barangay Culiat, Quezon City traffic citation using your plate number and citation reference.",
       },
-      { property: "og:title", content: "Citation Lookup · QC Traffic Ops" },
+      { property: "og:title", content: "Citation Lookup · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:
-          "Motorist self-service portal to verify a Quezon City traffic citation, its offense, amount and payment status.",
+          "Motorist self-service portal to verify a Barangay Culiat, Quezon City traffic citation, its offense, amount and payment status.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

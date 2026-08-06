@@ -31,17 +31,17 @@ export const Route = createFileRoute("/dashboard")({
   },
   head: () => ({
     meta: [
-      { title: "Command Dashboard · QC Traffic Ops" },
+      { title: "Command Dashboard · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Real-time traffic violations, AI detections, live CCTV feeds and citation revenue for Quezon City.",
+          "Real-time traffic violations, AI detections, live CCTV feeds and citation revenue for Barangay Culiat, Quezon City.",
       },
-      { property: "og:title", content: "Command Dashboard · QC Traffic Ops" },
+      { property: "og:title", content: "Command Dashboard · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:
-          "Live AI enforcement dashboard for the Quezon City LGU: violations, citations, cameras, and revenue.",
+          "Live AI enforcement dashboard for the Barangay Culiat, Quezon City LGU: violations, citations, cameras, and revenue.",
       },
     ],
   }),
@@ -131,7 +131,7 @@ function CommandDashboard() {
         <div className="panel relative overflow-hidden rounded-3xl">
           <img
             src={qcMap}
-            alt="Real-time GIS heatmap of Quezon City traffic congestion"
+            alt="Real-time GIS heatmap of Barangay Culiat, Quezon City traffic congestion"
             className="h-[420px] w-full object-cover opacity-70"
             width={1600}
             height={900}
@@ -164,7 +164,7 @@ function CommandDashboard() {
           <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Quezon City · Live Traffic Heatmap
+                Barangay Culiat, Quezon City · Live Traffic Heatmap
               </p>
               <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
                 Updated · {new Date().toLocaleTimeString("en-PH")}

@@ -53,7 +53,7 @@ export function OfficerShell({ children }: { children: ReactNode }) {
       {/* Mobile Top Bar */}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md sm:hidden">
         <div className="flex items-center gap-2">
-          <img src="/qc-favicon.webp" alt="QC Logo" className="size-6 object-contain" />
+          <img src="/favico2.png" alt="QC Logo" className="size-6 object-contain" />
           <span className="font-semibold tracking-tight">QC Field Ops</span>
         </div>
         <button
@@ -71,7 +71,7 @@ export function OfficerShell({ children }: { children: ReactNode }) {
       {/* Desktop Sidebar (Optional fallback if viewed on desktop) */}
       <aside className="fixed inset-y-0 left-0 hidden w-20 flex-col items-center gap-8 border-r border-border bg-panel py-6 sm:flex">
         <div className="grid size-10 place-items-center overflow-hidden rounded-xl shadow-lg shadow-primary/30">
-          <img src="/qc-favicon.webp" alt="QC Logo" className="size-full object-contain" />
+          <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
         </div>
         <nav className="flex flex-col gap-2">
           {NAV.map((item) => {

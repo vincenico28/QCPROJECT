@@ -8,16 +8,16 @@ import { Filter, Search } from "lucide-react";
 export const Route = createFileRoute("/violations")({
   head: () => ({
     meta: [
-      { title: "Violations · QC Traffic Ops" },
+      { title: "Violations · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "AI-detected traffic violations across Quezon City with confidence scores, evidence, and enforcement status.",
+          "AI-detected traffic violations across Barangay Culiat, Quezon City with confidence scores, evidence, and enforcement status.",
       },
-      { property: "og:title", content: "Violations · QC Traffic Ops" },
+      { property: "og:title", content: "Violations · Culiat Traffic Ops" },
       {
         property: "og:description",
-        content: "Live AI-detected violations across Quezon City with evidence and status.",
+        content: "Live AI-detected violations across Barangay Culiat, Quezon City with evidence and status.",
       },
     ],
   }),

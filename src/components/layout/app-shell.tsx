@@ -70,9 +70,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Link
           to="/dashboard"
           className="grid size-10 place-items-center overflow-hidden rounded-xl shadow-lg shadow-primary/30"
-          aria-label="Quezon City Traffic Ops"
+          aria-label="Barangay Culiat, Quezon City Traffic Ops"
         >
-          <img src="/qc-favicon.webp" alt="QC Logo" className="size-full object-contain" />
+          <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
         </Link>
 
         <nav className="flex flex-col gap-2">
@@ -185,7 +185,7 @@ function PageHeading({ pathname }: { pathname: string }) {
     <div className="min-w-0">
       <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">{title}</h1>
       <p className="font-mono-tab text-[11px] uppercase tracking-widest text-subtle">
-        Sector · Quezon City Central District
+        Sector · Barangay Culiat, Quezon City Central District
       </p>
     </div>
   );

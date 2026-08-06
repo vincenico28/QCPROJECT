@@ -76,30 +76,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
-        title: "QC Traffic Ops — AI Enforcement Command · Quezon City LGU",
+        title: "Culiat Traffic Ops — AI Enforcement Command · Barangay Culiat, Quezon City LGU",
       },
       {
         name: "description",
         content:
-          "Real-time AI traffic violation detection, IoT camera monitoring, digital citations and online payment for the Quezon City LGU.",
+          "Real-time AI traffic violation detection, IoT camera monitoring, digital citations and online payment for the Barangay Culiat, Quezon City LGU.",
       },
-      { name: "author", content: "Quezon City LGU" },
+      { name: "author", content: "Barangay Culiat, Quezon City LGU" },
       { name: "theme-color", content: "#020617" },
       {
         property: "og:title",
-        content: "QC Traffic Ops — AI Enforcement Command",
+        content: "Culiat Traffic Ops — AI Enforcement Command",
       },
       {
         property: "og:description",
         content:
-          "Live AI violation detection, CCTV monitoring, and digital citations for Quezon City.",
+          "Live AI violation detection, CCTV monitoring, and digital citations for Barangay Culiat, Quezon City.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/qc-favicon.webp", type: "image/webp" },
+      { rel: "icon", href: "/favico2.png", type: "image/png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
         rel: "preconnect",

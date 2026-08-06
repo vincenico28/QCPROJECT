@@ -9,14 +9,14 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/officers/$badge")({
   head: ({ params }) => ({
     meta: [
-      { title: `Officer #${params.badge} · QC Traffic Ops` },
+      { title: `Officer #${params.badge} · Culiat Traffic Ops` },
       {
         name: "description",
-        content: `Service record for Quezon City traffic enforcer badge #${params.badge}: duty status, citations issued, revenue collected and dispatch history.`,
+        content: `Service record for Barangay Culiat, Quezon City traffic enforcer badge #${params.badge}: duty status, citations issued, revenue collected and dispatch history.`,
       },
       {
         property: "og:title",
-        content: `Officer #${params.badge} · QC Traffic Ops`,
+        content: `Officer #${params.badge} · Culiat Traffic Ops`,
       },
       {
         property: "og:description",

@@ -25,14 +25,14 @@ import { useAuth } from "@/hooks/use-auth";
 export const Route = createFileRoute("/cameras/$code")({
   head: ({ params }) => ({
     meta: [
-      { title: `Camera ${params.code} · QC Traffic Ops` },
+      { title: `Camera ${params.code} · Culiat Traffic Ops` },
       {
         name: "description",
-        content: `Live status, recent AI detections, event timeline and troubleshooting actions for enforcement camera ${params.code} in Quezon City.`,
+        content: `Live status, recent AI detections, event timeline and troubleshooting actions for enforcement camera ${params.code} in Barangay Culiat, Quezon City.`,
       },
       {
         property: "og:title",
-        content: `Camera ${params.code} · QC Traffic Ops`,
+        content: `Camera ${params.code} · Culiat Traffic Ops`,
       },
       {
         property: "og:description",

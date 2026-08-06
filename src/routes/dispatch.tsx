@@ -16,13 +16,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/dispatch")({
   head: () => ({
     meta: [
-      { title: "Officer Dispatch Board · QC Traffic Ops" },
+      { title: "Officer Dispatch Board · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Assign Quezon City enforcement officers to incidents and track dispatch status from queued to resolved.",
+          "Assign Barangay Culiat, Quezon City enforcement officers to incidents and track dispatch status from queued to resolved.",
       },
-      { property: "og:title", content: "Officer Dispatch Board · QC Traffic Ops" },
+      { property: "og:title", content: "Officer Dispatch Board · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:

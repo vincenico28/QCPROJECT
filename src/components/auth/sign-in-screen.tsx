@@ -46,10 +46,10 @@ export function SignInScreen() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="grid size-12 place-items-center overflow-hidden rounded-2xl shadow-lg shadow-primary/30">
-            <img src="/qc-favicon.webp" alt="QC Logo" className="size-full object-contain" />
+            <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
-            QC Traffic Operations
+            Culiat Traffic Operations
           </h1>
           <p className="mt-1 font-mono-tab text-[11px] uppercase tracking-widest text-subtle">
             Restricted · Authorized personnel only

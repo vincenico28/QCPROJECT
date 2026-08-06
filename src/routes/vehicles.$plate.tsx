@@ -17,14 +17,14 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/vehicles/$plate")({
   head: ({ params }) => ({
     meta: [
-      { title: `${params.plate} · Vehicle Record · QC Traffic Ops` },
+      { title: `${params.plate} · Vehicle Record · Culiat Traffic Ops` },
       {
         name: "description",
-        content: `Enforcement record for plate ${params.plate}: AI detections, issued citations, outstanding balance and watchlist risk level in Quezon City.`,
+        content: `Enforcement record for plate ${params.plate}: AI detections, issued citations, outstanding balance and watchlist risk level in Barangay Culiat, Quezon City.`,
       },
       {
         property: "og:title",
-        content: `${params.plate} · Vehicle Record · QC Traffic Ops`,
+        content: `${params.plate} · Vehicle Record · Culiat Traffic Ops`,
       },
       {
         property: "og:description",

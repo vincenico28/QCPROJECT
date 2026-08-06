@@ -7,17 +7,17 @@ import { Search, Download, Receipt, CheckCircle2, Clock, XCircle, TrendingUp } f
 export const Route = createFileRoute("/citations")({
   head: () => ({
     meta: [
-      { title: "Citations · QC Traffic Ops" },
+      { title: "Citations · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Digital traffic citations issued across Quezon City with payment status, officer attribution, and revenue analytics.",
+          "Digital traffic citations issued across Barangay Culiat, Quezon City with payment status, officer attribution, and revenue analytics.",
       },
-      { property: "og:title", content: "Citations · QC Traffic Ops" },
+      { property: "og:title", content: "Citations · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:
-          "Digital citations ledger with payment tracking and revenue analytics for Quezon City enforcement.",
+          "Digital citations ledger with payment tracking and revenue analytics for Barangay Culiat, Quezon City enforcement.",
       },
     ],
   }),

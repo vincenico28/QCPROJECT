@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/dispatches")({
   head: () => ({
-    meta: [{ title: "My Dispatches · QC Traffic Ops" }],
+    meta: [{ title: "My Dispatches · Culiat Traffic Ops" }],
   }),
   component: DispatchesPage,
 });

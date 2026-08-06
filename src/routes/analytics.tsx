@@ -22,13 +22,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
-      { title: "Enforcement Analytics · QC Traffic Ops" },
+      { title: "Enforcement Analytics · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Trend analysis of Quezon City traffic violations, citation revenue, offense mix and officer performance.",
+          "Trend analysis of Barangay Culiat, Quezon City traffic violations, citation revenue, offense mix and officer performance.",
       },
-      { property: "og:title", content: "Enforcement Analytics · QC Traffic Ops" },
+      { property: "og:title", content: "Enforcement Analytics · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:

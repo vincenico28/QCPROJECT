@@ -10,7 +10,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 
 export const Route = createFileRoute("/disputes")({
   head: () => ({
-    meta: [{ title: "Dispute Queue · QC Traffic Ops" }],
+    meta: [{ title: "Dispute Queue · Culiat Traffic Ops" }],
   }),
   beforeLoad: ({ context }) => {
     // @ts-expect-error - injected by router context

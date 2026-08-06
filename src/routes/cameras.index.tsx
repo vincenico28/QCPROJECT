@@ -9,17 +9,17 @@ import { useAuth } from "@/hooks/use-auth";
 export const Route = createFileRoute("/cameras/")({
   head: () => ({
     meta: [
-      { title: "IoT Cameras · QC Traffic Ops" },
+      { title: "IoT Cameras · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Live IoT enforcement camera network across Quezon City — uptime, health status, and per-camera detection counts.",
+          "Live IoT enforcement camera network across Barangay Culiat, Quezon City — uptime, health status, and per-camera detection counts.",
       },
-      { property: "og:title", content: "IoT Cameras · QC Traffic Ops" },
+      { property: "og:title", content: "IoT Cameras · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:
-          "Monitor the Quezon City enforcement camera network: uptime, health, and detections per node.",
+          "Monitor the Barangay Culiat, Quezon City enforcement camera network: uptime, health, and detections per node.",
       },
     ],
   }),

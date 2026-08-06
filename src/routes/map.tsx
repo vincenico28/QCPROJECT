@@ -18,16 +18,16 @@ const LeafletMap = lazy(() => import("@/components/map/leaflet-map"));
 export const Route = createFileRoute("/map")({
   head: () => ({
     meta: [
-      { title: "GIS Live Map · QC Traffic Ops" },
+      { title: "GIS Live Map · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Interactive Leaflet GIS heatmap of Quezon City traffic violations with road segment filters, time-range playback, and CSV export.",
+          "Interactive Leaflet GIS heatmap of Barangay Culiat, Quezon City traffic violations with road segment filters, time-range playback, and CSV export.",
       },
-      { property: "og:title", content: "GIS Live Map · QC Traffic Ops" },
+      { property: "og:title", content: "GIS Live Map · Culiat Traffic Ops" },
       {
         property: "og:description",
-        content: "Interactive heatmap of AI-detected traffic violations across Quezon City.",
+        content: "Interactive heatmap of AI-detected traffic violations across Barangay Culiat, Quezon City.",
       },
     ],
   }),
@@ -135,7 +135,7 @@ function GisMapPage() {
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
             <div className="pointer-events-auto rounded-xl border border-border bg-background/80 px-3 py-2 backdrop-blur-md">
               <p className="font-mono text-[10px] uppercase tracking-widest text-subtle">
-                Quezon City · Live GIS
+                Barangay Culiat, Quezon City · Live GIS
               </p>
               <p className="text-sm font-semibold text-foreground">
                 {filtered.length.toLocaleString()} detections in view

@@ -70,24 +70,24 @@
 :root {
   --radius: 0.75rem;
 
-  /* Base surfaces */
-  --background: oklch(0.14 0.03 260); /* #020617 slate-950 */
-  --surface: oklch(0.14 0.03 260);
-  --panel: oklch(0.2 0.04 260); /* #0F172A slate-900 */
-  --panel-elevated: oklch(0.24 0.045 260); /* between panel and border */
+  /* Base surfaces - saturated deep blue */
+  --background: oklch(0.28 0.07 258);
+  --surface: oklch(0.28 0.07 258);
+  --panel: oklch(0.32 0.08 258);
+  --panel-elevated: oklch(0.38 0.08 258);
   --foreground: oklch(0.98 0 0);
-  --muted: oklch(0.28 0.04 260);
-  --muted-foreground: oklch(0.68 0.03 260); /* slate-400 */
-  --subtle: oklch(0.55 0.03 260); /* slate-500 */
+  --muted: oklch(0.40 0.06 258);
+  --muted-foreground: oklch(0.75 0.03 258);
+  --subtle: oklch(0.60 0.03 258);
 
-  --border: oklch(1 0 0 / 0.06);
-  --border-strong: oklch(1 0 0 / 0.12);
+  --border: oklch(1 0 0 / 0.10);
+  --border-strong: oklch(1 0 0 / 0.18);
 
-  /* Brand accent — QC civic blue */
-  --primary: oklch(0.65 0.19 258); /* #3B82F6 */
+  /* Brand accent — Civic Red */
+  --primary: oklch(0.55 0.22 25);
   --primary-foreground: oklch(0.99 0 0);
-  --primary-glow: oklch(0.72 0.17 258);
-  --accent: oklch(0.65 0.19 258);
+  --primary-glow: oklch(0.60 0.22 25);
+  --accent: oklch(0.55 0.22 25);
   --accent-foreground: oklch(0.99 0 0);
 
   /* Signal colors */

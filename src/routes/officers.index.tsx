@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/officers/")({
   head: () => ({
     meta: [
-      { title: "Officers · QC Traffic Ops" },
+      { title: "Officers · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Quezon City traffic enforcement personnel roster with duty status, unit assignment, and citation output per officer.",
+          "Barangay Culiat, Quezon City traffic enforcement personnel roster with duty status, unit assignment, and citation output per officer.",
       },
-      { property: "og:title", content: "Officers · QC Traffic Ops" },
+      { property: "og:title", content: "Officers · Culiat Traffic Ops" },
       {
         property: "og:description",
         content: "Enforcement personnel roster: duty status, districts, units and citation output.",

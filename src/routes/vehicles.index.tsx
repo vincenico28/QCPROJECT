@@ -7,13 +7,13 @@ import { Search, Car, AlertTriangle, ShieldAlert, Ban } from "lucide-react";
 export const Route = createFileRoute("/vehicles/")({
   head: () => ({
     meta: [
-      { title: "Vehicles · QC Traffic Ops" },
+      { title: "Vehicles · Culiat Traffic Ops" },
       {
         name: "description",
         content:
-          "Vehicle registry aggregated from AI detections and citations across Quezon City — offender history, outstanding balances, and watchlist flags.",
+          "Vehicle registry aggregated from AI detections and citations across Barangay Culiat, Quezon City — offender history, outstanding balances, and watchlist flags.",
       },
-      { property: "og:title", content: "Vehicles · QC Traffic Ops" },
+      { property: "og:title", content: "Vehicles · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:

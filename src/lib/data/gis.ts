@@ -1,7 +1,7 @@
 // Browser-safe helpers for the GIS map. No leaflet imports here.
 import type { Violation, Camera } from "./traffic";
 
-// Quezon City centroid
+// Barangay Culiat, Quezon City centroid
 export const QC_CENTER: [number, number] = [14.676, 121.0437];
 
 export type GeoViolation = Violation & { lat: number; lng: number };

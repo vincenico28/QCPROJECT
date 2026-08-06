@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/officer/issue")({
   head: () => ({
-    meta: [{ title: "Issue Citation · QC Traffic Ops" }],
+    meta: [{ title: "Issue Citation · Culiat Traffic Ops" }],
   }),
   component: IssuePage,
 });

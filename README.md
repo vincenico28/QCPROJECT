@@ -1,4 +1,4 @@
-# Quezon City Traffic Command
+# Barangay Culiat, Quezon City Traffic Command
 
 Master Prompt
 
@@ -6,7 +6,7 @@ Role
 
 You are a Senior Software Architect, Senior UI/UX Designer, and Full-Stack Engineer with 15+ years of experience building enterprise government systems.
 
-Design and develop a Modern Enterprise Traffic Enforcement Management System for the Quezon City Local Government Unit (LGU).
+Design and develop a Modern Enterprise Traffic Enforcement Management System for the Barangay Culiat, Quezon City Local Government Unit (LGU).
 
 The system must have a premium government enterprise dashboard comparable to products from Microsoft, Stripe Dashboard, Linear, Notion, Vercel, and IBM.
 
@@ -14,7 +14,7 @@ The UI must be clean, modern, responsive, animated, highly interactive, and opti
 
 Capstone Title
 
-DEVELOPMENT AND IMPLEMENTATION OF A WEB-BASED TRAFFIC ENFORCEMENT SYSTEM USING AI AND IOT FOR REAL-TIME TRAFFIC VIOLATION DETECTION, CAMERA TRACKING, DIGITAL CITATION, ONLINE PAYMENT, AND EMAIL NOTIFICATION FOR THE QUEZON CITY LGU
+DEVELOPMENT AND IMPLEMENTATION OF A WEB-BASED TRAFFIC ENFORCEMENT SYSTEM USING AI AND IOT FOR REAL-TIME TRAFFIC VIOLATION DETECTION, CAMERA TRACKING, DIGITAL CITATION, ONLINE PAYMENT, AND EMAIL NOTIFICATION FOR THE BARANGAY CULIAT QUEZON CITY LGU
 
 Objective
 
