@@ -3,6 +3,7 @@ import {
   Outlet,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -10,6 +11,7 @@ import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { AppShell } from "@/components/layout/app-shell";
+import { OfficerShell } from "@/components/layout/officer-shell";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -138,12 +140,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const routerState = useRouterState();
+  const pathname = routerState.location.pathname;
+
+  const isOfficerRoute = pathname === "/officer" || pathname.startsWith("/officer/");
+  const Shell = isOfficerRoute ? OfficerShell : AppShell;
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
+      <Shell>
         <Outlet />
-      </AppShell>
+      </Shell>
       <Toaster />
     </QueryClientProvider>
   );

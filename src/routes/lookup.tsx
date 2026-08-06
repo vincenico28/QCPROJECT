@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Search, ShieldCheck, FileText } from "lucide-react"
 import { lookupCitation, type PublicCitation } from "@/lib/citation-lookup.functions";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
+import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
 
 export const Route = createFileRoute("/lookup")({
   head: () => ({
@@ -191,10 +192,24 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
       </div>
 
       {citation.status !== "paid" && (
-        <p className="text-xs text-muted-foreground">
-          Settle this citation at any QC LGU treasury window or authorized payment center. Bring a
-          valid ID and this reference number.
-        </p>
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-muted-foreground">
+            Settle this citation at any QC LGU treasury window or authorized payment center. Bring a
+            valid ID and this reference number.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link
+              to="/portal/pay/$citationId"
+              params={{ citationId: citation.citation_number }}
+              className="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90"
+            >
+              Pay Now Online
+            </Link>
+            {citation.status === "pending" && (
+              <FileDisputeDialog citationId={citation.id} citationNumber={citation.citation_number} />
+            )}
+          </div>
+        </div>
       )}
     </article>
   );

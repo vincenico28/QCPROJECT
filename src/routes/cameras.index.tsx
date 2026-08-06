@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Video, Wifi, WifiOff, Wrench, Radio, Search } from "lucide-react";
-import { useCameras, useViolations, type Camera } from "@/lib/data/traffic";
+import { useCameras, useViolations, useUpdateCamera, type Camera } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
+import { DeployCameraDialog } from "@/components/cameras/deploy-camera-dialog";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/cameras/")({
   head: () => ({
@@ -30,6 +32,7 @@ type CamFilter = (typeof FILTERS)[number];
 function CamerasPage() {
   const { data: cameras = [], isLoading } = useCameras();
   const { data: violations = [] } = useViolations(200);
+  const { role } = useAuth();
   const [filter, setFilter] = useState<CamFilter>("all");
   const [q, setQ] = useState("");
 
@@ -92,15 +95,26 @@ function CamerasPage() {
             </button>
           ))}
         </div>
-        <label className="relative flex items-center">
-          <Search className="pointer-events-none absolute left-3 size-4 text-subtle" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search camera code or location…"
-            className="w-full rounded-lg border border-border bg-panel py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 sm:w-80"
-          />
-        </label>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <label className="relative flex items-center flex-1 sm:flex-none">
+            <Search className="pointer-events-none absolute left-3 size-4 text-subtle" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search camera code or location…"
+              className="w-full rounded-lg border border-border bg-panel py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 sm:w-64"
+            />
+          </label>
+          {(role === "admin" || role === "dispatcher") && (
+            <DeployCameraDialog 
+              trigger={
+                <button className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+                  Deploy Node
+                </button>
+              }
+            />
+          )}
+        </div>
       </div>
 
       {isLoading ? (

@@ -10,23 +10,37 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as CitationsRouteImport } from './routes/citations'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DispatchRouteImport } from './routes/dispatch'
+import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as LookupRouteImport } from './routes/lookup'
 import { Route as MapRouteImport } from './routes/map'
+import { Route as OfficerRouteImport } from './routes/officer'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as CamerasIndexRouteImport } from './routes/cameras.index'
 import { Route as CamerasCodeRouteImport } from './routes/cameras.$code'
+import { Route as OfficerIndexRouteImport } from './routes/officer.index'
+import { Route as OfficerDispatchesRouteImport } from './routes/officer.dispatches'
+import { Route as OfficerIssueRouteImport } from './routes/officer.issue'
+import { Route as OfficerScanRouteImport } from './routes/officer.scan'
 import { Route as OfficersIndexRouteImport } from './routes/officers.index'
 import { Route as OfficersBadgeRouteImport } from './routes/officers.$badge'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as VehiclesPlateRouteImport } from './routes/vehicles.$plate'
+import { Route as PortalPayCitationIdRouteImport } from './routes/portal.pay.$citationId'
+import { Route as PortalReceiptCitationIdRouteImport } from './routes/portal.receipt.$citationId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -49,6 +63,11 @@ const DispatchRoute = DispatchRouteImport.update({
   path: '/dispatch',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DisputesRoute = DisputesRouteImport.update({
+  id: '/disputes',
+  path: '/disputes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LookupRoute = LookupRouteImport.update({
   id: '/lookup',
   path: '/lookup',
@@ -57,6 +76,11 @@ const LookupRoute = LookupRouteImport.update({
 const MapRoute = MapRouteImport.update({
   id: '/map',
   path: '/map',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OfficerRoute = OfficerRouteImport.update({
+  id: '/officer',
+  path: '/officer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ViolationsRoute = ViolationsRouteImport.update({
@@ -73,6 +97,26 @@ const CamerasCodeRoute = CamerasCodeRouteImport.update({
   id: '/cameras/$code',
   path: '/cameras/$code',
   getParentRoute: () => rootRouteImport,
+} as any)
+const OfficerIndexRoute = OfficerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OfficerRoute,
+} as any)
+const OfficerDispatchesRoute = OfficerDispatchesRouteImport.update({
+  id: '/dispatches',
+  path: '/dispatches',
+  getParentRoute: () => OfficerRoute,
+} as any)
+const OfficerIssueRoute = OfficerIssueRouteImport.update({
+  id: '/issue',
+  path: '/issue',
+  getParentRoute: () => OfficerRoute,
+} as any)
+const OfficerScanRoute = OfficerScanRouteImport.update({
+  id: '/scan',
+  path: '/scan',
+  getParentRoute: () => OfficerRoute,
 } as any)
 const OfficersIndexRoute = OfficersIndexRouteImport.update({
   id: '/officers/',
@@ -94,115 +138,180 @@ const VehiclesPlateRoute = VehiclesPlateRouteImport.update({
   path: '/vehicles/$plate',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalPayCitationIdRoute = PortalPayCitationIdRouteImport.update({
+  id: '/portal/pay/$citationId',
+  path: '/portal/pay/$citationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalReceiptCitationIdRoute = PortalReceiptCitationIdRouteImport.update({
+  id: '/portal/receipt/$citationId',
+  path: '/portal/receipt/$citationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/citations': typeof CitationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
+  '/disputes': typeof DisputesRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
+  '/officer': typeof OfficerRouteWithChildren
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
+  '/officer/dispatches': typeof OfficerDispatchesRoute
+  '/officer/issue': typeof OfficerIssueRoute
+  '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras/': typeof CamerasIndexRoute
+  '/officer/': typeof OfficerIndexRoute
   '/officers/': typeof OfficersIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/portal/pay/$citationId': typeof PortalPayCitationIdRoute
+  '/portal/receipt/$citationId': typeof PortalReceiptCitationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/citations': typeof CitationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
+  '/disputes': typeof DisputesRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
+  '/officer/dispatches': typeof OfficerDispatchesRoute
+  '/officer/issue': typeof OfficerIssueRoute
+  '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras': typeof CamerasIndexRoute
+  '/officer': typeof OfficerIndexRoute
   '/officers': typeof OfficersIndexRoute
   '/vehicles': typeof VehiclesIndexRoute
+  '/portal/pay/$citationId': typeof PortalPayCitationIdRoute
+  '/portal/receipt/$citationId': typeof PortalReceiptCitationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/citations': typeof CitationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
+  '/disputes': typeof DisputesRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
+  '/officer': typeof OfficerRouteWithChildren
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
+  '/officer/dispatches': typeof OfficerDispatchesRoute
+  '/officer/issue': typeof OfficerIssueRoute
+  '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras/': typeof CamerasIndexRoute
+  '/officer/': typeof OfficerIndexRoute
   '/officers/': typeof OfficersIndexRoute
   '/vehicles/': typeof VehiclesIndexRoute
+  '/portal/pay/$citationId': typeof PortalPayCitationIdRoute
+  '/portal/receipt/$citationId': typeof PortalReceiptCitationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/citations'
     | '/dashboard'
     | '/dispatch'
+    | '/disputes'
     | '/lookup'
     | '/map'
+    | '/officer'
     | '/violations'
     | '/cameras/$code'
+    | '/officer/dispatches'
+    | '/officer/issue'
+    | '/officer/scan'
     | '/officers/$badge'
     | '/vehicles/$plate'
     | '/cameras/'
+    | '/officer/'
     | '/officers/'
     | '/vehicles/'
+    | '/portal/pay/$citationId'
+    | '/portal/receipt/$citationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/citations'
     | '/dashboard'
     | '/dispatch'
+    | '/disputes'
     | '/lookup'
     | '/map'
     | '/violations'
     | '/cameras/$code'
+    | '/officer/dispatches'
+    | '/officer/issue'
+    | '/officer/scan'
     | '/officers/$badge'
     | '/vehicles/$plate'
     | '/cameras'
+    | '/officer'
     | '/officers'
     | '/vehicles'
+    | '/portal/pay/$citationId'
+    | '/portal/receipt/$citationId'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/analytics'
     | '/citations'
     | '/dashboard'
     | '/dispatch'
+    | '/disputes'
     | '/lookup'
     | '/map'
+    | '/officer'
     | '/violations'
     | '/cameras/$code'
+    | '/officer/dispatches'
+    | '/officer/issue'
+    | '/officer/scan'
     | '/officers/$badge'
     | '/vehicles/$plate'
     | '/cameras/'
+    | '/officer/'
     | '/officers/'
     | '/vehicles/'
+    | '/portal/pay/$citationId'
+    | '/portal/receipt/$citationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   CitationsRoute: typeof CitationsRoute
   DashboardRoute: typeof DashboardRoute
   DispatchRoute: typeof DispatchRoute
+  DisputesRoute: typeof DisputesRoute
   LookupRoute: typeof LookupRoute
   MapRoute: typeof MapRoute
+  OfficerRoute: typeof OfficerRouteWithChildren
   ViolationsRoute: typeof ViolationsRoute
   CamerasCodeRoute: typeof CamerasCodeRoute
   OfficersBadgeRoute: typeof OfficersBadgeRoute
@@ -210,6 +319,8 @@ export interface RootRouteChildren {
   CamerasIndexRoute: typeof CamerasIndexRoute
   OfficersIndexRoute: typeof OfficersIndexRoute
   VehiclesIndexRoute: typeof VehiclesIndexRoute
+  PortalPayCitationIdRoute: typeof PortalPayCitationIdRoute
+  PortalReceiptCitationIdRoute: typeof PortalReceiptCitationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -219,6 +330,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -249,6 +367,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DispatchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/disputes': {
+      id: '/disputes'
+      path: '/disputes'
+      fullPath: '/disputes'
+      preLoaderRoute: typeof DisputesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lookup': {
       id: '/lookup'
       path: '/lookup'
@@ -261,6 +386,13 @@ declare module '@tanstack/react-router' {
       path: '/map'
       fullPath: '/map'
       preLoaderRoute: typeof MapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/officer': {
+      id: '/officer'
+      path: '/officer'
+      fullPath: '/officer'
+      preLoaderRoute: typeof OfficerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/violations': {
@@ -283,6 +415,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/cameras/$code'
       preLoaderRoute: typeof CamerasCodeRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/officer/': {
+      id: '/officer/'
+      path: '/'
+      fullPath: '/officer/'
+      preLoaderRoute: typeof OfficerIndexRouteImport
+      parentRoute: typeof OfficerRoute
+    }
+    '/officer/dispatches': {
+      id: '/officer/dispatches'
+      path: '/dispatches'
+      fullPath: '/officer/dispatches'
+      preLoaderRoute: typeof OfficerDispatchesRouteImport
+      parentRoute: typeof OfficerRoute
+    }
+    '/officer/issue': {
+      id: '/officer/issue'
+      path: '/issue'
+      fullPath: '/officer/issue'
+      preLoaderRoute: typeof OfficerIssueRouteImport
+      parentRoute: typeof OfficerRoute
+    }
+    '/officer/scan': {
+      id: '/officer/scan'
+      path: '/scan'
+      fullPath: '/officer/scan'
+      preLoaderRoute: typeof OfficerScanRouteImport
+      parentRoute: typeof OfficerRoute
     }
     '/officers/': {
       id: '/officers/'
@@ -312,17 +472,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesPlateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/pay/$citationId': {
+      id: '/portal/pay/$citationId'
+      path: '/portal/pay/$citationId'
+      fullPath: '/portal/pay/$citationId'
+      preLoaderRoute: typeof PortalPayCitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/receipt/$citationId': {
+      id: '/portal/receipt/$citationId'
+      path: '/portal/receipt/$citationId'
+      fullPath: '/portal/receipt/$citationId'
+      preLoaderRoute: typeof PortalReceiptCitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface OfficerRouteChildren {
+  OfficerDispatchesRoute: typeof OfficerDispatchesRoute
+  OfficerIssueRoute: typeof OfficerIssueRoute
+  OfficerScanRoute: typeof OfficerScanRoute
+  OfficerIndexRoute: typeof OfficerIndexRoute
+}
+
+const OfficerRouteChildren: OfficerRouteChildren = {
+  OfficerDispatchesRoute: OfficerDispatchesRoute,
+  OfficerIssueRoute: OfficerIssueRoute,
+  OfficerScanRoute: OfficerScanRoute,
+  OfficerIndexRoute: OfficerIndexRoute,
+}
+
+const OfficerRouteWithChildren =
+  OfficerRoute._addFileChildren(OfficerRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   CitationsRoute: CitationsRoute,
   DashboardRoute: DashboardRoute,
   DispatchRoute: DispatchRoute,
+  DisputesRoute: DisputesRoute,
   LookupRoute: LookupRoute,
   MapRoute: MapRoute,
+  OfficerRoute: OfficerRouteWithChildren,
   ViolationsRoute: ViolationsRoute,
   CamerasCodeRoute: CamerasCodeRoute,
   OfficersBadgeRoute: OfficersBadgeRoute,
@@ -330,6 +524,8 @@ const rootRouteChildren: RootRouteChildren = {
   CamerasIndexRoute: CamerasIndexRoute,
   OfficersIndexRoute: OfficersIndexRoute,
   VehiclesIndexRoute: VehiclesIndexRoute,
+  PortalPayCitationIdRoute: PortalPayCitationIdRoute,
+  PortalReceiptCitationIdRoute: PortalReceiptCitationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

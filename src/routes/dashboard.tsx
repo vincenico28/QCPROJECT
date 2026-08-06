@@ -1,15 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMemo } from "react";
 import {
   useViolations,
   useCitations,
   useCameras,
+  useCreateCitation,
   formatPeso,
   timeAgo,
   type Violation,
 } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 
 import qcMap from "@/assets/qc-map.jpg";
 import cctv1 from "@/assets/cctv-1.jpg";
@@ -20,6 +22,13 @@ import violation2 from "@/assets/violation-2.jpg";
 import violation3 from "@/assets/violation-3.jpg";
 
 export const Route = createFileRoute("/dashboard")({
+  beforeLoad: ({ context }) => {
+    // @ts-expect-error injected
+    const role = context.role;
+    if (role === "officer") {
+      throw redirect({ to: "/officer/scan" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Command Dashboard · QC Traffic Ops" },
@@ -425,6 +434,8 @@ function CctvTile({
 }
 
 function ViolationFeedItem({ violation, image }: { violation: Violation; image: string }) {
+  const { mutate: createCitation, isPending } = useCreateCitation();
+
   return (
     <article className="p-5 transition-colors hover:bg-panel-elevated/50">
       <div className="relative mb-3 aspect-video overflow-hidden rounded-lg border border-border">
@@ -462,11 +473,32 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
       </div>
 
       <div className="flex gap-2">
-        <button className="flex-1 rounded-md border border-border bg-panel-elevated py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground">
+        <button
+          onClick={() => toast.success("Violation dismissed")}
+          className="flex-1 rounded-md border border-border bg-panel-elevated py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+        >
           Dismiss
         </button>
-        <button className="flex-1 rounded-md bg-primary/20 py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-primary transition-colors hover:bg-primary/30">
-          Issue Citation
+        <button
+          onClick={() => {
+            createCitation(
+              {
+                violation_id: violation.id,
+                plate_number: violation.plate_number,
+                offense: violation.violation_type,
+                amount: 2500, // mock fixed penalty
+                officer_name: "Auto-AI Dispatch",
+              },
+              {
+                onSuccess: (data) => toast.success(`Citation ${data.citation_number} issued`),
+                onError: (error) => toast.error(error.message),
+              },
+            );
+          }}
+          disabled={isPending}
+          className="flex-1 rounded-md bg-primary/20 py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-primary transition-colors hover:bg-primary/30 disabled:opacity-50"
+        >
+          {isPending ? "Issuing..." : "Issue Citation"}
         </button>
       </div>
     </article>

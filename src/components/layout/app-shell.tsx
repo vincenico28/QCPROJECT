@@ -13,6 +13,8 @@ import {
   Loader2,
   BarChart3,
   Radio,
+  UserCog,
+  Scale,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -38,12 +40,13 @@ const NAV: NavItem[] = [
   { to: "/vehicles", label: "Vehicles", icon: Car },
   { to: "/officers", label: "Officers", icon: Users },
   { to: "/dispatch", label: "Dispatch", icon: Radio },
+  { to: "/disputes", label: "Disputes", icon: Scale },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { session, loading, user } = useAuth();
+  const { session, loading, user, role } = useAuth();
   const email = user?.email ?? null;
   const palette = useCommandPalette();
 
@@ -73,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav className="flex flex-col gap-2">
-          {NAV.map((item) => {
+          {(role === "admin" ? [...NAV, { to: "/admin", label: "Admin", icon: UserCog }] : NAV).map((item) => {
             const active = pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
@@ -102,7 +105,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="mt-auto flex flex-col gap-3">
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = "/";
+            }}
             className="grid size-10 place-items-center rounded-xl text-subtle transition-colors hover:bg-panel-elevated hover:text-danger"
             aria-label="Sign out"
           >

@@ -7,6 +7,7 @@ const schema = z.object({
 });
 
 export type PublicCitation = {
+  id: string;
   citation_number: string;
   plate_number: string;
   offense: string;
@@ -27,7 +28,7 @@ export const lookupCitation = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("citations")
-      .select("citation_number, plate_number, offense, amount, status, issued_at, vehicle_model")
+      .select("id, citation_number, plate_number, offense, amount, status, issued_at, vehicle_model")
       .eq("citation_number", data.reference.toUpperCase())
       .ilike("plate_number", data.plate.replace(/\s+/g, ""))
       .maybeSingle();

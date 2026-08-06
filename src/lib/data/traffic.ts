@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type Violation = {
@@ -94,6 +94,54 @@ export function useCitations(limit = 20) {
   });
 }
 
+export function useCitation(citationNumber: string) {
+  return useQuery({
+    queryKey: ["citation", citationNumber],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("citations")
+        .select("*")
+        .eq("citation_number", citationNumber)
+        .single();
+      if (error) throw error;
+      return data as Citation;
+    },
+    enabled: !!citationNumber,
+  });
+}
+
+export type NewCitation = {
+  violation_id?: string | null;
+  plate_number: string;
+  offense: string;
+  amount: number;
+  officer_name?: string | null;
+};
+
+export function useCreateCitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: NewCitation) => {
+      const citation_number = `QC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { data, error } = await supabase
+        .from("citations")
+        .insert({
+          ...input,
+          citation_number,
+          status: "pending",
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Citation;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["citations"] });
+    },
+  });
+}
+
 export function useCameras() {
   return useQuery({
     queryKey: ["cameras"],
@@ -101,6 +149,55 @@ export function useCameras() {
       const { data, error } = await supabase.from("cameras").select("*").order("code");
       if (error) throw error;
       return (data ?? []) as Camera[];
+    },
+  });
+}
+
+export function useCreateCamera() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { location: string; lat?: number; lng?: number }) => {
+      const code = `QC-CAM-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { data, error } = await supabase
+        .from("cameras")
+        .insert({
+          code,
+          location: input.location,
+          lat: input.lat || null,
+          lng: input.lng || null,
+          status: "offline",
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Camera;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cameras"] });
+    },
+  });
+}
+
+export function useUpdateCamera() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; status?: string; location?: string }) => {
+      const { data, error } = await supabase
+        .from("cameras")
+        .update({
+          ...(input.status && { status: input.status }),
+          ...(input.location && { location: input.location }),
+        })
+        .eq("id", input.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Camera;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cameras"] });
     },
   });
 }

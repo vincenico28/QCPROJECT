@@ -17,8 +17,10 @@ import {
   Power,
   Stethoscope,
 } from "lucide-react";
-import { useCameras, useViolations, timeAgo } from "@/lib/data/traffic";
+import { useCameras, useViolations, timeAgo, useUpdateCamera } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
+import { AiCameraFeed } from "@/components/camera/ai-camera-feed";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/cameras/$code")({
   head: ({ params }) => ({
@@ -52,6 +54,8 @@ function CameraDetailPage() {
   const { data: cameras = [], isLoading, refetch } = useCameras();
   const { data: violations = [] } = useViolations(200);
   const [busy, setBusy] = useState<string | null>(null);
+  const { role } = useAuth();
+  const updateCamera = useUpdateCamera();
 
   const camera = cameras.find((c) => c.code === code);
 
@@ -178,39 +182,36 @@ function CameraDetailPage() {
           {/* Live feed */}
           <div className="panel overflow-hidden rounded-2xl">
             <div className="relative aspect-video bg-panel-elevated">
-              <div className="absolute inset-0 grid place-items-center">
-                {online ? (
-                  <div className="flex flex-col items-center gap-2 text-subtle">
-                    <Video className="size-10" strokeWidth={1.5} />
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest">
-                      Live feed · 1080p · {health.bitrate} Mbps
+              {online ? (
+                <AiCameraFeed code={camera.code} bitrate={health.bitrate} />
+              ) : (
+                <>
+                  <div className="absolute inset-0 grid place-items-center">
+                    <div className="flex flex-col items-center gap-2 text-danger/70">
+                      <WifiOff className="size-10" strokeWidth={1.5} />
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest">
+                        No signal
+                      </span>
+                    </div>
+                  </div>
+                  <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 backdrop-blur-sm">
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        maintenance ? "bg-warning" : "bg-danger",
+                      )}
+                    />
+                    <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-foreground">
+                      {camera.status}
                     </span>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-danger/70">
-                    <WifiOff className="size-10" strokeWidth={1.5} />
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest">
-                      No signal
-                    </span>
+                  <div className="absolute bottom-3 right-3 rounded-md bg-background/80 px-2 py-1 font-mono-tab text-[10px] text-subtle backdrop-blur-sm">
+                    {camera.lat != null && camera.lng != null
+                      ? `${camera.lat.toFixed(4)}, ${camera.lng.toFixed(4)}`
+                      : "Coordinates pending"}
                   </div>
-                )}
-              </div>
-              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 backdrop-blur-sm">
-                <span
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    online ? "animate-pulse bg-success" : maintenance ? "bg-warning" : "bg-danger",
-                  )}
-                />
-                <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-foreground">
-                  {online ? "Streaming" : camera.status}
-                </span>
-              </div>
-              <div className="absolute bottom-3 right-3 rounded-md bg-background/80 px-2 py-1 font-mono-tab text-[10px] text-subtle backdrop-blur-sm">
-                {camera.lat != null && camera.lng != null
-                  ? `${camera.lat.toFixed(4)}, ${camera.lng.toFixed(4)}`
-                  : "Coordinates pending"}
-              </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -305,15 +306,21 @@ function CameraDetailPage() {
                   )
                 }
               />
-              <ActionButton
-                icon={Power}
-                label="Reboot node"
-                busy={busy === "reboot"}
-                disabled={busy !== null}
-                onClick={() =>
-                  runAction("reboot", `Rebooting ${camera.code}…`, "Node rebooted and back online")
-                }
-              />
+              {(role === "admin" || role === "dispatcher") && (
+                <ActionButton
+                  icon={Power}
+                  label={camera.status === "online" ? "Take offline" : "Bring online"}
+                  busy={updateCamera.isPending}
+                  disabled={updateCamera.isPending}
+                  onClick={() => {
+                    const newStatus = camera.status === "online" ? "offline" : "online";
+                    updateCamera.mutate({ id: camera.id, status: newStatus }, {
+                      onSuccess: () => toast.success(`Node is now ${newStatus}`),
+                      onError: () => toast.error("Failed to update status"),
+                    });
+                  }}
+                />
+              )}
               <ActionButton
                 icon={Wrench}
                 label="Flag for maintenance"

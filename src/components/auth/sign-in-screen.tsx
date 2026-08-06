@@ -113,6 +113,8 @@ export function SignInScreen() {
             </p>
           )}
 
+
+
           <button
             type="submit"
             disabled={busy}
@@ -121,6 +123,12 @@ export function SignInScreen() {
             {busy && <Loader2 className="size-4 animate-spin" />}
             {mode === "signin" ? "Access command center" : "Create account"}
           </button>
+
+          <div className="mt-6 text-center">
+            <a href="/" className="text-xs text-subtle hover:text-foreground underline underline-offset-2 transition-colors">
+              ← Return to public portal
+            </a>
+          </div>
         </form>
       </div>
     </div>
