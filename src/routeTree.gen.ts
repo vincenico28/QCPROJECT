@@ -12,13 +12,21 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as CitationsRouteImport } from './routes/citations'
+import { Route as CitizenRouteImport } from './routes/citizen'
+import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DispatchRouteImport } from './routes/dispatch'
 import { Route as DisputesRouteImport } from './routes/disputes'
+import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as IotRouteImport } from './routes/iot'
 import { Route as LookupRouteImport } from './routes/lookup'
 import { Route as MapRouteImport } from './routes/map'
 import { Route as OfficerRouteImport } from './routes/officer'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TransportRouteImport } from './routes/transport'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as CamerasIndexRouteImport } from './routes/cameras.index'
 import { Route as CamerasCodeRouteImport } from './routes/cameras.$code'
@@ -28,6 +36,7 @@ import { Route as OfficerIssueRouteImport } from './routes/officer.issue'
 import { Route as OfficerScanRouteImport } from './routes/officer.scan'
 import { Route as OfficersIndexRouteImport } from './routes/officers.index'
 import { Route as OfficersBadgeRouteImport } from './routes/officers.$badge'
+import { Route as OfficersShiftsRouteImport } from './routes/officers.shifts'
 import { Route as VehiclesIndexRouteImport } from './routes/vehicles.index'
 import { Route as VehiclesPlateRouteImport } from './routes/vehicles.$plate'
 import { Route as PortalPayCitationIdRouteImport } from './routes/portal.pay.$citationId'
@@ -48,9 +57,24 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuditLogsRoute = AuditLogsRouteImport.update({
+  id: '/audit-logs',
+  path: '/audit-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CitationsRoute = CitationsRouteImport.update({
   id: '/citations',
   path: '/citations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CitizenRoute = CitizenRouteImport.update({
+  id: '/citizen',
+  path: '/citizen',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommunicationsRoute = CommunicationsRouteImport.update({
+  id: '/communications',
+  path: '/communications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -68,6 +92,16 @@ const DisputesRoute = DisputesRouteImport.update({
   path: '/disputes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IotRoute = IotRouteImport.update({
+  id: '/iot',
+  path: '/iot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LookupRoute = LookupRouteImport.update({
   id: '/lookup',
   path: '/lookup',
@@ -81,6 +115,21 @@ const MapRoute = MapRouteImport.update({
 const OfficerRoute = OfficerRouteImport.update({
   id: '/officer',
   path: '/officer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransportRoute = TransportRouteImport.update({
+  id: '/transport',
+  path: '/transport',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ViolationsRoute = ViolationsRouteImport.update({
@@ -128,6 +177,11 @@ const OfficersBadgeRoute = OfficersBadgeRouteImport.update({
   path: '/officers/$badge',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OfficersShiftsRoute = OfficersShiftsRouteImport.update({
+  id: '/officers/shifts',
+  path: '/officers/shifts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VehiclesIndexRoute = VehiclesIndexRouteImport.update({
   id: '/vehicles/',
   path: '/vehicles/',
@@ -153,19 +207,28 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
+  '/citizen': typeof CitizenRoute
+  '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
+  '/finance': typeof FinanceRoute
+  '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/officer': typeof OfficerRouteWithChildren
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
   '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
+  '/officers/shifts': typeof OfficersShiftsRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras/': typeof CamerasIndexRoute
   '/officer/': typeof OfficerIndexRoute
@@ -178,18 +241,27 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
+  '/citizen': typeof CitizenRoute
+  '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
+  '/finance': typeof FinanceRoute
+  '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
   '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
+  '/officers/shifts': typeof OfficersShiftsRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras': typeof CamerasIndexRoute
   '/officer': typeof OfficerIndexRoute
@@ -203,19 +275,28 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
+  '/citizen': typeof CitizenRoute
+  '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
+  '/finance': typeof FinanceRoute
+  '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/officer': typeof OfficerRouteWithChildren
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
   '/officer/scan': typeof OfficerScanRoute
   '/officers/$badge': typeof OfficersBadgeRoute
+  '/officers/shifts': typeof OfficersShiftsRoute
   '/vehicles/$plate': typeof VehiclesPlateRoute
   '/cameras/': typeof CamerasIndexRoute
   '/officer/': typeof OfficerIndexRoute
@@ -230,19 +311,28 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/audit-logs'
     | '/citations'
+    | '/citizen'
+    | '/communications'
     | '/dashboard'
     | '/dispatch'
     | '/disputes'
+    | '/finance'
+    | '/iot'
     | '/lookup'
     | '/map'
     | '/officer'
+    | '/reports'
+    | '/settings'
+    | '/transport'
     | '/violations'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
     | '/officer/scan'
     | '/officers/$badge'
+    | '/officers/shifts'
     | '/vehicles/$plate'
     | '/cameras/'
     | '/officer/'
@@ -255,18 +345,27 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/audit-logs'
     | '/citations'
+    | '/citizen'
+    | '/communications'
     | '/dashboard'
     | '/dispatch'
     | '/disputes'
+    | '/finance'
+    | '/iot'
     | '/lookup'
     | '/map'
+    | '/reports'
+    | '/settings'
+    | '/transport'
     | '/violations'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
     | '/officer/scan'
     | '/officers/$badge'
+    | '/officers/shifts'
     | '/vehicles/$plate'
     | '/cameras'
     | '/officer'
@@ -279,19 +378,28 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/audit-logs'
     | '/citations'
+    | '/citizen'
+    | '/communications'
     | '/dashboard'
     | '/dispatch'
     | '/disputes'
+    | '/finance'
+    | '/iot'
     | '/lookup'
     | '/map'
     | '/officer'
+    | '/reports'
+    | '/settings'
+    | '/transport'
     | '/violations'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
     | '/officer/scan'
     | '/officers/$badge'
+    | '/officers/shifts'
     | '/vehicles/$plate'
     | '/cameras/'
     | '/officer/'
@@ -305,16 +413,25 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AuditLogsRoute: typeof AuditLogsRoute
   CitationsRoute: typeof CitationsRoute
+  CitizenRoute: typeof CitizenRoute
+  CommunicationsRoute: typeof CommunicationsRoute
   DashboardRoute: typeof DashboardRoute
   DispatchRoute: typeof DispatchRoute
   DisputesRoute: typeof DisputesRoute
+  FinanceRoute: typeof FinanceRoute
+  IotRoute: typeof IotRoute
   LookupRoute: typeof LookupRoute
   MapRoute: typeof MapRoute
   OfficerRoute: typeof OfficerRouteWithChildren
+  ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
+  TransportRoute: typeof TransportRoute
   ViolationsRoute: typeof ViolationsRoute
   CamerasCodeRoute: typeof CamerasCodeRoute
   OfficersBadgeRoute: typeof OfficersBadgeRoute
+  OfficersShiftsRoute: typeof OfficersShiftsRoute
   VehiclesPlateRoute: typeof VehiclesPlateRoute
   CamerasIndexRoute: typeof CamerasIndexRoute
   OfficersIndexRoute: typeof OfficersIndexRoute
@@ -346,11 +463,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/audit-logs': {
+      id: '/audit-logs'
+      path: '/audit-logs'
+      fullPath: '/audit-logs'
+      preLoaderRoute: typeof AuditLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/citations': {
       id: '/citations'
       path: '/citations'
       fullPath: '/citations'
       preLoaderRoute: typeof CitationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/citizen': {
+      id: '/citizen'
+      path: '/citizen'
+      fullPath: '/citizen'
+      preLoaderRoute: typeof CitizenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/communications': {
+      id: '/communications'
+      path: '/communications'
+      fullPath: '/communications'
+      preLoaderRoute: typeof CommunicationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -374,6 +512,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DisputesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/iot': {
+      id: '/iot'
+      path: '/iot'
+      fullPath: '/iot'
+      preLoaderRoute: typeof IotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lookup': {
       id: '/lookup'
       path: '/lookup'
@@ -393,6 +545,27 @@ declare module '@tanstack/react-router' {
       path: '/officer'
       fullPath: '/officer'
       preLoaderRoute: typeof OfficerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transport': {
+      id: '/transport'
+      path: '/transport'
+      fullPath: '/transport'
+      preLoaderRoute: typeof TransportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/violations': {
@@ -458,6 +631,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OfficersBadgeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/officers/shifts': {
+      id: '/officers/shifts'
+      path: '/officers/shifts'
+      fullPath: '/officers/shifts'
+      preLoaderRoute: typeof OfficersShiftsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vehicles/': {
       id: '/vehicles/'
       path: '/vehicles'
@@ -510,16 +690,25 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AuditLogsRoute: AuditLogsRoute,
   CitationsRoute: CitationsRoute,
+  CitizenRoute: CitizenRoute,
+  CommunicationsRoute: CommunicationsRoute,
   DashboardRoute: DashboardRoute,
   DispatchRoute: DispatchRoute,
   DisputesRoute: DisputesRoute,
+  FinanceRoute: FinanceRoute,
+  IotRoute: IotRoute,
   LookupRoute: LookupRoute,
   MapRoute: MapRoute,
   OfficerRoute: OfficerRouteWithChildren,
+  ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
+  TransportRoute: TransportRoute,
   ViolationsRoute: ViolationsRoute,
   CamerasCodeRoute: CamerasCodeRoute,
   OfficersBadgeRoute: OfficersBadgeRoute,
+  OfficersShiftsRoute: OfficersShiftsRoute,
   VehiclesPlateRoute: VehiclesPlateRoute,
   CamerasIndexRoute: CamerasIndexRoute,
   OfficersIndexRoute: OfficersIndexRoute,

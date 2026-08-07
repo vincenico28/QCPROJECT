@@ -5,11 +5,12 @@ export type UserRole = "admin" | "dispatcher" | "officer" | "citizen";
 
 export function getRoleFromUser(user: User | null): UserRole {
   if (!user?.email) return "citizen";
-  if (user.email.startsWith("officer")) return "officer";
+  const email = user.email.toLowerCase();
+  if (email.startsWith("officer")) return "officer";
   if (
-    user.email.startsWith("admin") ||
-    user.email.includes("qc.gov.ph") ||
-    user.email === "escalavincenico28@gmail.com"
+    email.startsWith("admin") ||
+    email.includes("qc.gov.ph") ||
+    email === "escalavincenico28@gmail.com"
   ) {
     return "admin";
   }

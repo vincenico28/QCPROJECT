@@ -15,6 +15,12 @@ import {
   Radio,
   UserCog,
   Scale,
+  Settings2,
+  Landmark,
+  Bus,
+  Mail,
+  Server,
+  ShieldAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -41,7 +47,14 @@ const NAV: NavItem[] = [
   { to: "/officers", label: "Officers", icon: Users },
   { to: "/dispatch", label: "Dispatch", icon: Radio },
   { to: "/disputes", label: "Disputes", icon: Scale },
+  { to: "/transport", label: "Transport", icon: Bus },
+  { to: "/reports", label: "Reports", icon: FileText },
+  { to: "/finance", label: "Finance", icon: Landmark },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/communications", label: "Communications", icon: Mail },
+  { to: "/iot", label: "IoT Edge Nodes", icon: Server },
+  { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
+  { to: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -51,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const palette = useCommandPalette();
 
   // Public pages render without the operations chrome or auth gate.
-  if (pathname === "/" || pathname.startsWith("/lookup")) return <>{children}</>;
+  if (pathname === "/" || pathname.startsWith("/lookup") || pathname.startsWith("/citizen") || pathname.startsWith("/portal")) return <>{children}</>;
 
   if (loading) {
     return (

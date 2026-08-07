@@ -73,6 +73,20 @@ function OfficersPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Personnel Directory</h1>
+          <p className="text-sm text-muted-foreground">Manage active enforcers and review citation performance.</p>
+        </div>
+        <Link
+          to="/officers/shifts"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90"
+        >
+          <Activity className="size-4" />
+          Live GPS Tracking
+        </Link>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Personnel" value={officers.length} icon={Users} />
         <Kpi label="On duty now" value={counts.on_duty} icon={Activity} tone="text-success" />

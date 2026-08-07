@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Activity, Camera, FileText, MapPin, ShieldCheck, Zap, ArrowRight } from "lucide-react";
+import { Activity, Camera, FileText, MapPin, ShieldCheck, Zap, ArrowRight, User } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -124,11 +124,11 @@ function LandingPage() {
                 View camera grid
               </Link>
               <Link
-                to="/lookup"
-                className="inline-flex items-center gap-2 rounded-xl border border-border-strong bg-panel px-6 py-3.5 text-sm font-bold text-foreground transition-all hover:bg-panel-elevated hover:text-white"
+                to="/citizen"
+                className="inline-flex items-center gap-2 rounded-xl border border-border-strong bg-[#0066cc]/10 px-6 py-3.5 text-sm font-bold text-[#0066cc] transition-all hover:bg-[#0066cc]/20 hover:text-white"
               >
-                <FileText className="size-5 text-muted-foreground transition-colors group-hover:text-white" />
-                Check my citation
+                <User className="size-5" />
+                Citizen Portal
               </Link>
             </div>
             <dl className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-4">
