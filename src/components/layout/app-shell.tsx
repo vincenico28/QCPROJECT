@@ -21,6 +21,9 @@ import {
   Mail,
   Server,
   ShieldAlert,
+  BrainCircuit,
+  Flame,
+  Smartphone,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -51,8 +54,11 @@ const NAV: NavItem[] = [
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/finance", label: "Finance", icon: Landmark },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/analytics/heatmaps", label: "AI Heatmaps", icon: Flame },
+  { to: "/ai-training", label: "AI Training", icon: BrainCircuit },
   { to: "/communications", label: "Communications", icon: Mail },
   { to: "/iot", label: "IoT Edge Nodes", icon: Server },
+  { to: "/officer", label: "Officer Terminal", icon: Smartphone },
   { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
   { to: "/settings", label: "Settings", icon: Settings2 },
 ];
@@ -88,7 +94,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
         </Link>
 
-        <nav className="flex flex-col gap-2">
+        <nav 
+          className="flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden pb-4 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
           {(role === "admin" ? [...NAV, { to: "/admin", label: "Admin", icon: UserCog }] : NAV).map((item) => {
             const active = pathname.startsWith(item.to);
             const Icon = item.icon;

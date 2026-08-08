@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AiTrainingRouteImport } from './routes/ai-training'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as CitationsRouteImport } from './routes/citations'
@@ -28,6 +29,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TransportRouteImport } from './routes/transport'
 import { Route as ViolationsRouteImport } from './routes/violations'
+import { Route as AnalyticsHeatmapsRouteImport } from './routes/analytics.heatmaps'
 import { Route as CamerasIndexRouteImport } from './routes/cameras.index'
 import { Route as CamerasCodeRouteImport } from './routes/cameras.$code'
 import { Route as OfficerIndexRouteImport } from './routes/officer.index'
@@ -50,6 +52,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiTrainingRoute = AiTrainingRouteImport.update({
+  id: '/ai-training',
+  path: '/ai-training',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -137,6 +144,11 @@ const ViolationsRoute = ViolationsRouteImport.update({
   path: '/violations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsHeatmapsRoute = AnalyticsHeatmapsRouteImport.update({
+  id: '/heatmaps',
+  path: '/heatmaps',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
 const CamerasIndexRoute = CamerasIndexRouteImport.update({
   id: '/cameras/',
   path: '/cameras/',
@@ -206,7 +218,8 @@ const PortalReceiptCitationIdRoute = PortalReceiptCitationIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/analytics': typeof AnalyticsRoute
+  '/ai-training': typeof AiTrainingRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
@@ -223,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
+  '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
@@ -240,7 +254,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/analytics': typeof AnalyticsRoute
+  '/ai-training': typeof AiTrainingRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
@@ -256,6 +271,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
+  '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
@@ -274,7 +290,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/analytics': typeof AnalyticsRoute
+  '/ai-training': typeof AiTrainingRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
@@ -291,6 +308,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
   '/violations': typeof ViolationsRoute
+  '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
   '/officer/dispatches': typeof OfficerDispatchesRoute
   '/officer/issue': typeof OfficerIssueRoute
@@ -310,6 +328,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/ai-training'
     | '/analytics'
     | '/audit-logs'
     | '/citations'
@@ -327,6 +346,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/transport'
     | '/violations'
+    | '/analytics/heatmaps'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
@@ -344,6 +364,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/ai-training'
     | '/analytics'
     | '/audit-logs'
     | '/citations'
@@ -360,6 +381,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/transport'
     | '/violations'
+    | '/analytics/heatmaps'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
@@ -377,6 +399,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/ai-training'
     | '/analytics'
     | '/audit-logs'
     | '/citations'
@@ -394,6 +417,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/transport'
     | '/violations'
+    | '/analytics/heatmaps'
     | '/cameras/$code'
     | '/officer/dispatches'
     | '/officer/issue'
@@ -412,7 +436,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
-  AnalyticsRoute: typeof AnalyticsRoute
+  AiTrainingRoute: typeof AiTrainingRoute
+  AnalyticsRoute: typeof AnalyticsRouteWithChildren
   AuditLogsRoute: typeof AuditLogsRoute
   CitationsRoute: typeof CitationsRoute
   CitizenRoute: typeof CitizenRoute
@@ -454,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-training': {
+      id: '/ai-training'
+      path: '/ai-training'
+      fullPath: '/ai-training'
+      preLoaderRoute: typeof AiTrainingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -575,6 +607,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ViolationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics/heatmaps': {
+      id: '/analytics/heatmaps'
+      path: '/heatmaps'
+      fullPath: '/analytics/heatmaps'
+      preLoaderRoute: typeof AnalyticsHeatmapsRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
     '/cameras/': {
       id: '/cameras/'
       path: '/cameras'
@@ -669,6 +708,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AnalyticsRouteChildren {
+  AnalyticsHeatmapsRoute: typeof AnalyticsHeatmapsRoute
+}
+
+const AnalyticsRouteChildren: AnalyticsRouteChildren = {
+  AnalyticsHeatmapsRoute: AnalyticsHeatmapsRoute,
+}
+
+const AnalyticsRouteWithChildren = AnalyticsRoute._addFileChildren(
+  AnalyticsRouteChildren,
+)
+
 interface OfficerRouteChildren {
   OfficerDispatchesRoute: typeof OfficerDispatchesRoute
   OfficerIssueRoute: typeof OfficerIssueRoute
@@ -689,7 +740,8 @@ const OfficerRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
-  AnalyticsRoute: AnalyticsRoute,
+  AiTrainingRoute: AiTrainingRoute,
+  AnalyticsRoute: AnalyticsRouteWithChildren,
   AuditLogsRoute: AuditLogsRoute,
   CitationsRoute: CitationsRoute,
   CitizenRoute: CitizenRoute,
