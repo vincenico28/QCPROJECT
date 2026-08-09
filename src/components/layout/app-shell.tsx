@@ -24,6 +24,7 @@ import {
   BrainCircuit,
   Flame,
   Smartphone,
+  Megaphone,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,7 @@ const NAV: NavItem[] = [
   { to: "/analytics/heatmaps", label: "AI Heatmaps", icon: Flame },
   { to: "/ai-training", label: "AI Training", icon: BrainCircuit },
   { to: "/communications", label: "Communications", icon: Mail },
+  { to: "/advisories", label: "Public Advisories", icon: Megaphone },
   { to: "/iot", label: "IoT Edge Nodes", icon: Server },
   { to: "/officer", label: "Officer Terminal", icon: Smartphone },
   { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },

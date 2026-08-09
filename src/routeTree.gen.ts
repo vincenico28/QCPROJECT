@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdvisoriesRouteImport } from './routes/advisories'
 import { Route as AiTrainingRouteImport } from './routes/ai-training'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
@@ -52,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdvisoriesRoute = AdvisoriesRouteImport.update({
+  id: '/advisories',
+  path: '/advisories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AiTrainingRoute = AiTrainingRouteImport.update({
@@ -218,6 +224,7 @@ const PortalReceiptCitationIdRoute = PortalReceiptCitationIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/advisories': typeof AdvisoriesRoute
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
@@ -254,6 +261,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/advisories': typeof AdvisoriesRoute
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/advisories': typeof AdvisoriesRoute
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
@@ -328,6 +337,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/advisories'
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
@@ -364,6 +374,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/advisories'
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
@@ -399,6 +410,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/advisories'
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
@@ -436,6 +448,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AdvisoriesRoute: typeof AdvisoriesRoute
   AiTrainingRoute: typeof AiTrainingRoute
   AnalyticsRoute: typeof AnalyticsRouteWithChildren
   AuditLogsRoute: typeof AuditLogsRoute
@@ -479,6 +492,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/advisories': {
+      id: '/advisories'
+      path: '/advisories'
+      fullPath: '/advisories'
+      preLoaderRoute: typeof AdvisoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ai-training': {
@@ -740,6 +760,7 @@ const OfficerRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AdvisoriesRoute: AdvisoriesRoute,
   AiTrainingRoute: AiTrainingRoute,
   AnalyticsRoute: AnalyticsRouteWithChildren,
   AuditLogsRoute: AuditLogsRoute,
