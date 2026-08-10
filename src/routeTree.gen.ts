@@ -15,10 +15,12 @@ import { Route as AdvisoriesRouteImport } from './routes/advisories'
 import { Route as AiTrainingRouteImport } from './routes/ai-training'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
+import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as CitationsRouteImport } from './routes/citations'
 import { Route as CitizenRouteImport } from './routes/citizen'
 import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as DispatchRouteImport } from './routes/dispatch'
 import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as FinanceRouteImport } from './routes/finance'
@@ -29,6 +31,7 @@ import { Route as OfficerRouteImport } from './routes/officer'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TransportRouteImport } from './routes/transport'
+import { Route as TvDisplayRouteImport } from './routes/tv-display'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as AnalyticsHeatmapsRouteImport } from './routes/analytics.heatmaps'
 import { Route as CamerasIndexRouteImport } from './routes/cameras.index'
@@ -75,6 +78,11 @@ const AuditLogsRoute = AuditLogsRouteImport.update({
   path: '/audit-logs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AutomationRoute = AutomationRouteImport.update({
+  id: '/automation',
+  path: '/automation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CitationsRoute = CitationsRouteImport.update({
   id: '/citations',
   path: '/citations',
@@ -93,6 +101,11 @@ const CommunicationsRoute = CommunicationsRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeveloperRoute = DeveloperRouteImport.update({
+  id: '/developer',
+  path: '/developer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DispatchRoute = DispatchRouteImport.update({
@@ -143,6 +156,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const TransportRoute = TransportRouteImport.update({
   id: '/transport',
   path: '/transport',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TvDisplayRoute = TvDisplayRouteImport.update({
+  id: '/tv-display',
+  path: '/tv-display',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ViolationsRoute = ViolationsRouteImport.update({
@@ -228,10 +246,12 @@ export interface FileRoutesByFullPath {
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
+  '/automation': typeof AutomationRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
+  '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
   '/finance': typeof FinanceRoute
@@ -242,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
+  '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
   '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
@@ -265,10 +286,12 @@ export interface FileRoutesByTo {
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
+  '/automation': typeof AutomationRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
+  '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
   '/finance': typeof FinanceRoute
@@ -278,6 +301,7 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
+  '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
   '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
@@ -302,10 +326,12 @@ export interface FileRoutesById {
   '/ai-training': typeof AiTrainingRoute
   '/analytics': typeof AnalyticsRouteWithChildren
   '/audit-logs': typeof AuditLogsRoute
+  '/automation': typeof AutomationRoute
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
   '/dashboard': typeof DashboardRoute
+  '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
   '/disputes': typeof DisputesRoute
   '/finance': typeof FinanceRoute
@@ -316,6 +342,7 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transport': typeof TransportRoute
+  '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
   '/analytics/heatmaps': typeof AnalyticsHeatmapsRoute
   '/cameras/$code': typeof CamerasCodeRoute
@@ -341,10 +368,12 @@ export interface FileRouteTypes {
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
+    | '/automation'
     | '/citations'
     | '/citizen'
     | '/communications'
     | '/dashboard'
+    | '/developer'
     | '/dispatch'
     | '/disputes'
     | '/finance'
@@ -355,6 +384,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/transport'
+    | '/tv-display'
     | '/violations'
     | '/analytics/heatmaps'
     | '/cameras/$code'
@@ -378,10 +408,12 @@ export interface FileRouteTypes {
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
+    | '/automation'
     | '/citations'
     | '/citizen'
     | '/communications'
     | '/dashboard'
+    | '/developer'
     | '/dispatch'
     | '/disputes'
     | '/finance'
@@ -391,6 +423,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/transport'
+    | '/tv-display'
     | '/violations'
     | '/analytics/heatmaps'
     | '/cameras/$code'
@@ -414,10 +447,12 @@ export interface FileRouteTypes {
     | '/ai-training'
     | '/analytics'
     | '/audit-logs'
+    | '/automation'
     | '/citations'
     | '/citizen'
     | '/communications'
     | '/dashboard'
+    | '/developer'
     | '/dispatch'
     | '/disputes'
     | '/finance'
@@ -428,6 +463,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/transport'
+    | '/tv-display'
     | '/violations'
     | '/analytics/heatmaps'
     | '/cameras/$code'
@@ -452,10 +488,12 @@ export interface RootRouteChildren {
   AiTrainingRoute: typeof AiTrainingRoute
   AnalyticsRoute: typeof AnalyticsRouteWithChildren
   AuditLogsRoute: typeof AuditLogsRoute
+  AutomationRoute: typeof AutomationRoute
   CitationsRoute: typeof CitationsRoute
   CitizenRoute: typeof CitizenRoute
   CommunicationsRoute: typeof CommunicationsRoute
   DashboardRoute: typeof DashboardRoute
+  DeveloperRoute: typeof DeveloperRoute
   DispatchRoute: typeof DispatchRoute
   DisputesRoute: typeof DisputesRoute
   FinanceRoute: typeof FinanceRoute
@@ -466,6 +504,7 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   TransportRoute: typeof TransportRoute
+  TvDisplayRoute: typeof TvDisplayRoute
   ViolationsRoute: typeof ViolationsRoute
   CamerasCodeRoute: typeof CamerasCodeRoute
   OfficersBadgeRoute: typeof OfficersBadgeRoute
@@ -522,6 +561,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuditLogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/automation': {
+      id: '/automation'
+      path: '/automation'
+      fullPath: '/automation'
+      preLoaderRoute: typeof AutomationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/citations': {
       id: '/citations'
       path: '/citations'
@@ -548,6 +594,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/developer': {
+      id: '/developer'
+      path: '/developer'
+      fullPath: '/developer'
+      preLoaderRoute: typeof DeveloperRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dispatch': {
@@ -618,6 +671,13 @@ declare module '@tanstack/react-router' {
       path: '/transport'
       fullPath: '/transport'
       preLoaderRoute: typeof TransportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tv-display': {
+      id: '/tv-display'
+      path: '/tv-display'
+      fullPath: '/tv-display'
+      preLoaderRoute: typeof TvDisplayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/violations': {
@@ -764,10 +824,12 @@ const rootRouteChildren: RootRouteChildren = {
   AiTrainingRoute: AiTrainingRoute,
   AnalyticsRoute: AnalyticsRouteWithChildren,
   AuditLogsRoute: AuditLogsRoute,
+  AutomationRoute: AutomationRoute,
   CitationsRoute: CitationsRoute,
   CitizenRoute: CitizenRoute,
   CommunicationsRoute: CommunicationsRoute,
   DashboardRoute: DashboardRoute,
+  DeveloperRoute: DeveloperRoute,
   DispatchRoute: DispatchRoute,
   DisputesRoute: DisputesRoute,
   FinanceRoute: FinanceRoute,
@@ -778,6 +840,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   TransportRoute: TransportRoute,
+  TvDisplayRoute: TvDisplayRoute,
   ViolationsRoute: ViolationsRoute,
   CamerasCodeRoute: CamerasCodeRoute,
   OfficersBadgeRoute: OfficersBadgeRoute,

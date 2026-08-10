@@ -131,3 +131,8 @@
 @utility glow-primary {
   box-shadow: 0 0 24px oklch(from var(--primary) l c h / 0.4);
 }
+
+@keyframes marquee {
+  0% { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
