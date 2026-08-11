@@ -28,6 +28,10 @@ import {
   Bot,
   Code2,
   Tv,
+  Crosshair,
+  PhoneCall,
+  Zap,
+  Wind,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -61,12 +65,17 @@ const NAV: NavItem[] = [
   { to: "/analytics/heatmaps", label: "AI Heatmaps", icon: Flame },
   { to: "/ai-training", label: "AI Training", icon: BrainCircuit },
   { to: "/communications", label: "Communications", icon: Mail },
+  { to: "/dispatch-hotline", label: "Emergency Hotline", icon: PhoneCall },
   { to: "/automation", label: "Rules Engine", icon: Bot },
+  { to: "/smart-parking", label: "Smart Parking", icon: Car },
+  { to: "/ev-charging", label: "EV Charging", icon: Zap },
+  { to: "/environment", label: "Environment", icon: Wind },
   { to: "/developer", label: "Developer API", icon: Code2 },
   { to: "/tv-display", label: "TV Display Mode", icon: Tv },
   { to: "/advisories", label: "Public Advisories", icon: Megaphone },
   { to: "/iot", label: "IoT Edge Nodes", icon: Server },
   { to: "/officer", label: "Officer Terminal", icon: Smartphone },
+  { to: "/fleet", label: "Fleet & Drones", icon: Crosshair },
   { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
   { to: "/settings", label: "Settings", icon: Settings2 },
 ];

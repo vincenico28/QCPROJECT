@@ -22,14 +22,19 @@ import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as DispatchRouteImport } from './routes/dispatch'
+import { Route as DispatchHotlineRouteImport } from './routes/dispatch-hotline'
 import { Route as DisputesRouteImport } from './routes/disputes'
+import { Route as EnvironmentRouteImport } from './routes/environment'
+import { Route as EvChargingRouteImport } from './routes/ev-charging'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as IotRouteImport } from './routes/iot'
 import { Route as LookupRouteImport } from './routes/lookup'
 import { Route as MapRouteImport } from './routes/map'
 import { Route as OfficerRouteImport } from './routes/officer'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SmartParkingRouteImport } from './routes/smart-parking'
 import { Route as TransportRouteImport } from './routes/transport'
 import { Route as TvDisplayRouteImport } from './routes/tv-display'
 import { Route as ViolationsRouteImport } from './routes/violations'
@@ -113,14 +118,34 @@ const DispatchRoute = DispatchRouteImport.update({
   path: '/dispatch',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DispatchHotlineRoute = DispatchHotlineRouteImport.update({
+  id: '/dispatch-hotline',
+  path: '/dispatch-hotline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DisputesRoute = DisputesRouteImport.update({
   id: '/disputes',
   path: '/disputes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EnvironmentRoute = EnvironmentRouteImport.update({
+  id: '/environment',
+  path: '/environment',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvChargingRoute = EvChargingRouteImport.update({
+  id: '/ev-charging',
+  path: '/ev-charging',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FleetRoute = FleetRouteImport.update({
+  id: '/fleet',
+  path: '/fleet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IotRoute = IotRouteImport.update({
@@ -151,6 +176,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SmartParkingRoute = SmartParkingRouteImport.update({
+  id: '/smart-parking',
+  path: '/smart-parking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TransportRoute = TransportRouteImport.update({
@@ -253,14 +283,19 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
+  '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/environment': typeof EnvironmentRoute
+  '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/smart-parking': typeof SmartParkingRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -293,13 +328,18 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
+  '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/environment': typeof EnvironmentRoute
+  '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/smart-parking': typeof SmartParkingRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -333,14 +373,19 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
+  '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/environment': typeof EnvironmentRoute
+  '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/smart-parking': typeof SmartParkingRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -375,14 +420,19 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/developer'
     | '/dispatch'
+    | '/dispatch-hotline'
     | '/disputes'
+    | '/environment'
+    | '/ev-charging'
     | '/finance'
+    | '/fleet'
     | '/iot'
     | '/lookup'
     | '/map'
     | '/officer'
     | '/reports'
     | '/settings'
+    | '/smart-parking'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -415,13 +465,18 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/developer'
     | '/dispatch'
+    | '/dispatch-hotline'
     | '/disputes'
+    | '/environment'
+    | '/ev-charging'
     | '/finance'
+    | '/fleet'
     | '/iot'
     | '/lookup'
     | '/map'
     | '/reports'
     | '/settings'
+    | '/smart-parking'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -454,14 +509,19 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/developer'
     | '/dispatch'
+    | '/dispatch-hotline'
     | '/disputes'
+    | '/environment'
+    | '/ev-charging'
     | '/finance'
+    | '/fleet'
     | '/iot'
     | '/lookup'
     | '/map'
     | '/officer'
     | '/reports'
     | '/settings'
+    | '/smart-parking'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -495,14 +555,19 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DeveloperRoute: typeof DeveloperRoute
   DispatchRoute: typeof DispatchRoute
+  DispatchHotlineRoute: typeof DispatchHotlineRoute
   DisputesRoute: typeof DisputesRoute
+  EnvironmentRoute: typeof EnvironmentRoute
+  EvChargingRoute: typeof EvChargingRoute
   FinanceRoute: typeof FinanceRoute
+  FleetRoute: typeof FleetRoute
   IotRoute: typeof IotRoute
   LookupRoute: typeof LookupRoute
   MapRoute: typeof MapRoute
   OfficerRoute: typeof OfficerRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
+  SmartParkingRoute: typeof SmartParkingRoute
   TransportRoute: typeof TransportRoute
   TvDisplayRoute: typeof TvDisplayRoute
   ViolationsRoute: typeof ViolationsRoute
@@ -610,6 +675,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DispatchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dispatch-hotline': {
+      id: '/dispatch-hotline'
+      path: '/dispatch-hotline'
+      fullPath: '/dispatch-hotline'
+      preLoaderRoute: typeof DispatchHotlineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/disputes': {
       id: '/disputes'
       path: '/disputes'
@@ -617,11 +689,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DisputesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/environment': {
+      id: '/environment'
+      path: '/environment'
+      fullPath: '/environment'
+      preLoaderRoute: typeof EnvironmentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ev-charging': {
+      id: '/ev-charging'
+      path: '/ev-charging'
+      fullPath: '/ev-charging'
+      preLoaderRoute: typeof EvChargingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance': {
       id: '/finance'
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fleet': {
+      id: '/fleet'
+      path: '/fleet'
+      fullPath: '/fleet'
+      preLoaderRoute: typeof FleetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/iot': {
@@ -664,6 +757,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/smart-parking': {
+      id: '/smart-parking'
+      path: '/smart-parking'
+      fullPath: '/smart-parking'
+      preLoaderRoute: typeof SmartParkingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/transport': {
@@ -831,14 +931,19 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DeveloperRoute: DeveloperRoute,
   DispatchRoute: DispatchRoute,
+  DispatchHotlineRoute: DispatchHotlineRoute,
   DisputesRoute: DisputesRoute,
+  EnvironmentRoute: EnvironmentRoute,
+  EvChargingRoute: EvChargingRoute,
   FinanceRoute: FinanceRoute,
+  FleetRoute: FleetRoute,
   IotRoute: IotRoute,
   LookupRoute: LookupRoute,
   MapRoute: MapRoute,
   OfficerRoute: OfficerRouteWithChildren,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
+  SmartParkingRoute: SmartParkingRoute,
   TransportRoute: TransportRoute,
   TvDisplayRoute: TvDisplayRoute,
   ViolationsRoute: ViolationsRoute,

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useCitizenProfile } from "@/lib/data/citizen";
 import { useAdvisories } from "@/lib/data/advisories";
 import { useCitizenDisputes } from "@/lib/data/citizen-disputes";
-import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search } from "lucide-react";
+import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/citizen")({
 });
 
 function CitizenPortal() {
-  const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes">("vehicles");
+  const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes" | "rewards">("vehicles");
   
   const { data: profile, isLoading: loadingProfile } = useCitizenProfile();
   const { data: advisories, isLoading: loadingAdvisories } = useAdvisories();
@@ -61,6 +61,13 @@ function CitizenPortal() {
                 className={cn("transition-colors", activeTab === "disputes" ? "text-white" : "hover:text-white")}
               >
                 Appeals
+              </button>
+              <button 
+                onClick={() => setActiveTab("rewards")}
+                className={cn("transition-colors flex items-center gap-1", activeTab === "rewards" ? "text-emerald-400" : "text-emerald-400/60 hover:text-emerald-400")}
+              >
+                <Leaf className="size-3" />
+                Eco-Rewards
               </button>
             </nav>
             <div className="flex items-center gap-3 pl-6 border-l border-white/10">
@@ -361,6 +368,79 @@ function CitizenPortal() {
                    ))}
                 </div>
              )}
+          </div>
+        )}
+
+        {/* Eco-Rewards Tab */}
+        {activeTab === "rewards" && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mb-8 flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+                     <Leaf className="size-8" />
+                     Eco-Rewards Program
+                  </h1>
+                  <p className="mt-2 text-white/60">Thank you for keeping Culiat roads safe. Redeem your tokens for LGU perks.</p>
+                </div>
+             </div>
+             
+             <div className="grid gap-6 lg:grid-cols-3">
+                <div className="lg:col-span-2 flex flex-col gap-6">
+                   <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-transparent p-6 relative overflow-hidden">
+                      <Trophy className="absolute -bottom-4 -right-4 size-32 text-emerald-500/20 rotate-12" />
+                      <h2 className="text-lg font-bold text-white">Your Safe Driver Balance</h2>
+                      <p className="text-6xl font-black text-emerald-400 mt-2 font-mono-tab">1,250 <span className="text-xl">Tokens</span></p>
+                      <p className="text-sm text-emerald-500/80 mt-2 font-semibold">Streak: 14 Months without a citation! 🎉</p>
+                   </div>
+                   
+                   <h2 className="text-xl font-bold tracking-tight text-white mt-4">Redeem Rewards</h2>
+                   <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="panel rounded-xl border border-border bg-white/5 p-4 flex flex-col justify-between hover:border-emerald-500/50 transition-colors cursor-pointer group">
+                         <div>
+                            <div className="grid size-10 place-items-center rounded-lg bg-emerald-500/20 text-emerald-500 mb-3 group-hover:scale-110 transition-transform">
+                               <Car className="size-5" />
+                            </div>
+                            <h3 className="font-bold text-white">Free Parking Pass</h3>
+                            <p className="text-xs text-muted-foreground mt-1">1-Month free parking at any QC LGU facility.</p>
+                         </div>
+                         <button className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                            Redeem for 500 Tokens
+                         </button>
+                      </div>
+                      
+                      <div className="panel rounded-xl border border-border bg-white/5 p-4 flex flex-col justify-between hover:border-emerald-500/50 transition-colors cursor-pointer group">
+                         <div>
+                            <div className="grid size-10 place-items-center rounded-lg bg-blue-500/20 text-blue-500 mb-3 group-hover:scale-110 transition-transform">
+                               <Gift className="size-5" />
+                            </div>
+                            <h3 className="font-bold text-white">Priority Registration</h3>
+                            <p className="text-xs text-muted-foreground mt-1">Skip the line for your next LTO renewal via QC Express.</p>
+                         </div>
+                         <button className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                            Redeem for 1,000 Tokens
+                         </button>
+                      </div>
+                   </div>
+                </div>
+                
+                <div className="flex flex-col gap-4">
+                   <h2 className="font-bold text-white border-b border-border pb-2">How to earn</h2>
+                   <ul className="text-sm text-white/70 space-y-4">
+                      <li className="flex items-start gap-2">
+                         <CheckCircle2 className="size-4 text-emerald-500 mt-0.5 shrink-0" />
+                         <span><strong>100 Tokens</strong> every month with 0 traffic violations.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                         <CheckCircle2 className="size-4 text-emerald-500 mt-0.5 shrink-0" />
+                         <span><strong>500 Tokens</strong> bonus for completing a full year cleanly.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                         <AlertTriangle className="size-4 text-orange-500 mt-0.5 shrink-0" />
+                         <span>Tokens reset to 0 if any major moving violation is recorded.</span>
+                      </li>
+                   </ul>
+                </div>
+             </div>
           </div>
         )}
 
