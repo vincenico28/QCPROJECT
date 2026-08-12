@@ -32,6 +32,8 @@ import {
   PhoneCall,
   Zap,
   Wind,
+  TrendingUp,
+  Target,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -78,6 +80,9 @@ const NAV: NavItem[] = [
   { to: "/fleet", label: "Fleet & Drones", icon: Crosshair },
   { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
   { to: "/settings", label: "Settings", icon: Settings2 },
+  { to: "/finance-analytics", label: "Executive Analytics", icon: TrendingUp },
+  { to: "/sla-performance", label: "System SLA", icon: Target },
+  { to: "/transit", label: "Transit Network", icon: Bus },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

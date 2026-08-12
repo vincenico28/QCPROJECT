@@ -27,6 +27,7 @@ import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as EnvironmentRouteImport } from './routes/environment'
 import { Route as EvChargingRouteImport } from './routes/ev-charging'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as FinanceAnalyticsRouteImport } from './routes/finance-analytics'
 import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as IotRouteImport } from './routes/iot'
 import { Route as LookupRouteImport } from './routes/lookup'
@@ -34,7 +35,9 @@ import { Route as MapRouteImport } from './routes/map'
 import { Route as OfficerRouteImport } from './routes/officer'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SlaPerformanceRouteImport } from './routes/sla-performance'
 import { Route as SmartParkingRouteImport } from './routes/smart-parking'
+import { Route as TransitRouteImport } from './routes/transit'
 import { Route as TransportRouteImport } from './routes/transport'
 import { Route as TvDisplayRouteImport } from './routes/tv-display'
 import { Route as ViolationsRouteImport } from './routes/violations'
@@ -143,6 +146,11 @@ const FinanceRoute = FinanceRouteImport.update({
   path: '/finance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceAnalyticsRoute = FinanceAnalyticsRouteImport.update({
+  id: '/finance-analytics',
+  path: '/finance-analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FleetRoute = FleetRouteImport.update({
   id: '/fleet',
   path: '/fleet',
@@ -178,9 +186,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SlaPerformanceRoute = SlaPerformanceRouteImport.update({
+  id: '/sla-performance',
+  path: '/sla-performance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SmartParkingRoute = SmartParkingRouteImport.update({
   id: '/smart-parking',
   path: '/smart-parking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransitRoute = TransitRouteImport.update({
+  id: '/transit',
+  path: '/transit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TransportRoute = TransportRouteImport.update({
@@ -288,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
@@ -295,7 +314,9 @@ export interface FileRoutesByFullPath {
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/sla-performance': typeof SlaPerformanceRoute
   '/smart-parking': typeof SmartParkingRoute
+  '/transit': typeof TransitRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -333,13 +354,16 @@ export interface FileRoutesByTo {
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/sla-performance': typeof SlaPerformanceRoute
   '/smart-parking': typeof SmartParkingRoute
+  '/transit': typeof TransitRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -378,6 +402,7 @@ export interface FileRoutesById {
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
   '/finance': typeof FinanceRoute
+  '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
@@ -385,7 +410,9 @@ export interface FileRoutesById {
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/sla-performance': typeof SlaPerformanceRoute
   '/smart-parking': typeof SmartParkingRoute
+  '/transit': typeof TransitRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -425,6 +452,7 @@ export interface FileRouteTypes {
     | '/environment'
     | '/ev-charging'
     | '/finance'
+    | '/finance-analytics'
     | '/fleet'
     | '/iot'
     | '/lookup'
@@ -432,7 +460,9 @@ export interface FileRouteTypes {
     | '/officer'
     | '/reports'
     | '/settings'
+    | '/sla-performance'
     | '/smart-parking'
+    | '/transit'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -470,13 +500,16 @@ export interface FileRouteTypes {
     | '/environment'
     | '/ev-charging'
     | '/finance'
+    | '/finance-analytics'
     | '/fleet'
     | '/iot'
     | '/lookup'
     | '/map'
     | '/reports'
     | '/settings'
+    | '/sla-performance'
     | '/smart-parking'
+    | '/transit'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -514,6 +547,7 @@ export interface FileRouteTypes {
     | '/environment'
     | '/ev-charging'
     | '/finance'
+    | '/finance-analytics'
     | '/fleet'
     | '/iot'
     | '/lookup'
@@ -521,7 +555,9 @@ export interface FileRouteTypes {
     | '/officer'
     | '/reports'
     | '/settings'
+    | '/sla-performance'
     | '/smart-parking'
+    | '/transit'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -560,6 +596,7 @@ export interface RootRouteChildren {
   EnvironmentRoute: typeof EnvironmentRoute
   EvChargingRoute: typeof EvChargingRoute
   FinanceRoute: typeof FinanceRoute
+  FinanceAnalyticsRoute: typeof FinanceAnalyticsRoute
   FleetRoute: typeof FleetRoute
   IotRoute: typeof IotRoute
   LookupRoute: typeof LookupRoute
@@ -567,7 +604,9 @@ export interface RootRouteChildren {
   OfficerRoute: typeof OfficerRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
+  SlaPerformanceRoute: typeof SlaPerformanceRoute
   SmartParkingRoute: typeof SmartParkingRoute
+  TransitRoute: typeof TransitRoute
   TransportRoute: typeof TransportRoute
   TvDisplayRoute: typeof TvDisplayRoute
   ViolationsRoute: typeof ViolationsRoute
@@ -710,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance-analytics': {
+      id: '/finance-analytics'
+      path: '/finance-analytics'
+      fullPath: '/finance-analytics'
+      preLoaderRoute: typeof FinanceAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fleet': {
       id: '/fleet'
       path: '/fleet'
@@ -759,11 +805,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sla-performance': {
+      id: '/sla-performance'
+      path: '/sla-performance'
+      fullPath: '/sla-performance'
+      preLoaderRoute: typeof SlaPerformanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/smart-parking': {
       id: '/smart-parking'
       path: '/smart-parking'
       fullPath: '/smart-parking'
       preLoaderRoute: typeof SmartParkingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transit': {
+      id: '/transit'
+      path: '/transit'
+      fullPath: '/transit'
+      preLoaderRoute: typeof TransitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/transport': {
@@ -936,6 +996,7 @@ const rootRouteChildren: RootRouteChildren = {
   EnvironmentRoute: EnvironmentRoute,
   EvChargingRoute: EvChargingRoute,
   FinanceRoute: FinanceRoute,
+  FinanceAnalyticsRoute: FinanceAnalyticsRoute,
   FleetRoute: FleetRoute,
   IotRoute: IotRoute,
   LookupRoute: LookupRoute,
@@ -943,7 +1004,9 @@ const rootRouteChildren: RootRouteChildren = {
   OfficerRoute: OfficerRouteWithChildren,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
+  SlaPerformanceRoute: SlaPerformanceRoute,
   SmartParkingRoute: SmartParkingRoute,
+  TransitRoute: TransitRoute,
   TransportRoute: TransportRoute,
   TvDisplayRoute: TvDisplayRoute,
   ViolationsRoute: ViolationsRoute,
