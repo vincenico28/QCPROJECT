@@ -34,6 +34,8 @@ import {
   Wind,
   TrendingUp,
   Target,
+  Siren,
+  Cpu,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -83,6 +85,9 @@ const NAV: NavItem[] = [
   { to: "/finance-analytics", label: "Executive Analytics", icon: TrendingUp },
   { to: "/sla-performance", label: "System SLA", icon: Target },
   { to: "/transit", label: "Transit Network", icon: Bus },
+  { to: "/evp-control", label: "EVP Control", icon: Siren },
+  { to: "/infrastructure", label: "Predictive Infra", icon: Cpu },
+  { to: "/crowdsource", label: "Crowdsource", icon: Video },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -19,6 +19,7 @@ import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as CitationsRouteImport } from './routes/citations'
 import { Route as CitizenRouteImport } from './routes/citizen'
 import { Route as CommunicationsRouteImport } from './routes/communications'
+import { Route as CrowdsourceRouteImport } from './routes/crowdsource'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as DispatchRouteImport } from './routes/dispatch'
@@ -26,9 +27,11 @@ import { Route as DispatchHotlineRouteImport } from './routes/dispatch-hotline'
 import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as EnvironmentRouteImport } from './routes/environment'
 import { Route as EvChargingRouteImport } from './routes/ev-charging'
+import { Route as EvpControlRouteImport } from './routes/evp-control'
 import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as FinanceAnalyticsRouteImport } from './routes/finance-analytics'
 import { Route as FleetRouteImport } from './routes/fleet'
+import { Route as InfrastructureRouteImport } from './routes/infrastructure'
 import { Route as IotRouteImport } from './routes/iot'
 import { Route as LookupRouteImport } from './routes/lookup'
 import { Route as MapRouteImport } from './routes/map'
@@ -106,6 +109,11 @@ const CommunicationsRoute = CommunicationsRouteImport.update({
   path: '/communications',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrowdsourceRoute = CrowdsourceRouteImport.update({
+  id: '/crowdsource',
+  path: '/crowdsource',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -141,6 +149,11 @@ const EvChargingRoute = EvChargingRouteImport.update({
   path: '/ev-charging',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EvpControlRoute = EvpControlRouteImport.update({
+  id: '/evp-control',
+  path: '/evp-control',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
@@ -154,6 +167,11 @@ const FinanceAnalyticsRoute = FinanceAnalyticsRouteImport.update({
 const FleetRoute = FleetRouteImport.update({
   id: '/fleet',
   path: '/fleet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InfrastructureRoute = InfrastructureRouteImport.update({
+  id: '/infrastructure',
+  path: '/infrastructure',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IotRoute = IotRouteImport.update({
@@ -298,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
+  '/crowdsource': typeof CrowdsourceRoute
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
@@ -305,9 +324,11 @@ export interface FileRoutesByFullPath {
   '/disputes': typeof DisputesRoute
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
+  '/evp-control': typeof EvpControlRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
+  '/infrastructure': typeof InfrastructureRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
@@ -346,6 +367,7 @@ export interface FileRoutesByTo {
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
+  '/crowdsource': typeof CrowdsourceRoute
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
@@ -353,9 +375,11 @@ export interface FileRoutesByTo {
   '/disputes': typeof DisputesRoute
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
+  '/evp-control': typeof EvpControlRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
+  '/infrastructure': typeof InfrastructureRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
@@ -394,6 +418,7 @@ export interface FileRoutesById {
   '/citations': typeof CitationsRoute
   '/citizen': typeof CitizenRoute
   '/communications': typeof CommunicationsRoute
+  '/crowdsource': typeof CrowdsourceRoute
   '/dashboard': typeof DashboardRoute
   '/developer': typeof DeveloperRoute
   '/dispatch': typeof DispatchRoute
@@ -401,9 +426,11 @@ export interface FileRoutesById {
   '/disputes': typeof DisputesRoute
   '/environment': typeof EnvironmentRoute
   '/ev-charging': typeof EvChargingRoute
+  '/evp-control': typeof EvpControlRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/fleet': typeof FleetRoute
+  '/infrastructure': typeof InfrastructureRoute
   '/iot': typeof IotRoute
   '/lookup': typeof LookupRoute
   '/map': typeof MapRoute
@@ -444,6 +471,7 @@ export interface FileRouteTypes {
     | '/citations'
     | '/citizen'
     | '/communications'
+    | '/crowdsource'
     | '/dashboard'
     | '/developer'
     | '/dispatch'
@@ -451,9 +479,11 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/environment'
     | '/ev-charging'
+    | '/evp-control'
     | '/finance'
     | '/finance-analytics'
     | '/fleet'
+    | '/infrastructure'
     | '/iot'
     | '/lookup'
     | '/map'
@@ -492,6 +522,7 @@ export interface FileRouteTypes {
     | '/citations'
     | '/citizen'
     | '/communications'
+    | '/crowdsource'
     | '/dashboard'
     | '/developer'
     | '/dispatch'
@@ -499,9 +530,11 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/environment'
     | '/ev-charging'
+    | '/evp-control'
     | '/finance'
     | '/finance-analytics'
     | '/fleet'
+    | '/infrastructure'
     | '/iot'
     | '/lookup'
     | '/map'
@@ -539,6 +572,7 @@ export interface FileRouteTypes {
     | '/citations'
     | '/citizen'
     | '/communications'
+    | '/crowdsource'
     | '/dashboard'
     | '/developer'
     | '/dispatch'
@@ -546,9 +580,11 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/environment'
     | '/ev-charging'
+    | '/evp-control'
     | '/finance'
     | '/finance-analytics'
     | '/fleet'
+    | '/infrastructure'
     | '/iot'
     | '/lookup'
     | '/map'
@@ -588,6 +624,7 @@ export interface RootRouteChildren {
   CitationsRoute: typeof CitationsRoute
   CitizenRoute: typeof CitizenRoute
   CommunicationsRoute: typeof CommunicationsRoute
+  CrowdsourceRoute: typeof CrowdsourceRoute
   DashboardRoute: typeof DashboardRoute
   DeveloperRoute: typeof DeveloperRoute
   DispatchRoute: typeof DispatchRoute
@@ -595,9 +632,11 @@ export interface RootRouteChildren {
   DisputesRoute: typeof DisputesRoute
   EnvironmentRoute: typeof EnvironmentRoute
   EvChargingRoute: typeof EvChargingRoute
+  EvpControlRoute: typeof EvpControlRoute
   FinanceRoute: typeof FinanceRoute
   FinanceAnalyticsRoute: typeof FinanceAnalyticsRoute
   FleetRoute: typeof FleetRoute
+  InfrastructureRoute: typeof InfrastructureRoute
   IotRoute: typeof IotRoute
   LookupRoute: typeof LookupRoute
   MapRoute: typeof MapRoute
@@ -693,6 +732,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CommunicationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crowdsource': {
+      id: '/crowdsource'
+      path: '/crowdsource'
+      fullPath: '/crowdsource'
+      preLoaderRoute: typeof CrowdsourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -742,6 +788,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EvChargingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/evp-control': {
+      id: '/evp-control'
+      path: '/evp-control'
+      fullPath: '/evp-control'
+      preLoaderRoute: typeof EvpControlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance': {
       id: '/finance'
       path: '/finance'
@@ -761,6 +814,13 @@ declare module '@tanstack/react-router' {
       path: '/fleet'
       fullPath: '/fleet'
       preLoaderRoute: typeof FleetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/infrastructure': {
+      id: '/infrastructure'
+      path: '/infrastructure'
+      fullPath: '/infrastructure'
+      preLoaderRoute: typeof InfrastructureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/iot': {
@@ -988,6 +1048,7 @@ const rootRouteChildren: RootRouteChildren = {
   CitationsRoute: CitationsRoute,
   CitizenRoute: CitizenRoute,
   CommunicationsRoute: CommunicationsRoute,
+  CrowdsourceRoute: CrowdsourceRoute,
   DashboardRoute: DashboardRoute,
   DeveloperRoute: DeveloperRoute,
   DispatchRoute: DispatchRoute,
@@ -995,9 +1056,11 @@ const rootRouteChildren: RootRouteChildren = {
   DisputesRoute: DisputesRoute,
   EnvironmentRoute: EnvironmentRoute,
   EvChargingRoute: EvChargingRoute,
+  EvpControlRoute: EvpControlRoute,
   FinanceRoute: FinanceRoute,
   FinanceAnalyticsRoute: FinanceAnalyticsRoute,
   FleetRoute: FleetRoute,
+  InfrastructureRoute: InfrastructureRoute,
   IotRoute: IotRoute,
   LookupRoute: LookupRoute,
   MapRoute: MapRoute,
