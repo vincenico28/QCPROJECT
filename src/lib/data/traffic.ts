@@ -79,17 +79,39 @@ export function useViolations(limit = 20) {
   });
 }
 
+export let MOCK_CITATIONS: Citation[] = [
+  {
+    id: "CIT-00129",
+    citation_number: "CIT-00129",
+    violation_id: "V-001",
+    plate_number: "ABC-1234",
+    vehicle_model: "Toyota Vios",
+    offense: "Illegal Parking",
+    amount: 1500,
+    status: "unpaid",
+    officer_name: "AI Cam",
+    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString()
+  },
+  {
+    id: "CIT-00135",
+    citation_number: "CIT-00135",
+    violation_id: "V-002",
+    plate_number: "XYZ-987",
+    vehicle_model: "Honda Civic",
+    offense: "Red Light",
+    amount: 2000,
+    status: "unpaid",
+    officer_name: "Field Officer",
+    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString()
+  }
+];
+
 export function useCitations(limit = 20) {
   return useQuery({
     queryKey: ["citations", limit],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("citations")
-        .select("*")
-        .order("issued_at", { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      return (data ?? []) as Citation[];
+      await new Promise(r => setTimeout(r, 400));
+      return MOCK_CITATIONS.slice(0, limit);
     },
   });
 }
@@ -98,13 +120,10 @@ export function useCitation(citationNumber: string) {
   return useQuery({
     queryKey: ["citation", citationNumber],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("citations")
-        .select("*")
-        .eq("citation_number", citationNumber)
-        .single();
-      if (error) throw error;
-      return data as Citation;
+      await new Promise(r => setTimeout(r, 400));
+      const cit = MOCK_CITATIONS.find(c => c.citation_number === citationNumber);
+      if (!cit) throw new Error("Not found");
+      return cit;
     },
     enabled: !!citationNumber,
   });
@@ -122,19 +141,24 @@ export function useCreateCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewCitation) => {
+      await new Promise(r => setTimeout(r, 600));
       const citation_number = `QC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const { data, error } = await supabase
-        .from("citations")
-        .insert({
-          ...input,
-          citation_number,
-          status: "pending",
-        })
-        .select()
-        .single();
       
-      if (error) throw error;
-      return data as Citation;
+      const newCit: Citation = {
+        id: citation_number,
+        citation_number,
+        violation_id: input.violation_id || null,
+        plate_number: input.plate_number,
+        vehicle_model: null,
+        offense: input.offense,
+        amount: input.amount,
+        status: "pending",
+        officer_name: input.officer_name || null,
+        issued_at: new Date().toISOString()
+      };
+      
+      MOCK_CITATIONS = [newCit, ...MOCK_CITATIONS];
+      return newCit;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citations"] });

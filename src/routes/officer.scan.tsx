@@ -2,9 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { Search, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatPeso, timeAgo } from "@/lib/data/traffic";
+import { formatPeso, timeAgo, MOCK_CITATIONS } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/scan")({
@@ -50,26 +49,23 @@ function ScannerPage() {
     if (!scanResult) return;
     
     // We expect the QR code to contain the citation_number or we fallback to plate search
-    async function lookup() {
+    async function lookup(query: string) {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("citations")
-        .select("*")
-        .or(`citation_number.ilike.${scanResult},plate_number.ilike.${scanResult}`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      await new Promise(r => setTimeout(r, 600));
+      const data = MOCK_CITATIONS.find(c => 
+        c.citation_number.toLowerCase() === query.toLowerCase() || 
+        c.plate_number.toLowerCase() === query.toLowerCase()
+      );
 
-      if (error) {
-        toast.error("Lookup failed");
-      } else if (!data) {
+
+      if (!data) {
         toast.error("No active citation found for this reference.");
       } else {
         setCitation(data);
       }
       setLoading(false);
     }
-    lookup();
+    lookup(scanResult);
   }, [scanResult]);
 
   const handleManualSearch = (e: React.FormEvent) => {
@@ -164,16 +160,10 @@ function ScannerPage() {
                 <div className="mt-3 grid gap-2">
                   <button
                     onClick={async () => {
-                      const { error } = await supabase
-                        .from("citations")
-                        .update({ status: "paid" })
-                        .eq("id", citation.id);
-                      if (error) {
-                        toast.error(error.message);
-                      } else {
-                        toast.success("Citation marked as paid");
-                        setCitation({ ...citation, status: "paid" });
-                      }
+                      const cit = MOCK_CITATIONS.find(c => c.id === citation.id);
+                      if (cit) cit.status = "paid";
+                      toast.success("Citation marked as paid");
+                      setCitation({ ...citation, status: "paid" });
                     }}
                     className="rounded-lg bg-success px-4 py-3 text-sm font-semibold text-success-foreground shadow-lg shadow-success/20"
                   >

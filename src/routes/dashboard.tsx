@@ -22,13 +22,6 @@ import violation2 from "@/assets/violation-2.jpg";
 import violation3 from "@/assets/violation-3.jpg";
 
 export const Route = createFileRoute("/dashboard")({
-  beforeLoad: ({ context }) => {
-    // @ts-expect-error injected
-    const role = context.role;
-    if (role === "officer") {
-      throw redirect({ to: "/officer/scan" });
-    }
-  },
   head: () => ({
     meta: [
       { title: "Command Dashboard · Culiat Traffic Ops" },

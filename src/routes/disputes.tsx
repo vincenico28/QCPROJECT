@@ -12,13 +12,6 @@ export const Route = createFileRoute("/disputes")({
   head: () => ({
     meta: [{ title: "Dispute Queue · Culiat Traffic Ops" }],
   }),
-  beforeLoad: ({ context }) => {
-    // @ts-expect-error - injected by router context
-    const role = context.role;
-    if (role !== "admin" && role !== "dispatcher") {
-      throw new Error("Unauthorized");
-    }
-  },
   component: DisputesPage,
 });
 
@@ -84,7 +77,6 @@ function DisputeCard({ dispute }: { dispute: Dispute }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [actionType, setActionType] = useState<"approved" | "rejected" | null>(null);
 
-  // @ts-expect-error citation is joined
   const citation = dispute.citation;
 
   const handleResolve = async () => {

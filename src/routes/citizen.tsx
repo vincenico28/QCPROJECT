@@ -2,10 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useCitizenProfile } from "@/lib/data/citizen";
 import { useAdvisories } from "@/lib/data/advisories";
-import { useCitizenDisputes } from "@/lib/data/citizen-disputes";
-import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy } from "lucide-react";
+import { useCitizenDisputes, useCreateDispute } from "@/lib/data/disputes";
+import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy, Plus } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
+import * as Dialog from "@radix-ui/react-dialog";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/citizen")({
   head: () => ({
@@ -20,6 +22,10 @@ function CitizenPortal() {
   const { data: profile, isLoading: loadingProfile } = useCitizenProfile();
   const { data: advisories, isLoading: loadingAdvisories } = useAdvisories();
   const { data: disputes, isLoading: loadingDisputes } = useCitizenDisputes();
+  const createDispute = useCreateDispute();
+  const [appealModalOpen, setAppealModalOpen] = useState(false);
+  const [appealReason, setAppealReason] = useState("");
+  const [appealCitationId, setAppealCitationId] = useState("");
 
   if (loadingProfile || !profile) {
     return (
@@ -309,10 +315,70 @@ function CitizenPortal() {
                   <h1 className="text-3xl font-bold tracking-tight">Dispute Tracking Hub</h1>
                   <p className="mt-2 text-white/60">Monitor your submitted appeals and provide requested evidence.</p>
                 </div>
-                <button className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors">
-                  <ShieldCheck className="size-4" />
-                  File New Appeal
-                </button>
+                
+                <Dialog.Root open={appealModalOpen} onOpenChange={setAppealModalOpen}>
+                  <Dialog.Trigger asChild>
+                    <button className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors">
+                      <ShieldCheck className="size-4" />
+                      File New Appeal
+                    </button>
+                  </Dialog.Trigger>
+                  <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
+                    <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
+                      <Dialog.Title className="text-lg font-bold text-white">File New Citation Appeal</Dialog.Title>
+                      <Dialog.Description className="mt-2 text-sm text-white/60">
+                        Please provide the citation number and your reason for dispute. Our adjudicators will review your request.
+                      </Dialog.Description>
+                      
+                      <div className="mt-6 flex flex-col gap-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Citation Number</label>
+                          <input 
+                            type="text" 
+                            value={appealCitationId}
+                            onChange={(e) => setAppealCitationId(e.target.value)}
+                            placeholder="e.g. CIT-00129" 
+                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Reason for Dispute</label>
+                          <textarea 
+                            rows={4}
+                            value={appealReason}
+                            onChange={(e) => setAppealReason(e.target.value)}
+                            placeholder="Please explain in detail why you are appealing this citation..." 
+                            className="resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-8 flex justify-end gap-3">
+                        <Dialog.Close asChild>
+                          <button className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-colors">Cancel</button>
+                        </Dialog.Close>
+                        <button 
+                          disabled={createDispute.isPending || !appealCitationId || !appealReason}
+                          onClick={() => {
+                            createDispute.mutate({ citation_id: appealCitationId, reason: appealReason }, {
+                              onSuccess: () => {
+                                toast.success("Appeal submitted successfully.");
+                                setAppealModalOpen(false);
+                                setAppealCitationId("");
+                                setAppealReason("");
+                              }
+                            });
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors disabled:opacity-50"
+                        >
+                          {createDispute.isPending && <Loader2 className="size-4 animate-spin" />}
+                          Submit Appeal
+                        </button>
+                      </div>
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
              </div>
 
              {loadingDisputes ? (
@@ -328,13 +394,13 @@ function CitizenPortal() {
                              </div>
                              <div>
                                <h3 className="font-bold text-white">{dispute.id}</h3>
-                               <p className="text-xs text-white/50">Appealing Citation: {dispute.citationId}</p>
+                               <p className="text-xs text-white/50">Appealing Citation: {dispute.citation_id}</p>
                              </div>
                            </div>
                            <span className={cn(
                              "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
-                             dispute.status === "Resolved" ? "bg-emerald-500/20 text-emerald-500" :
-                             dispute.status === "Evidence Requested" ? "bg-orange-500/20 text-orange-500" :
+                             dispute.status === "approved" ? "bg-emerald-500/20 text-emerald-500" :
+                             dispute.status === "rejected" ? "bg-red-500/20 text-red-500" :
                              "bg-blue-500/20 text-blue-400"
                            )}>
                              {dispute.status}
@@ -346,21 +412,14 @@ function CitizenPortal() {
                               <p className="text-xs font-bold uppercase tracking-wider text-white/50">Your Statement</p>
                               <p className="mt-1 text-sm text-white/90">"{dispute.reason}"</p>
                               <p className="mt-2 text-xs text-white/40 flex items-center gap-1">
-                                <Clock className="size-3" /> Submitted {new Date(dispute.dateSubmitted).toLocaleDateString()}
+                                <Clock className="size-3" /> Submitted {new Date(dispute.created_at).toLocaleDateString()}
                               </p>
                            </div>
 
-                           {dispute.officerNotes && (
+                           {dispute.admin_notes && (
                               <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
                                 <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Adjudicator Notes</p>
-                                <p className="mt-1 text-sm text-white/90">{dispute.officerNotes}</p>
-                                
-                                {dispute.status === "Evidence Requested" && (
-                                   <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition-colors">
-                                     <Upload className="size-4" />
-                                     Upload Evidence
-                                   </button>
-                                )}
+                                <p className="mt-1 text-sm text-white/90">{dispute.admin_notes}</p>
                               </div>
                            )}
                         </div>

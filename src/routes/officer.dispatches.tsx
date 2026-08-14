@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, MapPin, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +13,27 @@ export const Route = createFileRoute("/officer/dispatches")({
   component: DispatchesPage,
 });
 
+const MOCK_DISPATCHES = [
+  {
+    id: "DSP-001",
+    location: "Commonwealth Ave & Tandang Sora",
+    status: "assigned",
+    instructions: "Respond to reported collision blocking 2 lanes.",
+    created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    officer_id: "104",
+    violation: { violation_type: "Accident / Obstruction", plate_number: "UNKNOWN" }
+  },
+  {
+    id: "DSP-002",
+    location: "Quezon Memorial Circle",
+    status: "in_progress",
+    instructions: "Direct traffic, broken traffic light.",
+    created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+    officer_id: "104",
+    violation: null
+  }
+];
+
 function DispatchesPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -21,24 +41,17 @@ function DispatchesPage() {
   const { data: dispatches = [], isLoading } = useQuery({
     queryKey: ["my_dispatches", user?.id],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("dispatches")
-        .select(`
-          *,
-          violation:violations(*)
-        `)
-        .eq("officer_id", user?.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      await new Promise(r => setTimeout(r, 500));
+      return MOCK_DISPATCHES;
     },
     enabled: !!user?.id,
   });
 
   const updateDispatch = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase as any).from("dispatches").update({ status }).eq("id", id);
-      if (error) throw error;
+      await new Promise(r => setTimeout(r, 400));
+      const d = MOCK_DISPATCHES.find(x => x.id === id);
+      if (d) d.status = status;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my_dispatches"] });
