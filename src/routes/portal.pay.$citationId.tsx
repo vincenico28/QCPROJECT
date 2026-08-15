@@ -1,9 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, Loader2, CreditCard, Smartphone } from "lucide-react";
-import { formatPeso, useCitation } from "@/lib/data/traffic";
+import { formatPeso, useCitation, useUpdateCitationStatus } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/pay/$citationId")({
@@ -17,26 +16,24 @@ function PaymentPage() {
   const [busy, setBusy] = useState(false);
 
   const { data: citation, isLoading, error } = useCitation(citationId);
+  const updateCitation = useUpdateCitationStatus();
   const amount = citation?.amount ? Number(citation.amount) : 0;
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
 
-    const { error } = await supabase
-      .from("citations")
-      .update({ status: "paid" })
-      .eq("citation_number", citationId);
-
-    setBusy(false);
-
-    if (error) {
-      toast.error("Payment failed to register in the database");
-      console.error(error);
-      return;
-    }
-
-    navigate({ to: "/portal/receipt/$citationId", params: { citationId } });
+    updateCitation.mutate({ citationId, status: "paid" }, {
+      onSuccess: () => {
+        setBusy(false);
+        navigate({ to: "/portal/receipt/$citationId", params: { citationId } });
+      },
+      onError: (err) => {
+        setBusy(false);
+        toast.error("Payment failed to register");
+        console.error(err);
+      }
+    });
   };
 
   if (isLoading) {
@@ -51,7 +48,7 @@ function PaymentPage() {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center bg-background gap-4">
         <p className="text-sm text-danger">Could not load citation details.</p>
-        <button onClick={() => window.history.back()} className="text-sm text-primary underline">Go back</button>
+        <Link to="/citizen" className="text-sm text-primary underline">Go back</Link>
       </div>
     );
   }
@@ -60,13 +57,13 @@ function PaymentPage() {
     <div className="min-h-dvh bg-background">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
-          <button
-            onClick={() => window.history.back()}
+          <Link
+            to="/citizen"
             className="inline-flex items-center gap-2 text-xs text-subtle transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-3.5" />
-            Back to citation
-          </button>
+            Back to portal
+          </Link>
           <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
             Secure Checkout
           </span>

@@ -35,10 +35,10 @@ function ReceiptPage() {
           </button>
           
           <Link
-            to="/lookup"
+            to="/citizen"
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-panel-elevated px-4 py-3 font-medium text-foreground hover:bg-panel transition-colors border border-border"
           >
-            Back to Lookup
+            Back to Portal
             <ArrowRight className="size-4" />
           </Link>
         </div>

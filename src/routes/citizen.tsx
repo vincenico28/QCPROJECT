@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useCitizenProfile } from "@/lib/data/citizen";
 import { useAdvisories } from "@/lib/data/advisories";
@@ -43,10 +43,10 @@ function CitizenPortal() {
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0b]/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3">
             <img src="/favico2.png" alt="Culiat LGU" className="size-8" />
             <span className="font-semibold tracking-tight text-white">Citizen<span className="text-[#0066cc]">Portal</span></span>
-          </div>
+          </Link>
           
           <div className="flex items-center gap-6">
             <nav className="hidden items-center gap-6 text-sm font-medium text-white/70 md:flex">
@@ -86,9 +86,9 @@ function CitizenPortal() {
                   <span className="text-xs text-white/50">{profile.id}</span>
                 </div>
               </div>
-              <button className="text-white/50 hover:text-white transition-colors">
+              <Link to="/" className="text-white/50 hover:text-white transition-colors">
                 <LogOut className="size-4" />
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -121,9 +121,13 @@ function CitizenPortal() {
                         </p>
                       </div>
                     </div>
-                    <button className="shrink-0 rounded-lg bg-[#cc0000] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#cc0000]/25 hover:bg-[#cc0000]/90 transition-all">
+                    <Link 
+                      to="/portal/pay/$citationId"
+                      params={{ citationId: unpaidCitations[0].id }}
+                      className="shrink-0 rounded-lg bg-[#cc0000] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#cc0000]/25 hover:bg-[#cc0000]/90 transition-all"
+                    >
                       Pay Now
-                    </button>
+                    </Link>
                   </div>
                 )}
 
@@ -194,9 +198,27 @@ function CitizenPortal() {
                                {c.status}
                              </span>
                              
-                             <button className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity">
-                               View Details <ChevronRight className="size-3" />
-                             </button>
+                             {c.status === "unpaid" ? (
+                               <Link 
+                                 to="/portal/pay/$citationId"
+                                 params={{ citationId: c.id }}
+                                 className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity"
+                               >
+                                 Pay Now <ChevronRight className="size-3" />
+                               </Link>
+                             ) : c.status === "settled" ? (
+                               <Link 
+                                 to="/portal/receipt/$citationId"
+                                 params={{ citationId: c.id }}
+                                 className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity"
+                               >
+                                 View Receipt <ChevronRight className="size-3" />
+                               </Link>
+                             ) : (
+                               <button className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity">
+                                 View Details <ChevronRight className="size-3" />
+                               </button>
+                             )}
                           </div>
                         </div>
                       ))}

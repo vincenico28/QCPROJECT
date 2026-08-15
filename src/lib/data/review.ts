@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import type { Citation, Violation } from "./traffic";
+import { type Citation, type Violation, MOCK_VIOLATIONS, MOCK_CITATIONS } from "./traffic";
 
 /** Standard QC LGU fine schedule (PHP) by offense type. */
 export const FINE_SCHEDULE: Record<string, number> = {
@@ -33,8 +32,9 @@ export function useReviewViolation() {
       id: string;
       status: "confirmed" | "dismissed" | "pending";
     }) => {
-      const { error } = await supabase.from("violations").update({ status }).eq("id", id);
-      if (error) throw error;
+      await new Promise(r => setTimeout(r, 400));
+      const v = MOCK_VIOLATIONS.find(x => x.id === id);
+      if (v) v.status = status;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["violations"] });
@@ -54,9 +54,9 @@ export function useIssueCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: IssueCitationInput) => {
-      const { data, error } = await supabase
-        .from("citations")
-        .insert({
+      await new Promise(r => setTimeout(r, 600));
+      const c: Citation = {
+          id: `CIT-${Date.now()}`,
           citation_number: nextCitationNumber(),
           violation_id: input.violation.id,
           plate_number: input.violation.plate_number,
@@ -64,19 +64,15 @@ export function useIssueCitation() {
           offense: input.offense,
           amount: input.amount,
           officer_name: input.officerName,
-          status: "pending",
-        })
-        .select()
-        .single();
-      if (error) throw error;
+          status: "unpaid",
+          issued_at: new Date().toISOString(),
+      };
+      MOCK_CITATIONS.unshift(c);
 
-      const { error: vErr } = await supabase
-        .from("violations")
-        .update({ status: "confirmed" })
-        .eq("id", input.violation.id);
-      if (vErr) throw vErr;
+      const v = MOCK_VIOLATIONS.find(x => x.id === input.violation.id);
+      if (v) v.status = "confirmed";
 
-      return data as Citation;
+      return c;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["violations"] });
