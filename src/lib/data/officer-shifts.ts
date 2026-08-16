@@ -13,30 +13,30 @@ export type OfficerShift = {
 const MOCK_SHIFTS: OfficerShift[] = [
   {
     id: "SH-101",
-    badgeNumber: "042",
+    badgeNumber: "BADGE-101",
     shiftStart: new Date(new Date().setHours(6, 0, 0, 0)).toISOString(),
     shiftEnd: null,
     location: [14.6548, 121.0536],
-    currentTask: "Patrolling Philcoa",
+    currentTask: "Patrolling Philcoa Sector",
     batteryLevel: 85,
   },
   {
     id: "SH-102",
-    badgeNumber: "018",
+    badgeNumber: "BADGE-102",
     shiftStart: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
     shiftEnd: null,
     location: [14.6713, 121.0475],
-    currentTask: "Assisting Accident at Tandang Sora",
+    currentTask: "Assisting Incident at Tandang Sora",
     batteryLevel: 62,
   },
   {
     id: "SH-103",
-    badgeNumber: "005",
+    badgeNumber: "BADGE-104",
     shiftStart: new Date(new Date().setHours(5, 30, 0, 0)).toISOString(),
     shiftEnd: null,
     location: [14.689, 121.077],
-    currentTask: "Directing Traffic Fairview",
-    batteryLevel: 40,
+    currentTask: "Directing Traffic at Commonwealth Ave",
+    batteryLevel: 94,
   }
 ];
 

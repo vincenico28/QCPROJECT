@@ -156,7 +156,7 @@ function ScannerPage() {
                 </p>
               </div>
 
-              {citation.status === "pending" && (
+              {(citation.status === "pending" || citation.status === "unpaid") && (
                 <div className="mt-3 grid gap-2">
                   <button
                     onClick={async () => {

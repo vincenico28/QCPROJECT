@@ -444,7 +444,7 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
           {violation.violation_type}
         </div>
         <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary backdrop-blur">
-          {Number(violation.confidence).toFixed(1)}%
+          {Math.round(Number(violation.confidence) > 1 ? Number(violation.confidence) : Number(violation.confidence) * 100)}%
         </div>
       </div>
 

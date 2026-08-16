@@ -146,25 +146,27 @@ function DisputeCard({ dispute }: { dispute: Dispute }) {
 
       {dispute.status === "pending" && (
         <div className="mt-2 flex items-center gap-3 border-t border-border pt-4">
+          <button
+            onClick={() => {
+              setActionType("approved");
+              setModalOpen(true);
+            }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-success/15 px-3 py-2 text-xs font-bold uppercase tracking-widest text-success transition-colors hover:bg-success hover:text-success-foreground"
+          >
+            <CheckCircle2 className="size-4" /> Approve & Waive
+          </button>
+          <button
+            onClick={() => {
+              setActionType("rejected");
+              setModalOpen(true);
+            }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-danger/15 px-3 py-2 text-xs font-bold uppercase tracking-widest text-danger transition-colors hover:bg-danger hover:text-danger-foreground"
+          >
+            <XCircle className="size-4" /> Reject Appeal
+          </button>
+          
+          {/* Resolution Modal */}
           <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
-            <Dialog.Trigger asChild>
-              <button
-                onClick={() => setActionType("approved")}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-success/15 px-3 py-2 text-xs font-bold uppercase tracking-widest text-success transition-colors hover:bg-success hover:text-success-foreground"
-              >
-                <CheckCircle2 className="size-4" /> Approve & Waive
-              </button>
-            </Dialog.Trigger>
-            <Dialog.Trigger asChild>
-              <button
-                onClick={() => setActionType("rejected")}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-danger/15 px-3 py-2 text-xs font-bold uppercase tracking-widest text-danger transition-colors hover:bg-danger hover:text-danger-foreground"
-              >
-                <XCircle className="size-4" /> Reject Appeal
-              </button>
-            </Dialog.Trigger>
-            
-            {/* Resolution Modal */}
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" />
               <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-xl border border-border bg-panel p-6 shadow-2xl">

@@ -146,7 +146,7 @@ function ViolationsPage() {
 }
 
 function ViolationRow({ v, onReview }: { v: Violation; onReview: () => void }) {
-  const conf = Number(v.confidence);
+  const conf = Number(v.confidence) > 1 ? Number(v.confidence) : Math.round(Number(v.confidence) * 100);
   const confTone = conf >= 90 ? "text-success" : conf >= 80 ? "text-primary" : "text-warning";
   const statusTone =
     v.status === "confirmed"

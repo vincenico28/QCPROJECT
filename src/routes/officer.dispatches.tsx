@@ -44,7 +44,6 @@ function DispatchesPage() {
       await new Promise(r => setTimeout(r, 500));
       return MOCK_DISPATCHES;
     },
-    enabled: !!user?.id,
   });
 
   const updateDispatch = useMutation({
