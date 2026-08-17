@@ -9,8 +9,9 @@ import {
   timeAgo,
   type Violation,
 } from "@/lib/data/traffic";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import qcMap from "@/assets/qc-map.jpg";
@@ -67,10 +68,45 @@ const CCTV_FEEDS = [
 
 const FEED_IMAGES = [violation1, violation2, violation3];
 
+const ROLE_INFO = {
+  admin: {
+    label: "Administrator",
+    clearance: "Level 4 · Full System & Root Admin Clearance",
+    badge: "border-primary/40 bg-primary/10 text-primary",
+    dot: "bg-primary shadow-[0_0_8px_var(--color-primary)]",
+    icon: ShieldCheck,
+  },
+  dispatcher: {
+    label: "Central Dispatcher",
+    clearance: "Level 3 · Tactical Dispatch & Unit Operations",
+    badge: "border-warning/40 bg-warning/10 text-warning",
+    dot: "bg-warning shadow-[0_0_8px_var(--color-warning)]",
+    icon: Radio,
+  },
+  officer: {
+    label: "Field Enforcement Officer",
+    clearance: "Level 2 · Sector Patrol & Citation Issuance",
+    badge: "border-success/40 bg-success/10 text-success",
+    dot: "bg-success shadow-[0_0_8px_var(--color-success)]",
+    icon: ShieldCheck,
+  },
+  citizen: {
+    label: "Citizen / Visitor",
+    clearance: "Level 1 · Public Portal & Inquiry Clearance",
+    badge: "border-border bg-panel-elevated text-subtle",
+    dot: "bg-subtle",
+    icon: User,
+  },
+};
+
 function CommandDashboard() {
+  const { user, role } = useAuth();
   const { data: violations = [], isLoading: vLoading } = useViolations(6);
   const { data: citations = [] } = useCitations(10);
   const { data: cameras = [] } = useCameras();
+
+  const roleConfig = ROLE_INFO[role] || ROLE_INFO.admin;
+  const RoleIcon = roleConfig.icon;
 
   const kpis = useMemo(() => {
     const revenue = citations
@@ -90,6 +126,37 @@ function CommandDashboard() {
 
   return (
     <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-12 lg:p-8">
+      {/* OPERATOR ROLE INDICATOR BANNER */}
+      <div className="col-span-1 lg:col-span-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-border bg-panel p-4.5 shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className={cn("grid size-11 place-items-center rounded-xl border", roleConfig.badge)}>
+            <RoleIcon className="size-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-foreground text-sm">
+                Logged in as: <strong className="text-foreground">{user?.email || "Authorized Operator"}</strong>
+              </span>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase tracking-wider", roleConfig.badge)}>
+                <span className={cn("size-1.5 rounded-full", roleConfig.dot)} />
+                {roleConfig.label}
+              </span>
+            </div>
+            <p className="font-mono-tab text-xs text-muted-foreground mt-0.5">
+              {roleConfig.clearance}
+            </p>
+          </div>
+        </div>
+
+        {role === "admin" && (
+          <Link
+            to="/employees"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all shrink-0"
+          >
+            Staff & Access Control →
+          </Link>
+        )}
+      </div>
       {/* KPI ROW */}
       <KpiCard
         label="Daily Violations"

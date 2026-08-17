@@ -24,6 +24,7 @@ import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as DispatchRouteImport } from './routes/dispatch'
 import { Route as DispatchHotlineRouteImport } from './routes/dispatch-hotline'
 import { Route as DisputesRouteImport } from './routes/disputes'
+import { Route as EmployeesRouteImport } from './routes/employees'
 import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as FinanceAnalyticsRouteImport } from './routes/finance-analytics'
 import { Route as InfrastructureRouteImport } from './routes/infrastructure'
@@ -125,6 +126,11 @@ const DispatchHotlineRoute = DispatchHotlineRouteImport.update({
 const DisputesRoute = DisputesRouteImport.update({
   id: '/disputes',
   path: '/disputes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmployeesRoute = EmployeesRouteImport.update({
+  id: '/employees',
+  path: '/employees',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FinanceRoute = FinanceRouteImport.update({
@@ -279,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/dispatch': typeof DispatchRoute
   '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/employees': typeof EmployeesRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/dispatch': typeof DispatchRoute
   '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/employees': typeof EmployeesRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/dispatch': typeof DispatchRoute
   '/dispatch-hotline': typeof DispatchHotlineRoute
   '/disputes': typeof DisputesRoute
+  '/employees': typeof EmployeesRoute
   '/finance': typeof FinanceRoute
   '/finance-analytics': typeof FinanceAnalyticsRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -413,6 +422,7 @@ export interface FileRouteTypes {
     | '/dispatch'
     | '/dispatch-hotline'
     | '/disputes'
+    | '/employees'
     | '/finance'
     | '/finance-analytics'
     | '/infrastructure'
@@ -457,6 +467,7 @@ export interface FileRouteTypes {
     | '/dispatch'
     | '/dispatch-hotline'
     | '/disputes'
+    | '/employees'
     | '/finance'
     | '/finance-analytics'
     | '/infrastructure'
@@ -500,6 +511,7 @@ export interface FileRouteTypes {
     | '/dispatch'
     | '/dispatch-hotline'
     | '/disputes'
+    | '/employees'
     | '/finance'
     | '/finance-analytics'
     | '/infrastructure'
@@ -545,6 +557,7 @@ export interface RootRouteChildren {
   DispatchRoute: typeof DispatchRoute
   DispatchHotlineRoute: typeof DispatchHotlineRoute
   DisputesRoute: typeof DisputesRoute
+  EmployeesRoute: typeof EmployeesRoute
   FinanceRoute: typeof FinanceRoute
   FinanceAnalyticsRoute: typeof FinanceAnalyticsRoute
   InfrastructureRoute: typeof InfrastructureRoute
@@ -674,6 +687,13 @@ declare module '@tanstack/react-router' {
       path: '/disputes'
       fullPath: '/disputes'
       preLoaderRoute: typeof DisputesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/employees': {
+      id: '/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof EmployeesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/finance': {
@@ -913,6 +933,7 @@ const rootRouteChildren: RootRouteChildren = {
   DispatchRoute: DispatchRoute,
   DispatchHotlineRoute: DispatchHotlineRoute,
   DisputesRoute: DisputesRoute,
+  EmployeesRoute: EmployeesRoute,
   FinanceRoute: FinanceRoute,
   FinanceAnalyticsRoute: FinanceAnalyticsRoute,
   InfrastructureRoute: InfrastructureRoute,

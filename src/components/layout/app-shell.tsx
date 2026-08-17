@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden pb-4 [&::-webkit-scrollbar]:hidden"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {(role === "admin" ? [...NAV, { to: "/admin", label: "Admin", icon: UserCog }] : NAV).map((item) => {
+          {(role === "admin" ? [...NAV, { to: "/employees", label: "Employees", icon: UserCog }] : NAV).map((item) => {
             const active = pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
@@ -131,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-3">
+        <div className="mt-auto flex flex-col items-center gap-3">
           <button
             onClick={async () => {
               await supabase.auth.signOut();
@@ -143,10 +143,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             <LogOut className="size-5" strokeWidth={1.75} />
           </button>
           <div
-            className="grid size-10 place-items-center rounded-full bg-panel-elevated font-mono-tab text-[11px] font-bold text-foreground ring-2 ring-primary/40"
-            title={email ?? "Signed in"}
+            className={cn(
+              "grid size-10 place-items-center rounded-full bg-panel-elevated font-mono-tab text-[11px] font-bold text-foreground ring-2 relative",
+              role === "admin" ? "ring-primary/60 shadow-[0_0_10px_var(--color-primary)]/20" :
+              role === "dispatcher" ? "ring-warning/60 shadow-[0_0_10px_var(--color-warning)]/20" :
+              role === "officer" ? "ring-success/60 shadow-[0_0_10px_var(--color-success)]/20" : "ring-border"
+            )}
+            title={`${email ?? "Signed in"} (${role.toUpperCase()})`}
           >
             {(email?.[0] ?? "Q").toUpperCase()}
+            <span
+              className={cn(
+                "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-panel",
+                role === "admin" ? "bg-primary" :
+                role === "dispatcher" ? "bg-warning" :
+                role === "officer" ? "bg-success" : "bg-subtle"
+              )}
+            />
           </div>
         </div>
       </aside>
@@ -159,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PageHeading pathname={pathname} />
           </div>
 
-          <div className="ml-auto flex items-center gap-3 sm:gap-5">
+          <div className="ml-auto flex items-center gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => palette.setOpen(true)}
@@ -172,6 +185,36 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Command className="size-3" /> K
               </span>
             </button>
+
+            {/* Operator Role Tag */}
+            <div className="hidden sm:flex items-center gap-2.5 rounded-lg border border-border bg-panel px-3 py-1.5 shadow-sm">
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  role === "admin"
+                    ? "bg-primary shadow-[0_0_8px_var(--color-primary)]"
+                    : role === "dispatcher"
+                    ? "bg-warning shadow-[0_0_8px_var(--color-warning)]"
+                    : role === "officer"
+                    ? "bg-success shadow-[0_0_8px_var(--color-success)]"
+                    : "bg-subtle"
+                )}
+              />
+              <div className="flex flex-col text-left">
+                <span className="font-mono-tab text-[9px] uppercase tracking-widest text-subtle leading-none">
+                  Account Role
+                </span>
+                <span className="font-mono-tab text-xs font-bold text-foreground leading-tight">
+                  {role === "admin"
+                    ? "Administrator"
+                    : role === "dispatcher"
+                    ? "Dispatcher"
+                    : role === "officer"
+                    ? "Field Officer"
+                    : "Citizen"}
+                </span>
+              </div>
+            </div>
 
             <div className="hidden md:flex flex-col items-end">
               <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">

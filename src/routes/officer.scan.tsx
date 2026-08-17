@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, ArrowLeft, LayoutDashboard, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { formatPeso, timeAgo, MOCK_CITATIONS } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
@@ -75,8 +75,31 @@ function ScannerPage() {
   };
 
   return (
-    <div className="flex flex-col p-4 pb-20">
-      <h2 className="mb-4 text-xl font-semibold tracking-tight">Scanner</h2>
+    <div className="flex flex-col p-4 pb-20 max-w-2xl mx-auto w-full">
+      {/* Back Navigation Bar */}
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+        <Link
+          to="/officer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"
+        >
+          <ArrowLeft className="size-3.5 text-primary" />
+          Back to Terminal
+        </Link>
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-panel-elevated transition-colors"
+        >
+          <LayoutDashboard className="size-3.5 text-subtle" />
+          Command Center
+        </Link>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <div className="grid size-8 place-items-center rounded-lg bg-blue-500/20 text-blue-400">
+          <QrCode className="size-4" />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-foreground">Scan Citation / License</h2>
+      </div>
 
       {!scanResult ? (
         <div className="flex flex-col gap-6">

@@ -1,39 +1,23 @@
 import { useState } from "react";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { ShieldCheck, Loader2, Lock, Mail, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
 
 export function SignInScreen() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          setMessage("Account created. Check your email to confirm access.");
-        }
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -56,26 +40,17 @@ export function SignInScreen() {
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="panel rounded-2xl p-6">
-          <div className="mb-5 flex rounded-lg border border-border bg-panel p-1">
-            {(["signin", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  "flex-1 rounded-md px-3 py-1.5 font-mono-tab text-[11px] font-semibold uppercase tracking-widest transition-colors",
-                  mode === m ? "bg-primary/15 text-primary" : "text-subtle hover:text-foreground",
-                )}
-              >
-                {m === "signin" ? "Sign in" : "Register"}
-              </button>
-            ))}
+        <form onSubmit={onSubmit} className="panel rounded-2xl p-6 border border-border bg-panel shadow-xl">
+          <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+            <Info className="size-4 shrink-0 text-primary mt-0.5" />
+            <p className="leading-relaxed">
+              Account provisioning is restricted. New employee accounts must be registered directly by a System Administrator in the Employees module.
+            </p>
           </div>
 
           <label className="block">
-            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-              Official email
+            <span className="flex items-center gap-1.5 font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+              <Mail className="size-3" /> Official email
             </span>
             <input
               type="email"
@@ -83,22 +58,21 @@ export function SignInScreen() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="officer@quezoncity.gov.ph"
-              className="mt-1.5 w-full rounded-lg border border-border bg-panel px-3 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </label>
 
           <label className="mt-4 block">
-            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-              Password
+            <span className="flex items-center gap-1.5 font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+              <Lock className="size-3" /> Password
             </span>
             <input
               type="password"
               required
-              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="mt-1.5 w-full rounded-lg border border-border bg-panel px-3 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </label>
 
@@ -107,26 +81,19 @@ export function SignInScreen() {
               {error}
             </p>
           )}
-          {message && (
-            <p className="mt-4 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
-              {message}
-            </p>
-          )}
-
-
 
           <button
             type="submit"
             disabled={busy}
             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {mode === "signin" ? "Access command center" : "Create account"}
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+            Sign in to Operations
           </button>
 
           <div className="mt-6 text-center">
             <a href="/" className="text-xs text-subtle hover:text-foreground underline underline-offset-2 transition-colors">
-              ← Return to public portal
+              ← Return to public citizen portal
             </a>
           </div>
         </form>

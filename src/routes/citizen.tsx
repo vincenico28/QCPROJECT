@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useCitizenProfile } from "@/lib/data/citizen";
+import { useCitizenProfile, useCitizenAuth, useAddCitizenVehicle } from "@/lib/data/citizen";
 import { useAdvisories } from "@/lib/data/advisories";
 import { useCitizenDisputes, useCreateDispute } from "@/lib/data/disputes";
-import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy, Plus } from "lucide-react";
+import { CitizenAuthScreen } from "@/components/citizen/citizen-auth-screen";
+import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy, Plus, X } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -17,26 +18,50 @@ export const Route = createFileRoute("/citizen")({
 });
 
 function CitizenPortal() {
-  const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes" | "rewards">("vehicles");
-  
+  const { citizen, isAuthenticated, logout } = useCitizenAuth();
   const { data: profile, isLoading: loadingProfile } = useCitizenProfile();
   const { data: advisories, isLoading: loadingAdvisories } = useAdvisories();
   const { data: disputes, isLoading: loadingDisputes } = useCitizenDisputes();
   const createDispute = useCreateDispute();
+  const addVehicle = useAddCitizenVehicle();
+
+  const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes" | "rewards">("vehicles");
   const [appealModalOpen, setAppealModalOpen] = useState(false);
   const [appealReason, setAppealReason] = useState("");
   const [appealCitationId, setAppealCitationId] = useState("");
 
-  if (loadingProfile || !profile) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-[#0a0a0b]">
-        <Loader2 className="size-8 animate-spin text-[#0066cc]" />
-      </div>
-    );
+  // Add Vehicle Modal State
+  const [addVehicleOpen, setAddVehicleOpen] = useState(false);
+  const [newPlate, setNewPlate] = useState("");
+  const [newModel, setNewModel] = useState("");
+  const [newType, setNewType] = useState("Sedan");
+
+  // Show Citizen Auth Screen (Sign In & Sign Up) if not authenticated
+  if (!isAuthenticated || !profile) {
+    return <CitizenAuthScreen />;
   }
 
-  const unpaidCitations = profile.citations.filter(c => c.status === "unpaid");
+  const unpaidCitations = profile.citations.filter((c) => c.status === "unpaid");
   const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount, 0);
+
+  const handleAddVehicleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlate || !newModel) return;
+
+    addVehicle.mutate(
+      { plateNumber: newPlate, makeModel: newModel, type: newType },
+      {
+        onSuccess: () => {
+          toast.success(`Vehicle ${newPlate.toUpperCase()} added to your profile.`);
+          setAddVehicleOpen(false);
+          setNewPlate("");
+          setNewModel("");
+          setNewType("Sedan");
+        },
+        onError: () => toast.error("Failed to add vehicle"),
+      },
+    );
+  };
 
   return (
     <div className="min-h-dvh bg-[#0a0a0b] text-white selection:bg-[#0066cc]/30">
@@ -45,32 +70,37 @@ function CitizenPortal() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link to="/" className="flex items-center gap-3">
             <img src="/favico2.png" alt="Culiat LGU" className="size-8" />
-            <span className="font-semibold tracking-tight text-white">Citizen<span className="text-[#0066cc]">Portal</span></span>
+            <span className="font-semibold tracking-tight text-white">
+              Citizen<span className="text-[#0066cc]">Portal</span>
+            </span>
           </Link>
-          
+
           <div className="flex items-center gap-6">
             <nav className="hidden items-center gap-6 text-sm font-medium text-white/70 md:flex">
-              <button 
+              <button
                 onClick={() => setActiveTab("vehicles")}
                 className={cn("transition-colors", activeTab === "vehicles" ? "text-white" : "hover:text-white")}
               >
                 Dashboard
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab("traffic")}
                 className={cn("transition-colors", activeTab === "traffic" ? "text-white" : "hover:text-white")}
               >
                 Live Traffic Feed
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab("disputes")}
                 className={cn("transition-colors", activeTab === "disputes" ? "text-white" : "hover:text-white")}
               >
                 Appeals
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab("rewards")}
-                className={cn("transition-colors flex items-center gap-1", activeTab === "rewards" ? "text-emerald-400" : "text-emerald-400/60 hover:text-emerald-400")}
+                className={cn(
+                  "transition-colors flex items-center gap-1",
+                  activeTab === "rewards" ? "text-emerald-400" : "text-emerald-400/60 hover:text-emerald-400",
+                )}
               >
                 <Leaf className="size-3" />
                 Eco-Rewards
@@ -86,27 +116,34 @@ function CitizenPortal() {
                   <span className="text-xs text-white/50">{profile.id}</span>
                 </div>
               </div>
-              <Link to="/" className="text-white/50 hover:text-white transition-colors">
+              <button
+                onClick={() => {
+                  logout();
+                  toast.success("Signed out of Citizen Portal");
+                }}
+                className="text-white/50 hover:text-white transition-colors"
+                title="Sign out of Citizen Portal"
+              >
                 <LogOut className="size-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
-        
         {/* Vehicles & Dashboard Tab */}
         {activeTab === "vehicles" && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold tracking-tight">Welcome back, {profile.fullName?.split(' ')[0] || "Citizen"}</h1>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Welcome back, {profile.fullName?.split(" ")[0] || "Citizen"}
+              </h1>
               <p className="mt-2 text-white/60">Manage your registered vehicles and settle traffic citations.</p>
             </div>
 
             <div className="grid gap-8 lg:grid-cols-3">
               <div className="lg:col-span-2 flex flex-col gap-8">
-                
                 {unpaidCitations.length > 0 && (
                   <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#cc0000]/20 to-transparent border border-[#cc0000]/30 p-6">
                     <div className="flex items-start gap-4">
@@ -116,12 +153,13 @@ function CitizenPortal() {
                       <div>
                         <h3 className="font-semibold text-white">Outstanding Citations Found</h3>
                         <p className="mt-1 text-sm text-white/70">
-                          You have {unpaidCitations.length} unpaid citation(s) totaling <strong className="text-white font-mono-tab">{formatPeso(totalUnpaid)}</strong>. 
-                          Please settle immediately to avoid late penalties.
+                          You have {unpaidCitations.length} unpaid citation(s) totaling{" "}
+                          <strong className="text-white font-mono-tab">{formatPeso(totalUnpaid)}</strong>. Please
+                          settle immediately to avoid late penalties.
                         </p>
                       </div>
                     </div>
-                    <Link 
+                    <Link
                       to="/portal/pay/$citationId"
                       params={{ citationId: unpaidCitations[0].id }}
                       className="shrink-0 rounded-lg bg-[#cc0000] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#cc0000]/25 hover:bg-[#cc0000]/90 transition-all"
@@ -137,7 +175,96 @@ function CitizenPortal() {
                       <Car className="size-5 text-[#0066cc]" />
                       Registered Vehicles
                     </h2>
-                    <button className="text-sm font-medium text-[#0066cc] hover:underline">+ Add Vehicle</button>
+
+                    {/* Add Vehicle Modal */}
+                    <Dialog.Root open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
+                      <Dialog.Trigger asChild>
+                        <button className="text-sm font-medium text-[#0066cc] hover:underline flex items-center gap-1">
+                          <Plus className="size-4" /> Add Vehicle
+                        </button>
+                      </Dialog.Trigger>
+                      <Dialog.Portal>
+                        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
+                        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl animate-in fade-in zoom-in-95">
+                          <div className="flex items-start justify-between border-b border-white/10 pb-3">
+                            <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
+                              <Car className="size-5 text-[#0066cc]" />
+                              Register Vehicle to Profile
+                            </Dialog.Title>
+                            <Dialog.Close asChild>
+                              <button className="rounded p-1 text-white/50 hover:text-white">
+                                <X className="size-4" />
+                              </button>
+                            </Dialog.Close>
+                          </div>
+
+                          <form onSubmit={handleAddVehicleSubmit} className="mt-4 flex flex-col gap-4">
+                            <label className="flex flex-col gap-1.5">
+                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
+                                License Plate Number *
+                              </span>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. NDB-1234"
+                                value={newPlate}
+                                onChange={(e) => setNewPlate(e.target.value.toUpperCase())}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm uppercase text-white focus:border-[#0066cc] focus:outline-none"
+                              />
+                            </label>
+
+                            <label className="flex flex-col gap-1.5">
+                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
+                                Make & Model *
+                              </span>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Honda City 2022"
+                                value={newModel}
+                                onChange={(e) => setNewModel(e.target.value)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm text-white focus:border-[#0066cc] focus:outline-none"
+                              />
+                            </label>
+
+                            <label className="flex flex-col gap-1.5">
+                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
+                                Vehicle Classification
+                              </span>
+                              <select
+                                value={newType}
+                                onChange={(e) => setNewType(e.target.value)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm text-white focus:border-[#0066cc] focus:outline-none"
+                              >
+                                <option value="Sedan">Sedan</option>
+                                <option value="SUV">SUV</option>
+                                <option value="Motorcycle">Motorcycle</option>
+                                <option value="Van / MPV">Van / MPV</option>
+                                <option value="Truck">Truck</option>
+                              </select>
+                            </label>
+
+                            <div className="mt-4 flex justify-end gap-3 border-t border-white/10 pt-4">
+                              <Dialog.Close asChild>
+                                <button
+                                  type="button"
+                                  className="rounded-lg px-4 py-2 text-sm font-semibold text-white/60 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                              </Dialog.Close>
+                              <button
+                                type="submit"
+                                disabled={addVehicle.isPending}
+                                className="rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-all disabled:opacity-50"
+                              >
+                                {addVehicle.isPending ? "Adding..." : "Register Vehicle"}
+                              </button>
+                            </div>
+                          </form>
+                        </Dialog.Content>
+                      </Dialog.Portal>
+                    </Dialog.Root>
                   </div>
                   
                   <div className="grid gap-4 sm:grid-cols-2">

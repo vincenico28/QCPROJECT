@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut } from "lucide-react";
+import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut, LayoutDashboard, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/officer/")({
   head: () => ({
@@ -25,9 +27,28 @@ function OfficerTerminalHome() {
             <p className="text-xs text-muted-foreground">Officer {user?.email?.split('@')[0] || 'Badge 104'}</p>
           </div>
         </div>
-        <button className="grid size-10 place-items-center rounded-full bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20">
-          <LogOut className="size-5" />
-        </button>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+            title="Return to Command Dashboard"
+          >
+            <LayoutDashboard className="size-4 text-blue-400" />
+            <span className="hidden sm:inline">Command Center</span>
+          </Link>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              toast.success("Terminal session ended");
+              window.location.href = "/";
+            }}
+            className="grid size-10 place-items-center rounded-lg bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20"
+            title="Exit Terminal"
+          >
+            <LogOut className="size-4" />
+          </button>
+        </div>
       </header>
 
       {/* Main Actions */}

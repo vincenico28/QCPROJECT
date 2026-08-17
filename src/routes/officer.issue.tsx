@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft, LayoutDashboard, FileSignature } from "lucide-react";
 import { useCreateCitation } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -53,8 +53,31 @@ function IssuePage() {
   };
 
   return (
-    <div className="flex flex-col p-4 pb-20">
-      <h2 className="mb-4 text-xl font-semibold tracking-tight">Issue Citation</h2>
+    <div className="flex flex-col p-4 pb-20 max-w-2xl mx-auto w-full">
+      {/* Back Navigation Bar */}
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+        <Link
+          to="/officer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"
+        >
+          <ArrowLeft className="size-3.5 text-primary" />
+          Back to Terminal
+        </Link>
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-panel-elevated transition-colors"
+        >
+          <LayoutDashboard className="size-3.5 text-subtle" />
+          Command Center
+        </Link>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <div className="grid size-8 place-items-center rounded-lg bg-orange-500/20 text-orange-400">
+          <FileSignature className="size-4" />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-foreground">Issue Electronic Citation</h2>
+      </div>
       
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
