@@ -1,15 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, ClientOnly } from "@tanstack/react-router";
 import { useHeatmapData } from "@/lib/data/heatmaps";
 import { QC_CENTER } from "@/lib/data/gis";
 import { Loader2, Flame, TrendingUp, Clock, AlertTriangle, ArrowLeft } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Suspense, lazy } from "react";
 
-// Lazy load leaflet for map rendering
-const MapContainer = lazy(() => import("react-leaflet").then(m => ({ default: m.MapContainer })));
-const TileLayer = lazy(() => import("react-leaflet").then(m => ({ default: m.TileLayer })));
-const CircleMarker = lazy(() => import("react-leaflet").then(m => ({ default: m.CircleMarker })));
-const Popup = lazy(() => import("react-leaflet").then(m => ({ default: m.Popup })));
+const PredictiveHeatmap = lazy(() => import("@/components/map/predictive-heatmap"));
 
 export const Route = createFileRoute("/analytics/heatmaps")({
   head: () => ({
@@ -75,39 +71,11 @@ function HeatmapsPage() {
                </div>
             </div>
             
-            <Suspense fallback={<div className="grid h-full place-items-center bg-background"><Loader2 className="size-8 animate-spin text-primary" /></div>}>
-              <MapContainer
-                center={QC_CENTER}
-                zoom={14}
-                zoomControl={false}
-                className="h-full w-full z-0"
-              >
-                <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                />
-                {data.points.map(point => {
-                  const color = point.intensity > 0.8 ? "#ef4444" : point.intensity > 0.5 ? "#f97316" : "#eab308";
-                  return (
-                    <CircleMarker 
-                      key={point.id}
-                      center={[point.lat, point.lng]}
-                      pathOptions={{ color, fillColor: color, fillOpacity: 0.6 }}
-                      radius={point.intensity * 25}
-                    >
-                      <Popup className="custom-popup">
-                        <div className="flex flex-col gap-1 p-1">
-                          <strong className="text-white font-sans">{point.label}</strong>
-                          <span className="text-xs text-muted-foreground font-mono-tab flex items-center gap-1">
-                            <AlertTriangle className="size-3 text-orange-500" />
-                            {point.predictedViolations} Pred. Violations
-                          </span>
-                        </div>
-                      </Popup>
-                    </CircleMarker>
-                  );
-                })}
-              </MapContainer>
-            </Suspense>
+            <ClientOnly fallback={<div className="grid h-full place-items-center bg-background"><Loader2 className="size-8 animate-spin text-primary" /></div>}>
+              <Suspense fallback={<div className="grid h-full place-items-center bg-background"><Loader2 className="size-8 animate-spin text-primary" /></div>}>
+                <PredictiveHeatmap points={data.points} center={QC_CENTER} />
+              </Suspense>
+            </ClientOnly>
           </div>
 
           {/* Time Series Forecast */}

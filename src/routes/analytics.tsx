@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
@@ -15,7 +15,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { Download, TrendingUp, ShieldAlert, Banknote, Gauge } from "lucide-react";
+import { Download, TrendingUp, ShieldAlert, Banknote, Gauge, Flame } from "lucide-react";
 import { useViolations, useCitations, useOfficers, formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
@@ -167,13 +167,23 @@ function AnalyticsPage() {
             </button>
           ))}
         </div>
-        <button
-          onClick={exportReport}
-          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2 text-xs font-medium text-foreground hover:bg-panel-elevated"
-        >
-          <Download className="size-3.5" />
-          Export report
-        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            to="/analytics/heatmaps"
+            className="inline-flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400 hover:bg-orange-500/20 transition-all"
+          >
+            <Flame className="size-3.5 text-orange-500" />
+            Predictive AI Heatmap
+          </Link>
+          <button
+            onClick={exportReport}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2 text-xs font-medium text-foreground hover:bg-panel-elevated"
+          >
+            <Download className="size-3.5" />
+            Export report
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}

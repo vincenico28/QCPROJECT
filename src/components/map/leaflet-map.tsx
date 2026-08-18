@@ -2,10 +2,13 @@
 // Never import this module from an SSR-reachable path statically.
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
-import "leaflet.heat";
 import type { GeoViolation } from "@/lib/data/gis";
 import { violationColor } from "@/lib/data/gis";
 import type { Camera } from "@/lib/data/traffic";
+
+if (typeof window !== "undefined") {
+  (window as any).L = L;
+}
 
 type Props = {
   violations: GeoViolation[];
@@ -36,6 +39,9 @@ export default function LeafletMap({
   // init map once
   useEffect(() => {
     if (!nodeRef.current || mapRef.current) return;
+    if (typeof window !== "undefined") {
+      (window as any).L = L;
+    }
     const map = L.map(nodeRef.current, {
       center,
       zoom: 13,
@@ -52,7 +58,7 @@ export default function LeafletMap({
     cameraLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     // ensure correct sizing after mount inside flex container
-    setTimeout(() => map.invalidateSize(), 50);
+    setTimeout(() => map.invalidateSize(), 100);
     return () => {
       map.remove();
       mapRef.current = null;
@@ -79,22 +85,50 @@ export default function LeafletMap({
       map.removeLayer(heatRef.current);
       heatRef.current = null;
     }
+
     if (showHeatmap && heatPoints.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      heatRef.current = (L as any)
-        .heatLayer(heatPoints, {
-          radius: 28,
-          blur: 22,
-          maxZoom: 17,
-          minOpacity: 0.35,
-          gradient: {
-            0.2: "#3b82f6",
-            0.45: "#10b981",
-            0.65: "#f59e0b",
-            0.85: "#ef4444",
-          },
-        })
-        .addTo(map);
+      const applyHeat = async () => {
+        if (typeof (L as any).heatLayer === "undefined") {
+          try {
+            await import("leaflet.heat");
+          } catch (err) {
+            console.warn("Could not load leaflet.heat, using fallback radial heat", err);
+          }
+        }
+
+        if (typeof (L as any).heatLayer === "function") {
+          heatRef.current = (L as any)
+            .heatLayer(heatPoints, {
+              radius: 28,
+              blur: 22,
+              maxZoom: 17,
+              minOpacity: 0.35,
+              gradient: {
+                0.2: "#3b82f6",
+                0.45: "#10b981",
+                0.65: "#f59e0b",
+                0.85: "#ef4444",
+              },
+            })
+            .addTo(map);
+        } else {
+          // Fallback heat layer using layered circle markers
+          const fallbackGroup = L.layerGroup();
+          heatPoints.forEach(([lat, lng, intensity]) => {
+            const color = intensity > 0.7 ? "#ef4444" : intensity > 0.4 ? "#f59e0b" : "#3b82f6";
+            L.circleMarker([lat, lng], {
+              radius: 22 * intensity,
+              color: "transparent",
+              fillColor: color,
+              fillOpacity: 0.3 * intensity,
+            }).addTo(fallbackGroup);
+          });
+          fallbackGroup.addTo(map);
+          heatRef.current = fallbackGroup;
+        }
+      };
+
+      applyHeat();
     }
   }, [heatPoints, showHeatmap]);
 

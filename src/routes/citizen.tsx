@@ -482,14 +482,29 @@ function CitizenPortal() {
                       
                       <div className="mt-6 flex flex-col gap-4">
                         <div className="flex flex-col gap-2">
-                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Citation Number</label>
-                          <input 
-                            type="text" 
-                            value={appealCitationId}
-                            onChange={(e) => setAppealCitationId(e.target.value)}
-                            placeholder="e.g. CIT-00129" 
-                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
-                          />
+                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Citation to Appeal</label>
+                          {profile.citations.length > 0 ? (
+                            <select
+                              value={appealCitationId}
+                              onChange={(e) => setAppealCitationId(e.target.value)}
+                              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                            >
+                              <option value="" className="bg-[#0a0a0b] text-white/60">-- Select a Citation --</option>
+                              {profile.citations.map((c) => (
+                                <option key={c.id} value={c.id} className="bg-[#0a0a0b] text-white">
+                                  {c.id} · {c.plateNumber} — {c.violation} ({formatPeso(c.amount)})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={appealCitationId}
+                              onChange={(e) => setAppealCitationId(e.target.value)}
+                              placeholder="e.g. CIT-00129" 
+                              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
+                            />
+                          )}
                         </div>
                         <div className="flex flex-col gap-2">
                           <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Reason for Dispute</label>
@@ -497,7 +512,7 @@ function CitizenPortal() {
                             rows={4}
                             value={appealReason}
                             onChange={(e) => setAppealReason(e.target.value)}
-                            placeholder="Please explain in detail why you are appealing this citation..." 
+                            placeholder="Please explain in detail why you are appealing this citation (e.g. emergency situation, obstruction, or wrong plate reading)..." 
                             className="resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
                           />
                         </div>
@@ -512,7 +527,7 @@ function CitizenPortal() {
                           onClick={() => {
                             createDispute.mutate({ citation_id: appealCitationId, reason: appealReason }, {
                               onSuccess: () => {
-                                toast.success("Appeal submitted successfully.");
+                                toast.success(`Appeal for ${appealCitationId} submitted successfully.`);
                                 setAppealModalOpen(false);
                                 setAppealCitationId("");
                                 setAppealReason("");
@@ -611,7 +626,10 @@ function CitizenPortal() {
                             <h3 className="font-bold text-white">Free Parking Pass</h3>
                             <p className="text-xs text-muted-foreground mt-1">1-Month free parking at any QC LGU facility.</p>
                          </div>
-                         <button className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                         <button 
+                            onClick={() => toast.success("Pass Voucher Claimed! Voucher Code: QC-PARK-2026-X89")}
+                            className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
+                         >
                             Redeem for 500 Tokens
                          </button>
                       </div>
@@ -624,7 +642,10 @@ function CitizenPortal() {
                             <h3 className="font-bold text-white">Priority Registration</h3>
                             <p className="text-xs text-muted-foreground mt-1">Skip the line for your next LTO renewal via QC Express.</p>
                          </div>
-                         <button className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                         <button 
+                            onClick={() => toast.success("Priority Pass Claimed! Reference: QC-EXPRESS-9921")}
+                            className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
+                         >
                             Redeem for 1,000 Tokens
                          </button>
                       </div>

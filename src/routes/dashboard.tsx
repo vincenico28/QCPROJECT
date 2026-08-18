@@ -11,7 +11,7 @@ import {
 } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles, Flame } from "lucide-react";
 import { toast } from "sonner";
 
 import qcMap from "@/assets/qc-map.jpg";
@@ -230,13 +230,22 @@ function CommandDashboard() {
                 Updated · {new Date().toLocaleTimeString("en-PH")}
               </p>
             </div>
-            <Link
-              to="/map"
-              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur-md hover:bg-panel-elevated"
-            >
-              Open GIS View
-              <ArrowUpRight className="size-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/analytics/heatmaps"
+                className="inline-flex items-center gap-1 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-400 backdrop-blur-md hover:bg-orange-500/20 transition-all"
+              >
+                <Flame className="size-3.5 text-orange-500" />
+                AI Forecast
+              </Link>
+              <Link
+                to="/map"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur-md hover:bg-panel-elevated transition-colors"
+              >
+                Live GIS Map
+                <ArrowUpRight className="size-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
 
