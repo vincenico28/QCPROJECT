@@ -64,15 +64,6 @@ export function CitizenAuthScreen() {
     }
   };
 
-  const handleQuickDemoLogin = (email: string) => {
-    setSignInEmail(email);
-    setSignInPassword("P@ssword123");
-    setBusy(true);
-    login(email)
-      .then((c) => toast.success(`Signed in as ${c.fullName}`))
-      .finally(() => setBusy(false));
-  };
-
   return (
     <div className="min-h-dvh bg-[#0a0a0b] text-white flex flex-col justify-between selection:bg-[#0066cc]/30 relative overflow-hidden">
       {/* Background ambient lighting */}
@@ -153,7 +144,7 @@ export function CitizenAuthScreen() {
               <input
                 type="email"
                 required
-                placeholder="juan.delacruz@example.com"
+                placeholder="your.email@example.com"
                 value={signInEmail}
                 onChange={(e) => setSignInEmail(e.target.value)}
                 className="rounded-lg border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-[#0066cc] focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20"
@@ -182,35 +173,6 @@ export function CitizenAuthScreen() {
               {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
               Sign In to Portal
             </button>
-
-            {/* Quick Demo Access Buttons */}
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <p className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/40 text-center mb-2.5">
-                Quick Demo Motorist Profiles
-              </p>
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin("juan.delacruz@example.com")}
-                  className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-all text-left"
-                >
-                  <span>
-                    <strong>Juan Dela Cruz</strong> (ABC-1234 · 1 Unpaid Ticket)
-                  </span>
-                  <span className="text-[#0066cc] font-mono-tab text-[10px]">Select →</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin("maria.santos@example.com")}
-                  className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-all text-left"
-                >
-                  <span>
-                    <strong>Maria Clara Santos</strong> (NDB-8921 · Red Light Ticket)
-                  </span>
-                  <span className="text-[#0066cc] font-mono-tab text-[10px]">Select →</span>
-                </button>
-              </div>
-            </div>
           </form>
         ) : (
           /* SIGN UP FORM */

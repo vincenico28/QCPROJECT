@@ -25,6 +25,8 @@ function CitizenPortal() {
   const createDispute = useCreateDispute();
   const addVehicle = useAddCitizenVehicle();
 
+  const currentCitizen = profile || citizen;
+
   const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes" | "rewards">("vehicles");
   const [appealModalOpen, setAppealModalOpen] = useState(false);
   const [appealReason, setAppealReason] = useState("");
@@ -37,11 +39,11 @@ function CitizenPortal() {
   const [newType, setNewType] = useState("Sedan");
 
   // Show Citizen Auth Screen (Sign In & Sign Up) if not authenticated
-  if (!isAuthenticated || !profile) {
+  if (!isAuthenticated || !currentCitizen) {
     return <CitizenAuthScreen />;
   }
 
-  const unpaidCitations = profile.citations.filter((c) => c.status === "unpaid");
+  const unpaidCitations = currentCitizen.citations ? currentCitizen.citations.filter((c) => c.status === "unpaid") : [];
   const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount, 0);
 
   const handleAddVehicleSubmit = (e: React.FormEvent) => {
@@ -112,8 +114,8 @@ function CitizenPortal() {
                   <User className="size-4" />
                 </div>
                 <div className="hidden flex-col md:flex">
-                  <span className="text-sm font-medium leading-none text-white">{profile.fullName}</span>
-                  <span className="text-xs text-white/50">{profile.id}</span>
+                  <span className="text-sm font-medium leading-none text-white">{currentCitizen.fullName}</span>
+                  <span className="text-xs text-white/50">{currentCitizen.id}</span>
                 </div>
               </div>
               <button
@@ -137,7 +139,7 @@ function CitizenPortal() {
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="mb-8">
               <h1 className="text-3xl font-bold tracking-tight">
-                Welcome back, {profile.fullName?.split(" ")[0] || "Citizen"}
+                Welcome back, {currentCitizen.fullName?.split(" ")[0] || "Citizen"}
               </h1>
               <p className="mt-2 text-white/60">Manage your registered vehicles and settle traffic citations.</p>
             </div>
@@ -268,7 +270,7 @@ function CitizenPortal() {
                   </div>
                   
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {profile.vehicles.map(v => (
+                    {currentCitizen.vehicles && currentCitizen.vehicles.map(v => (
                       <div key={v.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition-all hover:bg-white/10 hover:border-white/20">
                         <div className="flex items-start justify-between">
                           <div>
@@ -306,7 +308,7 @@ function CitizenPortal() {
                     </h2>
                     
                     <div className="flex flex-col gap-3">
-                      {profile.citations.map(c => (
+                      {currentCitizen.citations && currentCitizen.citations.map(c => (
                         <div key={c.id} className="group flex flex-col gap-3 rounded-xl border border-white/10 bg-black/40 p-4 transition-colors hover:bg-white/5">
                           <div className="flex items-start justify-between">
                             <div>
@@ -483,14 +485,14 @@ function CitizenPortal() {
                       <div className="mt-6 flex flex-col gap-4">
                         <div className="flex flex-col gap-2">
                           <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Citation to Appeal</label>
-                          {profile.citations.length > 0 ? (
+                          {currentCitizen.citations && currentCitizen.citations.length > 0 ? (
                             <select
                               value={appealCitationId}
                               onChange={(e) => setAppealCitationId(e.target.value)}
                               className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
                             >
                               <option value="" className="bg-[#0a0a0b] text-white/60">-- Select a Citation --</option>
-                              {profile.citations.map((c) => (
+                              {currentCitizen.citations.map((c) => (
                                 <option key={c.id} value={c.id} className="bg-[#0a0a0b] text-white">
                                   {c.id} · {c.plateNumber} — {c.violation} ({formatPeso(c.amount)})
                                 </option>

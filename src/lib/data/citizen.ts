@@ -39,51 +39,44 @@ export type SignUpCitizenInput = {
   vehicleType?: string;
 };
 
-export let MOCK_CITIZENS: CitizenProfile[] = [
-  {
-    id: "CZT-1092",
-    fullName: "Juan Dela Cruz",
-    email: "juan.delacruz@example.com",
-    phone: "0917-123-4567",
-    address: "Block 4, Lot 12, Culiat, Quezon City",
-    vehicles: [
-      { id: "v1", plateNumber: "ABC-1234", makeModel: "Toyota Vios 2021", type: "Sedan", status: "verified" },
-      { id: "v2", plateNumber: "XYZ-987", makeModel: "Honda Click 125i", type: "Motorcycle", status: "pending" },
-    ],
-    citations: [
-      { id: "CIT-00129", plateNumber: "ABC-1234", violation: "Illegal Parking", date: "2026-08-01T14:30:00Z", amount: 1500, status: "unpaid" },
-      { id: "CIT-00042", plateNumber: "XYZ-987", violation: "No Helmet", date: "2026-07-15T09:15:00Z", amount: 1000, status: "settled" },
-    ],
-  },
-  {
-    id: "CZT-2045",
-    fullName: "Maria Clara Santos",
-    email: "maria.santos@example.com",
-    phone: "0918-999-8888",
-    address: "Tandang Sora Ave, Barangay Culiat, QC",
-    vehicles: [
-      { id: "v3", plateNumber: "NDB-8921", makeModel: "Mitsubishi Xpander", type: "MPV", status: "verified" },
-    ],
-    citations: [
-      { id: "CIT-00135", plateNumber: "NDB-8921", violation: "Red Light", date: "2026-08-05T11:20:00Z", amount: 2000, status: "unpaid" },
-    ],
-  },
-];
+let inMemoryCitizens: CitizenProfile[] = [];
+let inMemoryActiveId: string | null = null;
 
-let activeCitizenId: string | null = "CZT-1092";
-
-function getStoredCitizenId(): string | null {
-  if (typeof window === "undefined") return activeCitizenId;
+function loadCitizensFromStorage(): CitizenProfile[] {
+  if (typeof window === "undefined") return inMemoryCitizens;
   try {
-    const saved = localStorage.getItem("qc_active_citizen_id");
-    return saved || activeCitizenId;
-  } catch {
-    return activeCitizenId;
+    const raw = localStorage.getItem("qc_citizens_db");
+    if (raw) {
+      inMemoryCitizens = JSON.parse(raw);
+    }
+  } catch (err) {
+    console.warn("Error reading citizens DB from storage:", err);
+  }
+  return inMemoryCitizens;
+}
+
+function saveCitizensToStorage(list: CitizenProfile[]) {
+  inMemoryCitizens = list;
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("qc_citizens_db", JSON.stringify(list));
+  } catch (err) {
+    console.warn("Error saving citizens DB:", err);
   }
 }
 
-function setStoredCitizenId(id: string | null) {
-  activeCitizenId = id;
+export function getStoredCitizenId(): string | null {
+  if (typeof window === "undefined") return inMemoryActiveId;
+  try {
+    const saved = localStorage.getItem("qc_active_citizen_id");
+    return saved || inMemoryActiveId;
+  } catch {
+    return inMemoryActiveId;
+  }
+}
+
+export function setStoredCitizenId(id: string | null) {
+  inMemoryActiveId = id;
   if (typeof window === "undefined") return;
   try {
     if (id) {
@@ -91,6 +84,8 @@ function setStoredCitizenId(id: string | null) {
     } else {
       localStorage.removeItem("qc_active_citizen_id");
     }
+    // Broadcast event to notify all components
+    window.dispatchEvent(new CustomEvent("qc-citizen-auth-change", { detail: id }));
   } catch (e) {
     console.warn("Storage error:", e);
   }
@@ -98,13 +93,13 @@ function setStoredCitizenId(id: string | null) {
 
 export function useCitizenProfile() {
   return useQuery({
-    queryKey: ["citizen-profile", activeCitizenId],
+    queryKey: ["citizen-profile"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
       const currentId = getStoredCitizenId();
       if (!currentId) return null;
-      const citizen = MOCK_CITIZENS.find((c) => c.id === currentId);
-      return citizen || MOCK_CITIZENS[0];
+      const all = loadCitizensFromStorage();
+      const citizen = all.find((c) => c.id === currentId);
+      return citizen || null;
     },
   });
 }
@@ -114,19 +109,36 @@ export function useCitizenAuth() {
   const [currentId, setCurrentId] = useState<string | null>(getStoredCitizenId());
 
   useEffect(() => {
-    setCurrentId(getStoredCitizenId());
-  }, []);
+    const syncState = () => {
+      const id = getStoredCitizenId();
+      setCurrentId(id);
+      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+    };
 
-  const citizen = MOCK_CITIZENS.find((c) => c.id === currentId) || null;
+    window.addEventListener("qc-citizen-auth-change", syncState);
+    window.addEventListener("storage", syncState);
+
+    // Initial sync
+    syncState();
+
+    return () => {
+      window.removeEventListener("qc-citizen-auth-change", syncState);
+      window.removeEventListener("storage", syncState);
+    };
+  }, [qc]);
+
+  const allCitizens = loadCitizensFromStorage();
+  const citizen = allCitizens.find((c) => c.id === currentId) || null;
   const isAuthenticated = !!citizen;
 
   const login = async (email: string) => {
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 300));
     const cleanEmail = email.trim().toLowerCase();
-    let found = MOCK_CITIZENS.find((c) => c.email.toLowerCase() === cleanEmail);
+    const all = loadCitizensFromStorage();
+    let found = all.find((c) => c.email.toLowerCase() === cleanEmail);
 
     if (!found) {
-      // Auto-create citizen profile for any new valid email login
+      // Auto-create citizen profile for valid email login
       const namePart = cleanEmail.split("@")[0].replace(".", " ");
       const formattedName = namePart
         .split(" ")
@@ -139,28 +151,36 @@ export function useCitizenAuth() {
         email: cleanEmail,
         address: "Barangay Culiat, Quezon City",
         vehicles: [
-          { id: `v-${Date.now()}`, plateNumber: "QC-2026", makeModel: "Registered Vehicle", type: "Sedan", status: "verified" },
+          {
+            id: `v-${Date.now()}`,
+            plateNumber: "NDB-8921",
+            makeModel: "Registered Vehicle",
+            type: "Sedan",
+            status: "verified",
+          },
         ],
         citations: [],
       };
-      MOCK_CITIZENS.push(found);
+      all.push(found);
+      saveCitizensToStorage(all);
     }
 
     setStoredCitizenId(found.id);
     setCurrentId(found.id);
-    qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+    await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
     return found;
   };
 
   const signup = async (input: SignUpCitizenInput) => {
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 400));
     const cleanEmail = input.email.trim().toLowerCase();
+    const all = loadCitizensFromStorage();
 
-    const existing = MOCK_CITIZENS.find((c) => c.email.toLowerCase() === cleanEmail);
+    const existing = all.find((c) => c.email.toLowerCase() === cleanEmail);
     if (existing) {
       setStoredCitizenId(existing.id);
       setCurrentId(existing.id);
-      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
       return existing;
     }
 
@@ -184,10 +204,12 @@ export function useCitizenAuth() {
       citations: [],
     };
 
-    MOCK_CITIZENS.unshift(newCitizen);
+    all.unshift(newCitizen);
+    saveCitizensToStorage(all);
+
     setStoredCitizenId(newCitizen.id);
     setCurrentId(newCitizen.id);
-    qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+    await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
     return newCitizen;
   };
 
@@ -210,9 +232,10 @@ export function useAddCitizenVehicle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { plateNumber: string; makeModel: string; type: string }) => {
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 300));
       const currentId = getStoredCitizenId();
-      const citizen = MOCK_CITIZENS.find((c) => c.id === currentId);
+      const all = loadCitizensFromStorage();
+      const citizen = all.find((c) => c.id === currentId);
       if (!citizen) throw new Error("Not authenticated");
 
       const newVehicle: CitizenVehicle = {
@@ -224,6 +247,7 @@ export function useAddCitizenVehicle() {
       };
 
       citizen.vehicles.push(newVehicle);
+      saveCitizensToStorage(all);
       return newVehicle;
     },
     onSuccess: () => {
