@@ -34,7 +34,6 @@ import { Route as MapRouteImport } from './routes/map'
 import { Route as OfficerRouteImport } from './routes/officer'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SlaPerformanceRouteImport } from './routes/sla-performance'
 import { Route as TransportRouteImport } from './routes/transport'
 import { Route as TvDisplayRouteImport } from './routes/tv-display'
 import { Route as ViolationsRouteImport } from './routes/violations'
@@ -178,11 +177,6 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SlaPerformanceRoute = SlaPerformanceRouteImport.update({
-  id: '/sla-performance',
-  path: '/sla-performance',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TransportRoute = TransportRouteImport.update({
   id: '/transport',
   path: '/transport',
@@ -295,7 +289,6 @@ export interface FileRoutesByFullPath {
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
-  '/sla-performance': typeof SlaPerformanceRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -339,7 +332,6 @@ export interface FileRoutesByTo {
   '/map': typeof MapRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
-  '/sla-performance': typeof SlaPerformanceRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -385,7 +377,6 @@ export interface FileRoutesById {
   '/officer': typeof OfficerRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
-  '/sla-performance': typeof SlaPerformanceRoute
   '/transport': typeof TransportRoute
   '/tv-display': typeof TvDisplayRoute
   '/violations': typeof ViolationsRoute
@@ -432,7 +423,6 @@ export interface FileRouteTypes {
     | '/officer'
     | '/reports'
     | '/settings'
-    | '/sla-performance'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -476,7 +466,6 @@ export interface FileRouteTypes {
     | '/map'
     | '/reports'
     | '/settings'
-    | '/sla-performance'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -521,7 +510,6 @@ export interface FileRouteTypes {
     | '/officer'
     | '/reports'
     | '/settings'
-    | '/sla-performance'
     | '/transport'
     | '/tv-display'
     | '/violations'
@@ -567,7 +555,6 @@ export interface RootRouteChildren {
   OfficerRoute: typeof OfficerRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
-  SlaPerformanceRoute: typeof SlaPerformanceRoute
   TransportRoute: typeof TransportRoute
   TvDisplayRoute: typeof TvDisplayRoute
   ViolationsRoute: typeof ViolationsRoute
@@ -759,13 +746,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sla-performance': {
-      id: '/sla-performance'
-      path: '/sla-performance'
-      fullPath: '/sla-performance'
-      preLoaderRoute: typeof SlaPerformanceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/transport': {
       id: '/transport'
       path: '/transport'
@@ -943,7 +923,6 @@ const rootRouteChildren: RootRouteChildren = {
   OfficerRoute: OfficerRouteWithChildren,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
-  SlaPerformanceRoute: SlaPerformanceRoute,
   TransportRoute: TransportRoute,
   TvDisplayRoute: TvDisplayRoute,
   ViolationsRoute: ViolationsRoute,
