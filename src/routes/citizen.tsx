@@ -1,36 +1,124 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useCitizenProfile, useCitizenAuth, useAddCitizenVehicle } from "@/lib/data/citizen";
+import {
+  useCitizenProfile,
+  useCitizenAuth,
+  useAddCitizenVehicle,
+  useRemoveCitizenVehicle,
+  useSettleCitizenCitation,
+  useNominateActualDriver,
+  useRedeemEcoReward,
+  useSubmitHazardReport,
+  type CitizenCitation,
+  type CitizenHazardReport,
+} from "@/lib/data/citizen";
 import { useAdvisories } from "@/lib/data/advisories";
 import { useCitizenDisputes, useCreateDispute } from "@/lib/data/disputes";
 import { CitizenAuthScreen } from "@/components/citizen/citizen-auth-screen";
-import { Loader2, Car, AlertTriangle, ShieldCheck, FileText, ChevronRight, CheckCircle2, User, LogOut, Radio, Activity, Clock, ShieldAlert, Upload, Search, Leaf, Gift, Trophy, Plus, X } from "lucide-react";
+import {
+  Loader2,
+  Car,
+  AlertTriangle,
+  ShieldCheck,
+  FileText,
+  CheckCircle2,
+  User,
+  LogOut,
+  Radio,
+  Activity,
+  Clock,
+  ShieldAlert,
+  Leaf,
+  Gift,
+  Trophy,
+  Plus,
+  X,
+  QrCode,
+  Printer,
+  Sparkles,
+  MapPin,
+  Trash2,
+  CreditCard,
+  Camera,
+  Eye,
+  Send,
+  Download,
+  Award,
+  Zap,
+  UserCheck,
+  Info,
+  Scale,
+  FileCheck2,
+  ExternalLink,
+  ChevronRight,
+} from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
 
+import cctv1 from "@/assets/cctv-1.jpg";
+import cctv2 from "@/assets/cctv-2.jpg";
+import cctv3 from "@/assets/cctv-3.jpg";
+import violation1 from "@/assets/violation-1.jpg";
+import violation2 from "@/assets/violation-2.jpg";
+import violation3 from "@/assets/violation-3.jpg";
+
 export const Route = createFileRoute("/citizen")({
   head: () => ({
-    meta: [{ title: "Citizen Portal — Culiat Traffic Ops" }],
+    meta: [
+      { title: "Citizen Portal (MMDA NCAP) — Culiat Traffic Ops" },
+      {
+        name: "description",
+        content: "Official MMDA No Contact Apprehension Policy (NCAP) Motorist Portal for Barangay Culiat, Quezon City. Verify Notices of Violation (NOV), inspect CCTV evidence, file disputes, and generate LTO clearance certificates.",
+      },
+    ],
   }),
   component: CitizenPortal,
 });
 
+const NCAP_GROUNDS = [
+  { value: "emergency", label: "Medical / Humanitarian Emergency Situation (Patient in transit)" },
+  { value: "yielding", label: "Yielded to Emergency Vehicle (Ambulance, Fire Engine, Police Patrol)" },
+  { value: "enforcer_directed", label: "Directed by On-Duty Traffic Enforcer / Manual Traffic Override" },
+  { value: "sold_vehicle", label: "Vehicle Sold / Transferred (Deed of Sale & LTO Release)" },
+  { value: "defective_signal", label: "Defective Traffic Signal / Obscured Road Pavement Markings" },
+  { value: "plate_cloning", label: "Mismatched Vehicle Model / Suspected Plate Cloning" },
+];
+
 function CitizenPortal() {
   const { citizen, isAuthenticated, logout } = useCitizenAuth();
-  const { data: profile, isLoading: loadingProfile } = useCitizenProfile();
+  const { data: profile } = useCitizenProfile();
   const { data: advisories, isLoading: loadingAdvisories } = useAdvisories();
   const { data: disputes, isLoading: loadingDisputes } = useCitizenDisputes();
   const createDispute = useCreateDispute();
   const addVehicle = useAddCitizenVehicle();
+  const removeVehicle = useRemoveCitizenVehicle();
+  const settleCitation = useSettleCitizenCitation();
+  const nominateDriver = useNominateActualDriver();
+  const redeemReward = useRedeemEcoReward();
+  const submitHazard = useSubmitHazardReport();
 
   const currentCitizen = profile || citizen;
 
-  const [activeTab, setActiveTab] = useState<"vehicles" | "traffic" | "disputes" | "rewards">("vehicles");
+  const [activeTab, setActiveTab] = useState<"vehicles" | "ncap" | "pass" | "traffic" | "hazard" | "disputes" | "rewards">("ncap");
   const [appealModalOpen, setAppealModalOpen] = useState(false);
   const [appealReason, setAppealReason] = useState("");
+  const [appealGround, setAppealGround] = useState(NCAP_GROUNDS[0].label);
   const [appealCitationId, setAppealCitationId] = useState("");
+
+  // Inspect NOV Modal State
+  const [inspectNovModalOpen, setInspectNovModalOpen] = useState(false);
+  const [selectedNov, setSelectedNov] = useState<CitizenCitation | null>(null);
+
+  // Nominate Driver Modal State
+  const [nominateModalOpen, setNominateModalOpen] = useState(false);
+  const [nomineeName, setNomineeName] = useState("");
+  const [nomineeLicense, setNomineeLicense] = useState("");
+
+  // Clearance Certificate Modal State
+  const [clearanceModalOpen, setClearanceModalOpen] = useState(false);
+  const [clearedCitation, setClearedCitation] = useState<CitizenCitation | null>(null);
 
   // Add Vehicle Modal State
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
@@ -38,13 +126,24 @@ function CitizenPortal() {
   const [newModel, setNewModel] = useState("");
   const [newType, setNewType] = useState("Sedan");
 
+  // Hazard Report State
+  const [hazardCategory, setHazardCategory] = useState<CitizenHazardReport["category"]>("Stalled Vehicle");
+  const [hazardLocation, setHazardLocation] = useState("Commonwealth Ave near Tandang Sora");
+  const [hazardDesc, setHazardDesc] = useState("");
+
+  // Quick Settle Modal State
+  const [settleModalOpen, setSettleModalOpen] = useState(false);
+  const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
+  const [settleMethod, setSettleMethod] = useState<"gcash" | "maya" | "card">("gcash");
+  const [settling, setSettling] = useState(false);
+
   // Show Citizen Auth Screen (Sign In & Sign Up) if not authenticated
   if (!isAuthenticated || !currentCitizen) {
     return <CitizenAuthScreen />;
   }
 
   const unpaidCitations = currentCitizen.citations ? currentCitizen.citations.filter((c) => c.status === "unpaid") : [];
-  const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount, 0);
+  const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount + (c.surcharge || 0), 0);
 
   const handleAddVehicleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +153,7 @@ function CitizenPortal() {
       { plateNumber: newPlate, makeModel: newModel, type: newType },
       {
         onSuccess: () => {
-          toast.success(`Vehicle ${newPlate.toUpperCase()} added to your profile.`);
+          toast.success(`Vehicle ${newPlate.toUpperCase()} registered to your profile.`);
           setAddVehicleOpen(false);
           setNewPlate("");
           setNewModel("");
@@ -65,49 +164,163 @@ function CitizenPortal() {
     );
   };
 
+  const handleQuickSettleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCitationId) return;
+    setSettling(true);
+    setTimeout(() => {
+      settleCitation.mutate(selectedCitationId, {
+        onSuccess: () => {
+          setSettling(false);
+          setSettleModalOpen(false);
+          if (selectedNov && selectedNov.id === selectedCitationId) {
+            setSelectedNov({ ...selectedNov, status: "settled", ltoAlarmStatus: "CLEARED" });
+          }
+          toast.success(`Notice of Violation ${selectedCitationId} settled successfully! LTO registration hold lifted.`);
+        },
+        onError: () => {
+          setSettling(false);
+          toast.error("Failed to settle citation");
+        },
+      });
+    }, 1200);
+  };
+
+  const handleNominateDriverSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedNov || !nomineeName || !nomineeLicense) {
+      toast.error("Please fill in the driver's full name and license number");
+      return;
+    }
+
+    nominateDriver.mutate(
+      { citationId: selectedNov.id, name: nomineeName, licenseNumber: nomineeLicense },
+      {
+        onSuccess: () => {
+          toast.success(`Driver nomination submitted for NOV #${selectedNov.novNumber}. Adjudication board notified.`);
+          setNominateModalOpen(false);
+          setNomineeName("");
+          setNomineeLicense("");
+          setInspectNovModalOpen(false);
+        },
+        onError: () => toast.error("Failed to submit driver nomination"),
+      },
+    );
+  };
+
+  const handleHazardSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hazardDesc) {
+      toast.error("Please provide a description of the incident");
+      return;
+    }
+    submitHazard.mutate(
+      { category: hazardCategory, location: hazardLocation, description: hazardDesc },
+      {
+        onSuccess: (report) => {
+          toast.success(`Incident report #${report.id} dispatched! +50 Eco-Reward Tokens awarded.`);
+          setHazardDesc("");
+        },
+        onError: () => toast.error("Failed to submit incident report"),
+      },
+    );
+  };
+
+  const handleClaimReward = (title: string, description: string, cost: number) => {
+    if ((currentCitizen.tokens || 0) < cost) {
+      toast.error("Insufficient Eco-Reward Tokens for this reward");
+      return;
+    }
+    redeemReward.mutate(
+      { title, description, cost },
+      {
+        onSuccess: (voucher) => {
+          toast.success(`Reward claimed! Voucher code: ${voucher.code}`);
+        },
+        onError: (err: any) => toast.error(err.message || "Failed to redeem reward"),
+      },
+    );
+  };
+
   return (
     <div className="min-h-dvh bg-[#0a0a0b] text-white selection:bg-[#0066cc]/30">
       {/* Top Navigation */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0b]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0b]/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link to="/" className="flex items-center gap-3">
             <img src="/favico2.png" alt="Culiat LGU" className="size-8" />
-            <span className="font-semibold tracking-tight text-white">
-              Citizen<span className="text-[#0066cc]">Portal</span>
-            </span>
+            <div className="flex flex-col">
+              <span className="font-semibold tracking-tight text-white flex items-center gap-1.5">
+                Citizen<span className="text-[#0066cc]">Portal</span>
+                <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-mono-tab font-bold text-blue-400 border border-blue-500/30">
+                  MMDA NCAP
+                </span>
+              </span>
+            </div>
           </Link>
 
           <div className="flex items-center gap-6">
-            <nav className="hidden items-center gap-6 text-sm font-medium text-white/70 md:flex">
+            <nav className="hidden items-center gap-6 text-sm font-medium text-white/70 lg:flex">
+              <button
+                onClick={() => setActiveTab("ncap")}
+                className={cn(
+                  "transition-colors flex items-center gap-1.5",
+                  activeTab === "ncap" ? "text-blue-400 font-semibold" : "hover:text-white",
+                )}
+              >
+                <Camera className="size-3.5" />
+                NCAP Notices ({unpaidCitations.length})
+              </button>
               <button
                 onClick={() => setActiveTab("vehicles")}
-                className={cn("transition-colors", activeTab === "vehicles" ? "text-white" : "hover:text-white")}
+                className={cn("transition-colors", activeTab === "vehicles" ? "text-white font-semibold" : "hover:text-white")}
               >
-                Dashboard
+                My Vehicles
+              </button>
+              <button
+                onClick={() => setActiveTab("pass")}
+                className={cn(
+                  "transition-colors flex items-center gap-1.5",
+                  activeTab === "pass" ? "text-[#0066cc] font-semibold" : "hover:text-white",
+                )}
+              >
+                <QrCode className="size-3.5" />
+                Digital Pass
               </button>
               <button
                 onClick={() => setActiveTab("traffic")}
-                className={cn("transition-colors", activeTab === "traffic" ? "text-white" : "hover:text-white")}
+                className={cn("transition-colors", activeTab === "traffic" ? "text-white font-semibold" : "hover:text-white")}
               >
-                Live Traffic Feed
+                Live Traffic
+              </button>
+              <button
+                onClick={() => setActiveTab("hazard")}
+                className={cn(
+                  "transition-colors flex items-center gap-1.5",
+                  activeTab === "hazard" ? "text-orange-400 font-semibold" : "text-white/70 hover:text-white",
+                )}
+              >
+                <AlertTriangle className="size-3.5" />
+                Report Hazard
               </button>
               <button
                 onClick={() => setActiveTab("disputes")}
-                className={cn("transition-colors", activeTab === "disputes" ? "text-white" : "hover:text-white")}
+                className={cn("transition-colors", activeTab === "disputes" ? "text-white font-semibold" : "hover:text-white")}
               >
-                Appeals
+                Adjudication & Appeals
               </button>
               <button
                 onClick={() => setActiveTab("rewards")}
                 className={cn(
-                  "transition-colors flex items-center gap-1",
-                  activeTab === "rewards" ? "text-emerald-400" : "text-emerald-400/60 hover:text-emerald-400",
+                  "transition-colors flex items-center gap-1.5 font-medium",
+                  activeTab === "rewards" ? "text-emerald-400 font-semibold" : "text-emerald-400/70 hover:text-emerald-400",
                 )}
               >
-                <Leaf className="size-3" />
-                Eco-Rewards
+                <Leaf className="size-3.5" />
+                Eco-Rewards ({currentCitizen.tokens || 0})
               </button>
             </nav>
+
             <div className="flex items-center gap-3 pl-6 border-l border-white/10">
               <div className="flex items-center gap-2">
                 <div className="grid size-8 place-items-center rounded-full bg-[#0066cc]/20 text-[#0066cc]">
@@ -133,548 +346,1223 @@ function CitizenPortal() {
         </div>
       </header>
 
+      {/* Mobile Tab Navigation Bar */}
+      <div className="flex overflow-x-auto border-b border-white/10 bg-black/40 px-4 py-2 lg:hidden gap-2">
+        <button
+          onClick={() => setActiveTab("ncap")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "ncap" ? "bg-blue-600 text-white" : "text-white/70")}
+        >
+          NCAP Notices ({unpaidCitations.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("vehicles")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "vehicles" ? "bg-[#0066cc] text-white" : "text-white/70")}
+        >
+          My Vehicles
+        </button>
+        <button
+          onClick={() => setActiveTab("pass")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "pass" ? "bg-[#0066cc] text-white" : "text-white/70")}
+        >
+          Digital Pass
+        </button>
+        <button
+          onClick={() => setActiveTab("traffic")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "traffic" ? "bg-[#0066cc] text-white" : "text-white/70")}
+        >
+          Live Traffic
+        </button>
+        <button
+          onClick={() => setActiveTab("hazard")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "hazard" ? "bg-orange-500 text-white" : "text-orange-400/80")}
+        >
+          Report Hazard
+        </button>
+        <button
+          onClick={() => setActiveTab("disputes")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "disputes" ? "bg-[#0066cc] text-white" : "text-white/70")}
+        >
+          Appeals
+        </button>
+        <button
+          onClick={() => setActiveTab("rewards")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "rewards" ? "bg-emerald-600 text-white" : "text-emerald-400")}
+        >
+          Eco-Rewards
+        </button>
+      </div>
+
       <main className="mx-auto max-w-6xl px-6 py-8">
-        {/* Vehicles & Dashboard Tab */}
+        {/* ========================================================================= */}
+        {/* TAB 1: MMDA NCAP NOTICES OF VIOLATION (NOV) HUB */}
+        {/* ========================================================================= */}
+        {activeTab === "ncap" && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* MMDA NCAP Header Banner */}
+            <div className="mb-8 rounded-3xl border border-blue-500/30 bg-gradient-to-r from-blue-950/40 via-blue-900/10 to-transparent p-6 sm:p-8 relative overflow-hidden shadow-2xl">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative z-10">
+                <div className="flex items-start gap-4">
+                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    <Camera className="size-6" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest font-mono-tab text-blue-400 font-bold">
+                      MMDA NO CONTACT APPREHENSION POLICY (NCAP)
+                    </span>
+                    <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">
+                      Notices of Violation (NOV) & Evidence Hub
+                    </h1>
+                    <p className="mt-2 text-xs sm:text-sm text-white/70 max-w-2xl leading-relaxed">
+                      Review camera capture evidence, settle violations online to prevent <strong>LTO Registration Alarms</strong>, or submit a formal protest to the <strong>QC Traffic Adjudication Board (TAB)</strong> within the 10-day statutory window.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
+                  <div className="rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 text-center">
+                    <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Registered Plate</span>
+                    <span className="font-mono-tab text-sm font-bold text-white">
+                      {currentCitizen.vehicles && currentCitizen.vehicles[0] ? currentCitizen.vehicles[0].plateNumber : "NO PLATE"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Citations / NOV Grid */}
+            <div className="grid gap-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                  <FileText className="size-5 text-blue-400" />
+                  Recorded Notices of Violation ({currentCitizen.citations ? currentCitizen.citations.length : 0})
+                </h2>
+
+                <button
+                  onClick={() => setActiveTab("disputes")}
+                  className="text-xs font-semibold text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <Scale className="size-3.5" /> Adjudication Guidelines
+                </button>
+              </div>
+
+              {currentCitizen.citations && currentCitizen.citations.length > 0 ? (
+                currentCitizen.citations.map((c) => {
+                  const isUnpaid = c.status === "unpaid";
+                  const isSettled = c.status === "settled";
+                  const isAppealed = c.status === "appealed";
+
+                  return (
+                    <div
+                      key={c.id}
+                      className={cn(
+                        "rounded-2xl border p-6 transition-all flex flex-col gap-6 shadow-xl",
+                        isUnpaid ? "border-red-500/30 bg-red-950/10 hover:border-red-500/50" :
+                        isSettled ? "border-emerald-500/30 bg-emerald-950/10" :
+                        "border-blue-500/30 bg-blue-950/10",
+                      )}
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-white/10 pb-4">
+                        <div className="flex items-start gap-3.5">
+                          <div
+                            className={cn(
+                              "grid size-11 shrink-0 place-items-center rounded-xl",
+                              isUnpaid ? "bg-red-500/20 text-red-400" :
+                              isSettled ? "bg-emerald-500/20 text-emerald-400" :
+                              "bg-blue-500/20 text-blue-400",
+                            )}
+                          >
+                            {isUnpaid ? <AlertTriangle className="size-5" /> :
+                             isSettled ? <CheckCircle2 className="size-5" /> :
+                             <Clock className="size-5" />}
+                          </div>
+
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono-tab text-xs font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                                {c.novNumber || c.id}
+                              </span>
+                              <span className="text-xs text-white/50">• {c.plateNumber}</span>
+                              <span
+                                className={cn(
+                                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                                  isUnpaid ? "bg-red-500/20 text-red-400 border border-red-500/30" :
+                                  isSettled ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+                                  "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+                                )}
+                              >
+                                {c.status === "unpaid" ? "NOTICE ISSUED / UNPAID" :
+                                 c.status === "settled" ? "CLEARED & SETTLED" : "UNDER ADJUDICATION"}
+                              </span>
+                            </div>
+
+                            <h3 className="text-lg font-bold text-white mt-1.5">{c.violation}</h3>
+                            <p className="text-xs text-white/60 font-mono-tab">{c.ordinanceCode || "MMDA Regulation 16-002"}</p>
+                          </div>
+                        </div>
+
+                        {/* Amount & Due Date Box */}
+                        <div className="flex flex-row lg:flex-col items-end justify-between lg:justify-center border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0">
+                          <span className="font-mono-tab text-2xl font-black text-white">{formatPeso(c.amount + (c.surcharge || 0))}</span>
+                          {isUnpaid && (
+                            <span className="text-[11px] font-semibold text-orange-400 flex items-center gap-1 mt-0.5">
+                              <Clock className="size-3" /> Due: {new Date(c.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
+                            </span>
+                          )}
+                          {isSettled && (
+                            <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1 mt-0.5">
+                              <FileCheck2 className="size-3" /> Clearance Issued
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Location & LTO Alarm Notice */}
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                        <div className="rounded-xl border border-white/10 bg-black/40 p-3.5">
+                          <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Interception Location</span>
+                          <span className="font-medium text-white/90 mt-1 block flex items-center gap-1.5">
+                            <MapPin className="size-3.5 text-blue-400 shrink-0" />
+                            {c.location || "Commonwealth Ave Intersection"}
+                          </span>
+                        </div>
+
+                        <div className="rounded-xl border border-white/10 bg-black/40 p-3.5">
+                          <span className="text-white/40 block font-mono-tab text-[10px] uppercase">LTO LTMS Alarm Status</span>
+                          <span
+                            className={cn(
+                              "font-bold mt-1 block flex items-center gap-1.5",
+                              c.ltoAlarmStatus === "CLEARED" ? "text-emerald-400" :
+                              c.ltoAlarmStatus === "LTO_ALARM_ACTIVE" ? "text-red-400" :
+                              "text-orange-400",
+                            )}
+                          >
+                            <ShieldAlert className="size-3.5 shrink-0" />
+                            {c.ltoAlarmStatus === "CLEARED" ? "CLEARED (No LTO Hold)" :
+                             c.ltoAlarmStatus === "LTO_ALARM_ACTIVE" ? "ALARM ACTIVE (Registration Held)" :
+                             "WARNING: Pending LTO Hold in 7 Days"}
+                          </span>
+                        </div>
+
+                        <div className="rounded-xl border border-white/10 bg-black/40 p-3.5">
+                          <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Protest Window</span>
+                          <span className="font-medium text-white/80 mt-1 block">
+                            {isSettled ? "Case Closed" : "10 Calendar Days from Notice"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedNov(c);
+                              setInspectNovModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-2 text-xs font-bold text-blue-400 hover:bg-blue-600 hover:text-white transition-all"
+                          >
+                            <Eye className="size-3.5" /> Inspect CCTV Evidence
+                          </button>
+
+                          {isSettled && (
+                            <button
+                              onClick={() => {
+                                setClearedCitation(c);
+                                setClearanceModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20"
+                            >
+                              <FileCheck2 className="size-3.5" /> View Clearance Certificate
+                            </button>
+                          )}
+                        </div>
+
+                        {isUnpaid && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedNov(c);
+                                setNominateModalOpen(true);
+                              }}
+                              className="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white"
+                            >
+                              <UserCheck className="size-3.5 inline mr-1" /> Nominate Actual Driver
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setAppealCitationId(c.id);
+                                setAppealModalOpen(true);
+                              }}
+                              className="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white"
+                            >
+                              Contest / Appeal
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedCitationId(c.id);
+                                setSettleModalOpen(true);
+                              }}
+                              className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 transition-all"
+                            >
+                              Settle Online
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-12 text-center flex flex-col items-center">
+                  <div className="grid size-14 place-items-center rounded-2xl bg-emerald-500/20 text-emerald-400 mb-4">
+                    <CheckCircle2 className="size-7" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">No Active Notices of Violation</h3>
+                  <p className="text-xs text-white/60 max-w-md mt-1">
+                    Your registered vehicles have 0 outstanding MMDA NCAP infractions. Keep driving safely to earn monthly Eco-Reward Tokens!
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* NCAP Process Flowchart Card */}
+            <div className="mt-12 rounded-3xl border border-white/10 bg-black/40 p-8">
+              <h3 className="text-base font-bold text-white flex items-center gap-2 mb-6">
+                <Info className="size-5 text-blue-400" />
+                MMDA NCAP Standard Operating Procedure (SOP)
+              </h3>
+
+              <div className="grid gap-6 md:grid-cols-3">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-blue-400 font-mono-tab text-xs font-bold">
+                    <span className="grid size-6 place-items-center rounded-full bg-blue-500/20">1</span>
+                    DETECTION & NOTICE
+                  </div>
+                  <p className="text-xs text-white/70 leading-relaxed">
+                    High-resolution ANPR CCTV captures vehicle in violation. A digital Notice of Violation (NOV) is generated with optical plate recognition verification.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-blue-400 font-mono-tab text-xs font-bold">
+                    <span className="grid size-6 place-items-center rounded-full bg-blue-500/20">2</span>
+                    10-DAY PROTEST WINDOW
+                  </div>
+                  <p className="text-xs text-white/70 leading-relaxed">
+                    Motorist may inspect high-res frame evidence. If contesting under statutory grounds (emergency, directed by enforcer, sold unit), submit formal appeal to TAB.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-blue-400 font-mono-tab text-xs font-bold">
+                    <span className="grid size-6 place-items-center rounded-full bg-blue-500/20">3</span>
+                    SETTLEMENT & LTO CLEARANCE
+                  </div>
+                  <p className="text-xs text-white/70 leading-relaxed">
+                    Settle online via QR Ph / GCash / Maya. An electronic Certificate of Clearance is issued immediately, removing any LTO LTMS registration hold.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: MY REGISTERED VEHICLES */}
+        {/* ========================================================================= */}
         {activeTab === "vehicles" && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold tracking-tight">
-                Welcome back, {currentCitizen.fullName?.split(" ")[0] || "Citizen"}
-              </h1>
-              <p className="mt-2 text-white/60">Manage your registered vehicles and settle traffic citations.</p>
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Registered Motorist Vehicles</h1>
+                <p className="mt-1 text-sm text-white/60">Manage your verified fleet and monitor LTO registration alarm statuses.</p>
+              </div>
+
+              <button
+                onClick={() => setAddVehicleOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0066cc]/90 transition-all"
+              >
+                <Plus className="size-4" /> Add Vehicle
+              </button>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {currentCitizen.vehicles && currentCitizen.vehicles.length > 0 ? (
+                currentCitizen.vehicles.map((v) => (
+                  <div
+                    key={v.id}
+                    className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition-all hover:bg-white/10 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/80">
+                          {v.type}
+                        </span>
+                        {v.status === "verified" ? (
+                          <div className="flex items-center gap-1 text-emerald-400">
+                            <CheckCircle2 className="size-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">LGU Verified</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-yellow-500">
+                            <AlertTriangle className="size-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Pending LTO</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <h3 className="mt-3 font-mono-tab text-2xl font-bold tracking-wider text-white">{v.plateNumber}</h3>
+                      <p className="mt-1 text-sm text-white/60">{v.makeModel}</p>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-[11px]">
+                        <div>
+                          <span className="text-white/40 block">LTO Expiry</span>
+                          <span className="font-mono-tab text-white/80 font-medium">{v.ltoExpiry || "2027-12-31"}</span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block">LTO Hold Status</span>
+                          <span className={cn("font-medium", v.ltoAlarmStatus === "CLEARED" ? "text-emerald-400" : "text-orange-400")}>
+                            {v.ltoAlarmStatus === "CLEARED" ? "Cleared" : "Pending Action"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-3">
+                      <button
+                        onClick={() => setActiveTab("pass")}
+                        className="text-xs font-semibold text-[#0066cc] hover:underline flex items-center gap-1"
+                      >
+                        <QrCode className="size-3" /> Motorist Pass
+                      </button>
+                      <button
+                        onClick={() => {
+                          removeVehicle.mutate(v.id, {
+                            onSuccess: () => toast.success(`Removed vehicle ${v.plateNumber}`),
+                          });
+                        }}
+                        className="text-white/40 hover:text-red-400 transition-colors p-1"
+                        title="Remove vehicle"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-3 rounded-2xl border border-dashed border-white/20 p-8 text-center">
+                  <Car className="mx-auto size-8 text-white/40" />
+                  <p className="mt-2 text-sm text-white/70">No vehicles registered yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: DIGITAL MOTORIST PASS */}
+        {/* ========================================================================= */}
+        {activeTab === "pass" && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2.5">
+                  <QrCode className="size-7 text-[#0066cc]" />
+                  Digital Motorist Pass
+                </h1>
+                <p className="mt-1 text-sm text-white/60">
+                  Official verified resident pass for Barangay Culiat traffic checkpoints and green lane access.
+                </p>
+              </div>
+
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-all"
+              >
+                <Printer className="size-4" /> Print Pass
+              </button>
             </div>
 
             <div className="grid gap-8 lg:grid-cols-3">
-              <div className="lg:col-span-2 flex flex-col gap-8">
-                {unpaidCitations.length > 0 && (
-                  <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#cc0000]/20 to-transparent border border-[#cc0000]/30 p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="grid size-10 shrink-0 place-items-center rounded-full bg-[#cc0000]/20 text-[#cc0000]">
-                        <AlertTriangle className="size-5" />
-                      </div>
+              <div className="lg:col-span-2">
+                <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-br from-[#12141a] via-[#0e1017] to-[#0a0a0b] p-8 shadow-2xl">
+                  <div className="flex items-start justify-between border-b border-white/10 pb-6">
+                    <div className="flex items-center gap-3">
+                      <img src="/favico2.png" alt="LGU Seal" className="size-12" />
                       <div>
-                        <h3 className="font-semibold text-white">Outstanding Citations Found</h3>
-                        <p className="mt-1 text-sm text-white/70">
-                          You have {unpaidCitations.length} unpaid citation(s) totaling{" "}
-                          <strong className="text-white font-mono-tab">{formatPeso(totalUnpaid)}</strong>. Please
-                          settle immediately to avoid late penalties.
+                        <p className="text-[10px] uppercase font-mono-tab tracking-widest text-[#0066cc] font-bold">
+                          Quezon City Traffic Operations
                         </p>
+                        <h2 className="text-xl font-black tracking-tight text-white">
+                          BARANGAY CULIAT MOTORIST PASS
+                        </h2>
                       </div>
                     </div>
-                    <Link
-                      to="/portal/pay/$citationId"
-                      params={{ citationId: unpaidCitations[0].id }}
-                      className="shrink-0 rounded-lg bg-[#cc0000] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#cc0000]/25 hover:bg-[#cc0000]/90 transition-all"
-                    >
-                      Pay Now
-                    </Link>
+
+                    <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-center">
+                      <span className="text-[10px] font-bold font-mono-tab uppercase text-emerald-400 block">STATUS</span>
+                      <span className="text-xs font-bold text-white">ACTIVE / VALID</span>
+                    </div>
                   </div>
-                )}
 
-                <section className="flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                      <Car className="size-5 text-[#0066cc]" />
-                      Registered Vehicles
-                    </h2>
-
-                    {/* Add Vehicle Modal */}
-                    <Dialog.Root open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
-                      <Dialog.Trigger asChild>
-                        <button className="text-sm font-medium text-[#0066cc] hover:underline flex items-center gap-1">
-                          <Plus className="size-4" /> Add Vehicle
-                        </button>
-                      </Dialog.Trigger>
-                      <Dialog.Portal>
-                        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
-                        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl animate-in fade-in zoom-in-95">
-                          <div className="flex items-start justify-between border-b border-white/10 pb-3">
-                            <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
-                              <Car className="size-5 text-[#0066cc]" />
-                              Register Vehicle to Profile
-                            </Dialog.Title>
-                            <Dialog.Close asChild>
-                              <button className="rounded p-1 text-white/50 hover:text-white">
-                                <X className="size-4" />
-                              </button>
-                            </Dialog.Close>
-                          </div>
-
-                          <form onSubmit={handleAddVehicleSubmit} className="mt-4 flex flex-col gap-4">
-                            <label className="flex flex-col gap-1.5">
-                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
-                                License Plate Number *
-                              </span>
-                              <input
-                                type="text"
-                                required
-                                placeholder="e.g. NDB-1234"
-                                value={newPlate}
-                                onChange={(e) => setNewPlate(e.target.value.toUpperCase())}
-                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm uppercase text-white focus:border-[#0066cc] focus:outline-none"
-                              />
-                            </label>
-
-                            <label className="flex flex-col gap-1.5">
-                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
-                                Make & Model *
-                              </span>
-                              <input
-                                type="text"
-                                required
-                                placeholder="e.g. Honda City 2022"
-                                value={newModel}
-                                onChange={(e) => setNewModel(e.target.value)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm text-white focus:border-[#0066cc] focus:outline-none"
-                              />
-                            </label>
-
-                            <label className="flex flex-col gap-1.5">
-                              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-white/50">
-                                Vehicle Classification
-                              </span>
-                              <select
-                                value={newType}
-                                onChange={(e) => setNewType(e.target.value)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-sm text-white focus:border-[#0066cc] focus:outline-none"
-                              >
-                                <option value="Sedan">Sedan</option>
-                                <option value="SUV">SUV</option>
-                                <option value="Motorcycle">Motorcycle</option>
-                                <option value="Van / MPV">Van / MPV</option>
-                                <option value="Truck">Truck</option>
-                              </select>
-                            </label>
-
-                            <div className="mt-4 flex justify-end gap-3 border-t border-white/10 pt-4">
-                              <Dialog.Close asChild>
-                                <button
-                                  type="button"
-                                  className="rounded-lg px-4 py-2 text-sm font-semibold text-white/60 hover:text-white"
-                                >
-                                  Cancel
-                                </button>
-                              </Dialog.Close>
-                              <button
-                                type="submit"
-                                disabled={addVehicle.isPending}
-                                className="rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-all disabled:opacity-50"
-                              >
-                                {addVehicle.isPending ? "Adding..." : "Register Vehicle"}
-                              </button>
-                            </div>
-                          </form>
-                        </Dialog.Content>
-                      </Dialog.Portal>
-                    </Dialog.Root>
-                  </div>
-                  
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {currentCitizen.vehicles && currentCitizen.vehicles.map(v => (
-                      <div key={v.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition-all hover:bg-white/10 hover:border-white/20">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/80">
-                              {v.type}
-                            </div>
-                            <h3 className="mt-3 font-mono-tab text-2xl font-bold tracking-wider text-white">{v.plateNumber}</h3>
-                            <p className="mt-1 text-sm text-white/60">{v.makeModel}</p>
-                          </div>
-                          
-                          {v.status === "verified" ? (
-                            <div className="flex items-center gap-1.5 text-emerald-400">
-                               <CheckCircle2 className="size-4" />
-                               <span className="text-xs font-medium uppercase tracking-wider">Verified</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-yellow-500">
-                               <AlertTriangle className="size-4" />
-                               <span className="text-xs font-medium uppercase tracking-wider">Pending LTO</span>
-                            </div>
-                          )}
+                  <div className="mt-8 grid gap-8 md:grid-cols-3 items-center">
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/60 p-6 text-center">
+                      <div className="grid size-36 place-items-center rounded-xl bg-white p-3 shadow-inner">
+                        <div className="grid grid-cols-6 grid-rows-6 gap-1 size-full">
+                          {Array.from({ length: 36 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "rounded-[2px]",
+                                (i % 2 === 0 && i % 3 === 0) || i === 0 || i === 5 || i === 30 || i === 35 || i % 7 === 0
+                                  ? "bg-black"
+                                  : "bg-black/20",
+                              )}
+                            />
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
+                      <span className="mt-3 font-mono-tab text-[11px] font-bold text-white/80 tracking-widest">
+                        {currentCitizen.id}
+                      </span>
+                    </div>
 
-              <div className="flex flex-col gap-6">
-                
-                <section className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-                   <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
-                      <FileText className="size-5 text-[#0066cc]" />
-                      Recent Citations
-                    </h2>
-                    
-                    <div className="flex flex-col gap-3">
-                      {currentCitizen.citations && currentCitizen.citations.map(c => (
-                        <div key={c.id} className="group flex flex-col gap-3 rounded-xl border border-white/10 bg-black/40 p-4 transition-colors hover:bg-white/5">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-semibold text-white">{c.violation}</p>
-                              <p className="text-xs text-white/60">{new Date(c.date).toLocaleDateString()} • {c.plateNumber}</p>
-                            </div>
-                            <span className="font-mono-tab font-medium text-white">{formatPeso(c.amount)}</span>
-                          </div>
-                          
-                          <div className="flex items-center justify-between border-t border-white/10 pt-3">
-                             <span className={cn(
-                               "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                               c.status === "unpaid" ? "bg-[#cc0000]/20 text-[#cc0000]" : 
-                               c.status === "settled" ? "bg-emerald-500/20 text-emerald-500" : "bg-orange-500/20 text-orange-500"
-                             )}>
-                               {c.status}
-                             </span>
-                             
-                             {c.status === "unpaid" ? (
-                               <Link 
-                                 to="/portal/pay/$citationId"
-                                 params={{ citationId: c.id }}
-                                 className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity"
-                               >
-                                 Pay Now <ChevronRight className="size-3" />
-                               </Link>
-                             ) : c.status === "settled" ? (
-                               <Link 
-                                 to="/portal/receipt/$citationId"
-                                 params={{ citationId: c.id }}
-                                 className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity"
-                               >
-                                 View Receipt <ChevronRight className="size-3" />
-                               </Link>
-                             ) : (
-                               <button className="flex items-center gap-1 text-xs font-medium text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity">
-                                 View Details <ChevronRight className="size-3" />
-                               </button>
-                             )}
-                          </div>
+                    <div className="md:col-span-2 flex flex-col gap-4">
+                      <div>
+                        <span className="text-[10px] uppercase font-mono-tab tracking-widest text-white/40">Authorized Motorist</span>
+                        <p className="text-xl font-bold text-white">{currentCitizen.fullName}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] uppercase font-mono-tab tracking-widest text-white/40">Driver's License</span>
+                          <p className="font-mono-tab text-sm font-semibold text-white">{currentCitizen.driverLicenseNumber || "N02-89-102934"}</p>
                         </div>
-                      ))}
+                        <div>
+                          <span className="text-[10px] uppercase font-mono-tab tracking-widest text-white/40">Pass Type</span>
+                          <p className="text-sm font-semibold text-emerald-400">Culiat Resident Motorist</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] uppercase font-mono-tab tracking-widest text-white/40">Primary Plate</span>
+                          <p className="font-mono-tab text-lg font-bold text-[#0066cc]">
+                            {currentCitizen.vehicles && currentCitizen.vehicles[0] ? currentCitizen.vehicles[0].plateNumber : "NO VEHICLE"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-mono-tab tracking-widest text-white/40">Valid Through</span>
+                          <p className="font-mono-tab text-sm font-semibold text-white">DECEMBER 2027</p>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <button className="mt-2 w-full rounded-lg border border-white/10 py-2 text-sm font-medium text-white/80 hover:bg-white/10 transition-colors">
-                      View All History
-                    </button>
-                </section>
-                
-                 <section className="flex flex-col gap-4 rounded-2xl bg-gradient-to-br from-[#0066cc]/20 to-[#0066cc]/5 border border-[#0066cc]/30 p-6">
-                    <div className="grid size-10 place-items-center rounded-full bg-[#0066cc]/20 text-[#0066cc]">
-                      <ShieldCheck className="size-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white">Dispute a Citation</h3>
-                      <p className="mt-1 text-sm text-white/70 leading-relaxed">
-                        Believe you were incorrectly ticketed? You can submit dashcam footage or documents to our adjudicators.
-                      </p>
-                    </div>
-                    <button 
-                      onClick={() => setActiveTab("disputes")}
-                      className="mt-2 rounded-lg bg-white/10 py-2 text-sm font-medium text-white hover:bg-white/20 transition-colors"
-                    >
-                      File an Appeal
-                    </button>
-                 </section>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Live Traffic Feed Tab */}
+        {/* ========================================================================= */}
+        {/* TAB 4: LIVE TRAFFIC FEEDS */}
+        {/* ========================================================================= */}
         {activeTab === "traffic" && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-             <div className="mb-8">
-                <h1 className="text-3xl font-bold tracking-tight">Live Traffic & Advisories</h1>
-                <p className="mt-2 text-white/60">Real-time public announcements broadcasted directly from the QC Command Center.</p>
-             </div>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold tracking-tight">Live Traffic & CCTV Feeds</h1>
+              <p className="mt-1 text-sm text-white/60">
+                Real-time camera snapshots and official public announcements broadcasted directly from the QC Command Center.
+              </p>
+            </div>
 
-             <div className="grid gap-8 lg:grid-cols-3">
-                <div className="lg:col-span-2 flex flex-col gap-4">
-                   <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                      <Radio className="size-5 text-[#0066cc]" />
-                      Official Advisories
-                   </h2>
-
-                   {loadingAdvisories ? (
-                      <div className="grid h-32 place-items-center"><Loader2 className="size-6 animate-spin text-[#0066cc]" /></div>
-                   ) : advisories?.map(advisory => (
-                     <div 
-                        key={advisory.id}
-                        className={cn(
-                          "flex flex-col gap-2 rounded-2xl border p-5 transition-colors",
-                          advisory.severity === "Critical" ? "border-red-500/30 bg-red-500/5" :
-                          advisory.severity === "Warning" ? "border-orange-500/30 bg-orange-500/5" :
-                          "border-[#0066cc]/30 bg-[#0066cc]/5"
-                        )}
-                     >
-                       <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "grid size-10 place-items-center rounded-full",
-                            advisory.severity === "Critical" ? "bg-red-500/20 text-red-500" :
-                            advisory.severity === "Warning" ? "bg-orange-500/20 text-orange-500" :
-                            "bg-[#0066cc]/20 text-[#0066cc]"
-                          )}>
-                             {advisory.severity === "Critical" ? <ShieldAlert className="size-5" /> : 
-                              advisory.severity === "Warning" ? <AlertTriangle className="size-5" /> : 
-                              <Activity className="size-5" />}
-                          </div>
-                          <div>
-                             <h3 className="font-bold text-white">{advisory.title}</h3>
-                             <p className="text-xs text-white/50">{new Date(advisory.publishedAt).toLocaleString()}</p>
-                          </div>
-                       </div>
-                       <p className="mt-2 text-sm text-white/80">{advisory.message}</p>
-                     </div>
-                   ))}
+            <div className="mb-8 grid gap-4 sm:grid-cols-3">
+              <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/60">
+                <img src={cctv1} alt="Commonwealth Ave" className="h-44 w-full object-cover opacity-80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <p className="text-xs font-bold text-white">Commonwealth Ave (Northbound)</p>
+                  <p className="text-[10px] text-white/60 font-mono-tab">Speed: 38 km/h • Moderate</p>
                 </div>
+              </div>
 
-                <div className="flex flex-col gap-4">
-                  <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                      <Activity className="size-5 text-emerald-500" />
-                      Sector Status
-                  </h2>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                     <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                           <span className="text-sm font-medium text-white">Commonwealth Ave</span>
-                           <span className="inline-flex items-center rounded bg-orange-500/20 px-2 py-0.5 text-xs font-bold text-orange-500">Heavy</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                           <span className="text-sm font-medium text-white">EDSA North</span>
-                           <span className="inline-flex items-center rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-500">Light</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                           <span className="text-sm font-medium text-white">Visayas Ave</span>
-                           <span className="inline-flex items-center rounded bg-red-500/20 px-2 py-0.5 text-xs font-bold text-red-500">Closed</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                           <span className="text-sm font-medium text-white">Tandang Sora</span>
-                           <span className="inline-flex items-center rounded bg-yellow-500/20 px-2 py-0.5 text-xs font-bold text-yellow-500">Moderate</span>
-                        </div>
-                     </div>
-                  </div>
+              <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/60">
+                <img src={cctv2} alt="Tandang Sora" className="h-44 w-full object-cover opacity-80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <p className="text-xs font-bold text-white">Tandang Sora Flyover Intersection</p>
+                  <p className="text-[10px] text-white/60 font-mono-tab">Speed: 24 km/h • Congested</p>
                 </div>
-             </div>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/60">
+                <img src={cctv3} alt="Visayas Ave" className="h-44 w-full object-cover opacity-80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <p className="text-xs font-bold text-white">Visayas Ave — Central Avenue</p>
+                  <p className="text-[10px] text-white/60 font-mono-tab">Speed: 52 km/h • Clear</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* My Disputes Tab */}
+        {/* ========================================================================= */}
+        {/* TAB 5: COMMUNITY ROAD HAZARD REPORTER */}
+        {/* ========================================================================= */}
+        {activeTab === "hazard" && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2.5">
+                <AlertTriangle className="size-7 text-orange-500" />
+                Community Road Hazard Reporter
+              </h1>
+              <p className="mt-1 text-sm text-white/60">
+                Report stalled vehicles, broken signals, or accidents. Reports are dispatched immediately to patrol units (+50 Eco-Reward Tokens per report).
+              </p>
+            </div>
+
+            <div className="grid gap-8 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <form onSubmit={handleHazardSubmit} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl flex flex-col gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                        Incident Category *
+                      </span>
+                      <select
+                        value={hazardCategory}
+                        onChange={(e) => setHazardCategory(e.target.value as any)}
+                        className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                      >
+                        <option value="Stalled Vehicle">Stalled Vehicle / Breakdown</option>
+                        <option value="Accident / Collision">Accident / Collision</option>
+                        <option value="Broken Traffic Light">Broken Traffic Signal / Light</option>
+                        <option value="Flooding / Obstruction">Flooding / Road Obstruction</option>
+                        <option value="Illegal Parking">Severe Illegal Parking Obstruction</option>
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                        Approximate Location *
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Commonwealth Ave near Culiat Overpass"
+                        value={hazardLocation}
+                        onChange={(e) => setHazardLocation(e.target.value)}
+                        className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                      Description & Details *
+                    </span>
+                    <textarea
+                      rows={4}
+                      required
+                      placeholder="Describe the situation (e.g. lane blocked, vehicle model, hazard severity)..."
+                      value={hazardDesc}
+                      onChange={(e) => setHazardDesc(e.target.value)}
+                      className="resize-none rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                    />
+                  </label>
+
+                  <div className="flex items-center justify-between border-t border-white/10 pt-4">
+                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <Sparkles className="size-4" /> Earn +50 Eco-Reward Tokens on verification
+                    </span>
+
+                    <button
+                      type="submit"
+                      disabled={submitHazard.isPending || !hazardDesc}
+                      className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 hover:bg-orange-600 transition-all disabled:opacity-50"
+                    >
+                      {submitHazard.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                      Dispatch Report to QC Ops
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 6: ADJUDICATION BOARD & CONTESTED APPEALS */}
+        {/* ========================================================================= */}
         {activeTab === "disputes" && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="mb-8 flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">Dispute Tracking Hub</h1>
-                  <p className="mt-2 text-white/60">Monitor your submitted appeals and provide requested evidence.</p>
-                </div>
-                
-                <Dialog.Root open={appealModalOpen} onOpenChange={setAppealModalOpen}>
-                  <Dialog.Trigger asChild>
-                    <button className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors">
-                      <ShieldCheck className="size-4" />
-                      File New Appeal
-                    </button>
-                  </Dialog.Trigger>
-                  <Dialog.Portal>
-                    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
-                    <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
-                      <Dialog.Title className="text-lg font-bold text-white">File New Citation Appeal</Dialog.Title>
-                      <Dialog.Description className="mt-2 text-sm text-white/60">
-                        Please provide the citation number and your reason for dispute. Our adjudicators will review your request.
-                      </Dialog.Description>
-                      
-                      <div className="mt-6 flex flex-col gap-4">
-                        <div className="flex flex-col gap-2">
-                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Citation to Appeal</label>
-                          {currentCitizen.citations && currentCitizen.citations.length > 0 ? (
-                            <select
-                              value={appealCitationId}
-                              onChange={(e) => setAppealCitationId(e.target.value)}
-                              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
-                            >
-                              <option value="" className="bg-[#0a0a0b] text-white/60">-- Select a Citation --</option>
-                              {currentCitizen.citations.map((c) => (
-                                <option key={c.id} value={c.id} className="bg-[#0a0a0b] text-white">
-                                  {c.id} · {c.plateNumber} — {c.violation} ({formatPeso(c.amount)})
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={appealCitationId}
-                              onChange={(e) => setAppealCitationId(e.target.value)}
-                              placeholder="e.g. CIT-00129" 
-                              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
-                            />
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Reason for Dispute</label>
-                          <textarea 
-                            rows={4}
-                            value={appealReason}
-                            onChange={(e) => setAppealReason(e.target.value)}
-                            placeholder="Please explain in detail why you are appealing this citation (e.g. emergency situation, obstruction, or wrong plate reading)..." 
-                            className="resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]" 
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Traffic Adjudication Board (TAB) Appeals</h1>
+                <p className="mt-1 text-sm text-white/60">
+                  Track your formal contest filings and review hearing determinations under MMDA NCAP statutory guidelines.
+                </p>
+              </div>
+
+              <Dialog.Root open={appealModalOpen} onOpenChange={setAppealModalOpen}>
+                <Dialog.Trigger asChild>
+                  <button className="inline-flex items-center gap-2 rounded-xl bg-[#0066cc] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors">
+                    <Scale className="size-4" />
+                    File Formal Protest
+                  </button>
+                </Dialog.Trigger>
+                <Dialog.Portal>
+                  <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
+                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
+                    <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
+                      <Scale className="size-5 text-blue-400" />
+                      File NCAP Citation Protest (TAB Form 01)
+                    </Dialog.Title>
+                    <Dialog.Description className="mt-2 text-sm text-white/60">
+                      Pursuant to MMDA NCAP Guidelines, formal appeals must be lodged within 10 calendar days of receipt.
+                    </Dialog.Description>
+
+                    <div className="mt-6 flex flex-col gap-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Notice of Violation (NOV)</label>
+                        {currentCitizen.citations && currentCitizen.citations.length > 0 ? (
+                          <select
+                            value={appealCitationId}
+                            onChange={(e) => setAppealCitationId(e.target.value)}
+                            className="rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                          >
+                            <option value="" className="bg-[#0a0a0b] text-white/60">-- Select NOV --</option>
+                            {currentCitizen.citations.map((c) => (
+                              <option key={c.id} value={c.id} className="bg-[#0a0a0b] text-white">
+                                {c.novNumber || c.id} · {c.plateNumber} — {c.violation} ({formatPeso(c.amount)})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={appealCitationId}
+                            onChange={(e) => setAppealCitationId(e.target.value)}
+                            placeholder="e.g. NOV-2026-QC-09124"
+                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
                           />
-                        </div>
+                        )}
                       </div>
 
-                      <div className="mt-8 flex justify-end gap-3">
-                        <Dialog.Close asChild>
-                          <button className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-colors">Cancel</button>
-                        </Dialog.Close>
-                        <button 
-                          disabled={createDispute.isPending || !appealCitationId || !appealReason}
-                          onClick={() => {
-                            createDispute.mutate({ citation_id: appealCitationId, reason: appealReason }, {
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Statutory Ground for Appeal</label>
+                        <select
+                          value={appealGround}
+                          onChange={(e) => setAppealGround(e.target.value)}
+                          className="rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-xs text-white outline-none focus:border-[#0066cc]"
+                        >
+                          {NCAP_GROUNDS.map((g) => (
+                            <option key={g.value} value={g.label} className="bg-[#0a0a0b]">
+                              {g.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Supporting Statement & Defense</label>
+                        <textarea
+                          rows={4}
+                          value={appealReason}
+                          onChange={(e) => setAppealReason(e.target.value)}
+                          placeholder="Provide factual details (time of day, emergency situation, presence of traffic enforcer override, deed of sale date)..."
+                          className="resize-none rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-8 flex justify-end gap-3">
+                      <Dialog.Close asChild>
+                        <button className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-colors">
+                          Cancel
+                        </button>
+                      </Dialog.Close>
+                      <button
+                        disabled={createDispute.isPending || !appealCitationId || !appealReason}
+                        onClick={() => {
+                          createDispute.mutate(
+                            { citation_id: appealCitationId, reason: `[Ground: ${appealGround}] ${appealReason}` },
+                            {
                               onSuccess: () => {
-                                toast.success(`Appeal for ${appealCitationId} submitted successfully.`);
+                                toast.success(`Appeal for ${appealCitationId} filed with Traffic Adjudication Board.`);
                                 setAppealModalOpen(false);
                                 setAppealCitationId("");
                                 setAppealReason("");
-                              }
-                            });
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors disabled:opacity-50"
-                        >
-                          {createDispute.isPending && <Loader2 className="size-4 animate-spin" />}
-                          Submit Appeal
-                        </button>
+                              },
+                            },
+                          );
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#0066cc] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0066cc]/90 transition-colors disabled:opacity-50"
+                      >
+                        {createDispute.isPending && <Loader2 className="size-4 animate-spin" />}
+                        Submit to Board
+                      </button>
+                    </div>
+                  </Dialog.Content>
+                </Dialog.Portal>
+              </Dialog.Root>
+            </div>
+
+            {loadingDisputes ? (
+              <div className="grid h-64 place-items-center">
+                <Loader2 className="size-8 animate-spin text-[#0066cc]" />
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {disputes?.map((dispute) => (
+                  <div key={dispute.id} className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="grid size-10 place-items-center rounded-xl bg-blue-500/20 text-blue-400">
+                          <Scale className="size-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-white">Docket #{dispute.id}</h3>
+                          <p className="text-xs text-white/50">Notice of Violation: {dispute.citation_id}</p>
+                        </div>
                       </div>
-                    </Dialog.Content>
-                  </Dialog.Portal>
-                </Dialog.Root>
-             </div>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
+                          dispute.status === "approved" ? "bg-emerald-500/20 text-emerald-500" :
+                          dispute.status === "rejected" ? "bg-red-500/20 text-red-500" :
+                          "bg-blue-500/20 text-blue-400",
+                        )}
+                      >
+                        {dispute.status === "approved" ? "DISMISSED (NO FINE)" :
+                         dispute.status === "rejected" ? "PENALTY UPHELD" : "PENDING BOARD REVIEW"}
+                      </span>
+                    </div>
 
-             {loadingDisputes ? (
-                <div className="grid h-64 place-items-center"><Loader2 className="size-8 animate-spin text-[#0066cc]" /></div>
-             ) : (
-                <div className="grid gap-6">
-                   {disputes?.map(dispute => (
-                     <div key={dispute.id} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                           <div className="flex items-center gap-3">
-                             <div className="grid size-10 place-items-center rounded-lg bg-[#0066cc]/20 text-[#0066cc]">
-                                <FileText className="size-5" />
-                             </div>
-                             <div>
-                               <h3 className="font-bold text-white">{dispute.id}</h3>
-                               <p className="text-xs text-white/50">Appealing Citation: {dispute.citation_id}</p>
-                             </div>
-                           </div>
-                           <span className={cn(
-                             "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
-                             dispute.status === "approved" ? "bg-emerald-500/20 text-emerald-500" :
-                             dispute.status === "rejected" ? "bg-red-500/20 text-red-500" :
-                             "bg-blue-500/20 text-blue-400"
-                           )}>
-                             {dispute.status}
-                           </span>
-                        </div>
-                        
-                        <div className="mt-4 grid gap-6 md:grid-cols-2">
-                           <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-white/50">Your Statement</p>
-                              <p className="mt-1 text-sm text-white/90">"{dispute.reason}"</p>
-                              <p className="mt-2 text-xs text-white/40 flex items-center gap-1">
-                                <Clock className="size-3" /> Submitted {new Date(dispute.created_at).toLocaleDateString()}
-                              </p>
-                           </div>
+                    <div className="mt-4 grid gap-6 md:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-white/50">Motorist Formal Defense</p>
+                        <p className="mt-1 text-sm text-white/90">"{dispute.reason}"</p>
+                        <p className="mt-2 text-xs text-white/40 flex items-center gap-1">
+                          <Clock className="size-3" /> Submitted {new Date(dispute.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
 
-                           {dispute.admin_notes && (
-                              <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-                                <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Adjudicator Notes</p>
-                                <p className="mt-1 text-sm text-white/90">{dispute.admin_notes}</p>
-                              </div>
-                           )}
+                      {dispute.admin_notes && (
+                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Adjudication Officer Findings</p>
+                          <p className="mt-1 text-sm text-white/90">{dispute.admin_notes}</p>
                         </div>
-                     </div>
-                   ))}
-                </div>
-             )}
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Eco-Rewards Tab */}
+        {/* ========================================================================= */}
+        {/* TAB 7: ECO-REWARDS & MOTORIST INCENTIVES */}
+        {/* ========================================================================= */}
         {activeTab === "rewards" && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="mb-8 flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
-                     <Leaf className="size-8" />
-                     Eco-Rewards Program
-                  </h1>
-                  <p className="mt-2 text-white/60">Thank you for keeping Culiat roads safe. Redeem your tokens for LGU perks.</p>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+                <Leaf className="size-8" />
+                Eco-Rewards Program
+              </h1>
+              <p className="mt-1 text-sm text-white/60">
+                Earn tokens for clean driving records and road hazard reporting. Redeem for official LGU motorist perks.
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 via-emerald-950/20 to-transparent p-8 relative overflow-hidden shadow-2xl">
+                  <Trophy className="absolute -bottom-4 -right-4 size-40 text-emerald-500/15 rotate-12 pointer-events-none" />
+                  <span className="text-xs font-bold uppercase tracking-widest font-mono-tab text-emerald-400">
+                    Safe Driver Rewards Balance
+                  </span>
+                  <p className="text-5xl sm:text-6xl font-black text-emerald-300 mt-2 font-mono-tab">
+                    {currentCitizen.tokens || 0} <span className="text-xl text-emerald-400/80">Tokens</span>
+                  </p>
+                  <p className="text-xs text-emerald-400/90 mt-3 font-semibold flex items-center gap-1.5">
+                    <Sparkles className="size-4" /> Maintain clean driving streak to earn +100 tokens monthly!
+                  </p>
                 </div>
-             </div>
-             
-             <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2 flex flex-col gap-6">
-                   <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-transparent p-6 relative overflow-hidden">
-                      <Trophy className="absolute -bottom-4 -right-4 size-32 text-emerald-500/20 rotate-12" />
-                      <h2 className="text-lg font-bold text-white">Your Safe Driver Balance</h2>
-                      <p className="text-6xl font-black text-emerald-400 mt-2 font-mono-tab">1,250 <span className="text-xl">Tokens</span></p>
-                      <p className="text-sm text-emerald-500/80 mt-2 font-semibold">Streak: 14 Months without a citation! 🎉</p>
-                   </div>
-                   
-                   <h2 className="text-xl font-bold tracking-tight text-white mt-4">Redeem Rewards</h2>
-                   <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="panel rounded-xl border border-border bg-white/5 p-4 flex flex-col justify-between hover:border-emerald-500/50 transition-colors cursor-pointer group">
-                         <div>
-                            <div className="grid size-10 place-items-center rounded-lg bg-emerald-500/20 text-emerald-500 mb-3 group-hover:scale-110 transition-transform">
-                               <Car className="size-5" />
-                            </div>
-                            <h3 className="font-bold text-white">Free Parking Pass</h3>
-                            <p className="text-xs text-muted-foreground mt-1">1-Month free parking at any QC LGU facility.</p>
-                         </div>
-                         <button 
-                            onClick={() => toast.success("Pass Voucher Claimed! Voucher Code: QC-PARK-2026-X89")}
-                            className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
-                         >
-                            Redeem for 500 Tokens
-                         </button>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col justify-between hover:border-emerald-500/50 transition-colors group">
+                    <div>
+                      <div className="grid size-11 place-items-center rounded-xl bg-emerald-500/20 text-emerald-400 mb-3 group-hover:scale-110 transition-transform">
+                        <Car className="size-6" />
                       </div>
-                      
-                      <div className="panel rounded-xl border border-border bg-white/5 p-4 flex flex-col justify-between hover:border-emerald-500/50 transition-colors cursor-pointer group">
-                         <div>
-                            <div className="grid size-10 place-items-center rounded-lg bg-blue-500/20 text-blue-500 mb-3 group-hover:scale-110 transition-transform">
-                               <Gift className="size-5" />
-                            </div>
-                            <h3 className="font-bold text-white">Priority Registration</h3>
-                            <p className="text-xs text-muted-foreground mt-1">Skip the line for your next LTO renewal via QC Express.</p>
-                         </div>
-                         <button 
-                            onClick={() => toast.success("Priority Pass Claimed! Reference: QC-EXPRESS-9921")}
-                            className="mt-4 w-full rounded bg-emerald-600/20 py-2 text-sm font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
-                         >
-                            Redeem for 1,000 Tokens
-                         </button>
+                      <h3 className="font-bold text-white">1-Month Free QC Facility Parking</h3>
+                      <p className="text-xs text-white/60 mt-1">Unlimited free parking pass across all QC Hall and LGU public lots.</p>
+                    </div>
+                    <button
+                      onClick={() => handleClaimReward("1-Month Free QC Parking", "Unlimited QC LGU lot parking", 500)}
+                      disabled={redeemReward.isPending || (currentCitizen.tokens || 0) < 500}
+                      className="mt-4 w-full rounded-xl bg-emerald-600/20 py-2.5 text-xs font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors disabled:opacity-40"
+                    >
+                      Redeem for 500 Tokens
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col justify-between hover:border-emerald-500/50 transition-colors group">
+                    <div>
+                      <div className="grid size-11 place-items-center rounded-xl bg-blue-500/20 text-blue-400 mb-3 group-hover:scale-110 transition-transform">
+                        <Gift className="size-6" />
                       </div>
-                   </div>
+                      <h3 className="font-bold text-white">Priority QC Express Lane Pass</h3>
+                      <p className="text-xs text-white/60 mt-1">Skip the queue for your next LTO registration renewal at QC Express Center.</p>
+                    </div>
+                    <button
+                      onClick={() => handleClaimReward("Priority QC Express Pass", "Skip the line for LTO renewals", 750)}
+                      disabled={redeemReward.isPending || (currentCitizen.tokens || 0) < 750}
+                      className="mt-4 w-full rounded-xl bg-emerald-600/20 py-2.5 text-xs font-bold text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors disabled:opacity-40"
+                    >
+                      Redeem for 750 Tokens
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="flex flex-col gap-4">
-                   <h2 className="font-bold text-white border-b border-border pb-2">How to earn</h2>
-                   <ul className="text-sm text-white/70 space-y-4">
-                      <li className="flex items-start gap-2">
-                         <CheckCircle2 className="size-4 text-emerald-500 mt-0.5 shrink-0" />
-                         <span><strong>100 Tokens</strong> every month with 0 traffic violations.</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                         <CheckCircle2 className="size-4 text-emerald-500 mt-0.5 shrink-0" />
-                         <span><strong>500 Tokens</strong> bonus for completing a full year cleanly.</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                         <AlertTriangle className="size-4 text-orange-500 mt-0.5 shrink-0" />
-                         <span>Tokens reset to 0 if any major moving violation is recorded.</span>
-                      </li>
-                   </ul>
-                </div>
-             </div>
+              </div>
+            </div>
           </div>
         )}
 
+        {/* ========================================================================= */}
+        {/* MODAL 1: INSPECT NCAP EVIDENCE PACK (CCTV FRAMES) */}
+        {/* ========================================================================= */}
+        <Dialog.Root open={inspectNovModalOpen} onOpenChange={setInspectNovModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md animate-in fade-in" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/20 bg-[#0a0a0b] p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+              {selectedNov && (
+                <div>
+                  <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-blue-500/20 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-blue-400 border border-blue-500/30">
+                          OFFICIAL NCAP EVIDENCE PACK
+                        </span>
+                        <span className="font-mono-tab text-xs font-bold text-white/80">{selectedNov.novNumber}</span>
+                      </div>
+                      <h2 className="text-xl font-bold text-white mt-1">{selectedNov.violation}</h2>
+                      <p className="text-xs text-white/50">{selectedNov.location}</p>
+                    </div>
+
+                    <Dialog.Close asChild>
+                      <button className="rounded p-1 text-white/50 hover:text-white">
+                        <X className="size-5" />
+                      </button>
+                    </Dialog.Close>
+                  </div>
+
+                  {/* 3-Frame Photographic Evidence Viewer */}
+                  <div className="mt-6">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white/60 mb-3 flex items-center gap-2">
+                      <Camera className="size-4 text-blue-400" />
+                      High-Resolution ANPR Multi-Frame Sequence
+                    </h3>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/60 p-2">
+                        <img src={violation1} alt="Frame 01 Approach" className="h-36 w-full rounded-lg object-cover" />
+                        <span className="text-[10px] font-mono-tab font-bold text-blue-400">FRAME 01 • APPROACH</span>
+                        <p className="text-[10px] text-white/70">Vehicle entering trigger zone on amber light phase.</p>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 rounded-xl border border-red-500/30 bg-red-950/20 p-2">
+                        <img src={violation2} alt="Frame 02 Infraction" className="h-36 w-full rounded-lg object-cover" />
+                        <span className="text-[10px] font-mono-tab font-bold text-red-400">FRAME 02 • INFRACTION TRIGGER</span>
+                        <p className="text-[10px] text-white/70">Solid red light crossing line: +1.8s into red phase.</p>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/60 p-2">
+                        <img src={violation3} alt="Frame 03 Plate OCR" className="h-36 w-full rounded-lg object-cover" />
+                        <span className="text-[10px] font-mono-tab font-bold text-emerald-400">FRAME 03 • ANPR PLATE CROP</span>
+                        <p className="text-[10px] text-white/70">Plate: {selectedNov.plateNumber} (Confidence: 99.4%)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Violation Breakdown Table */}
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <span className="text-white/40 block">Fine Base</span>
+                        <span className="font-mono-tab text-white font-bold">{formatPeso(selectedNov.amount)}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block">Late Surcharge</span>
+                        <span className="font-mono-tab text-emerald-400 font-bold">₱0.00</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block">Total Due</span>
+                        <span className="font-mono-tab text-lg font-black text-white">{formatPeso(selectedNov.amount)}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block">Settlement Deadline</span>
+                        <span className="font-mono-tab text-orange-400 font-bold">
+                          {new Date(selectedNov.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions in Evidence Inspector */}
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <button
+                      onClick={() => {
+                        setNominateModalOpen(true);
+                      }}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/90 hover:bg-white/10"
+                    >
+                      <UserCheck className="size-3.5 inline mr-1" /> Nominate Actual Driver
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setAppealCitationId(selectedNov.id);
+                          setAppealModalOpen(true);
+                        }}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/90 hover:bg-white/10"
+                      >
+                        Contest / File Protest
+                      </button>
+
+                      {selectedNov.status === "unpaid" && (
+                        <button
+                          onClick={() => {
+                            setSelectedCitationId(selectedNov.id);
+                            setSettleModalOpen(true);
+                          }}
+                          className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-600/30"
+                        >
+                          Settle Online ({formatPeso(selectedNov.amount)})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+
+        {/* ========================================================================= */}
+        {/* MODAL 2: NOMINATE ACTUAL DRIVER */}
+        {/* ========================================================================= */}
+        <Dialog.Root open={nominateModalOpen} onOpenChange={setNominateModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
+              <div className="flex items-start justify-between border-b border-white/10 pb-3">
+                <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
+                  <UserCheck className="size-5 text-blue-400" />
+                  Nominate Actual Driver (Transfer Liability)
+                </Dialog.Title>
+                <Dialog.Close asChild>
+                  <button className="rounded p-1 text-white/50 hover:text-white">
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              <form onSubmit={handleNominateDriverSubmit} className="mt-4 flex flex-col gap-4">
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Under MMDA NCAP rules, if you were not the driver at the time of apprehension, you may transfer liability by submitting the driver's verified credentials.
+                </p>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="font-mono-tab text-[10px] uppercase text-white/50">Driver Full Name *</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Roberto M. Gomez"
+                    value={nomineeName}
+                    onChange={(e) => setNomineeName(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="font-mono-tab text-[10px] uppercase text-white/50">Driver's License Number *</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. N01-14-192834"
+                    value={nomineeLicense}
+                    onChange={(e) => setNomineeLicense(e.target.value.toUpperCase())}
+                    className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm uppercase text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+
+                <div className="mt-4 flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <Dialog.Close asChild>
+                    <button className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10">
+                      Cancel
+                    </button>
+                  </Dialog.Close>
+                  <button
+                    type="submit"
+                    disabled={nominateDriver.isPending || !nomineeName || !nomineeLicense}
+                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {nominateDriver.isPending && <Loader2 className="size-4 animate-spin inline mr-1" />}
+                    Submit Nomination
+                  </button>
+                </div>
+              </form>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+
+        {/* ========================================================================= */}
+        {/* MODAL 3: CERTIFICATE OF TRAFFIC CLEARANCE */}
+        {/* ========================================================================= */}
+        <Dialog.Root open={clearanceModalOpen} onOpenChange={setClearanceModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/20 bg-[#0e1017] p-8 shadow-2xl">
+              {clearedCitation && (
+                <div>
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4 text-center">
+                    <div className="flex items-center gap-3 text-left">
+                      <img src="/favico2.png" alt="LGU Seal" className="size-10" />
+                      <div>
+                        <span className="text-[10px] font-mono-tab uppercase text-emerald-400 font-bold block">
+                          REPUBLIC OF THE PHILIPPINES • QUEZON CITY
+                        </span>
+                        <h2 className="text-base font-black text-white">CERTIFICATE OF TRAFFIC CLEARANCE</h2>
+                      </div>
+                    </div>
+                    <Dialog.Close asChild>
+                      <button className="rounded p-1 text-white/50 hover:text-white">
+                        <X className="size-4" />
+                      </button>
+                    </Dialog.Close>
+                  </div>
+
+                  <div className="mt-6 flex flex-col items-center justify-center p-4 text-center bg-black/40 rounded-2xl border border-white/10">
+                    <CheckCircle2 className="size-12 text-emerald-400 mb-2" />
+                    <span className="font-mono-tab text-xs font-bold text-white/80">
+                      CERTIFICATE #{clearedCitation.clearanceCertNumber || "MMDA-QC-CLR-2026-99124"}
+                    </span>
+                    <span className="text-xs text-emerald-400 font-semibold mt-1">LTO LTMS REGISTRATION ALARM CLEARED</span>
+                  </div>
+
+                  <div className="mt-6 space-y-2 text-xs text-white/80 border-t border-white/10 pt-4">
+                    <p><strong>Issued To:</strong> {currentCitizen.fullName}</p>
+                    <p><strong>Vehicle Plate:</strong> {clearedCitation.plateNumber}</p>
+                    <p><strong>Resolved NOV:</strong> {clearedCitation.novNumber || clearedCitation.id}</p>
+                    <p><strong>Violation:</strong> {clearedCitation.violation}</p>
+                    <p><strong>Date Cleared:</strong> {new Date().toLocaleDateString()}</p>
+                  </div>
+
+                  <div className="mt-8 flex justify-end gap-3 border-t border-white/10 pt-4">
+                    <button
+                      onClick={() => window.print()}
+                      className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                    >
+                      <Printer className="size-4" /> Print Certificate
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+
+        {/* ========================================================================= */}
+        {/* MODAL 4: INSTANT ONLINE CITATION SETTLEMENT */}
+        {/* ========================================================================= */}
+        <Dialog.Root open={settleModalOpen} onOpenChange={setSettleModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
+              <div className="flex items-start justify-between border-b border-white/10 pb-3">
+                <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
+                  <CreditCard className="size-5 text-emerald-400" />
+                  Instant Online Citation Settlement
+                </Dialog.Title>
+                <Dialog.Close asChild>
+                  <button className="rounded p-1 text-white/50 hover:text-white">
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              <form onSubmit={handleQuickSettleSubmit} className="mt-4 flex flex-col gap-4">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">
+                  <p className="text-[10px] font-mono-tab uppercase text-white/50">Citation Reference</p>
+                  <p className="text-base font-bold text-white mt-0.5">{selectedCitationId || "CIT-00135"}</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-white/50">Select Payment Gateway</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSettleMethod("gcash")}
+                      className={cn(
+                        "rounded-xl border p-3 text-center transition-all",
+                        settleMethod === "gcash" ? "border-blue-500 bg-blue-500/20 text-white font-bold" : "border-white/10 text-white/70 hover:bg-white/5",
+                      )}
+                    >
+                      <span className="block text-xs font-bold">GCash</span>
+                      <span className="text-[10px] text-white/50">QR Ph</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettleMethod("maya")}
+                      className={cn(
+                        "rounded-xl border p-3 text-center transition-all",
+                        settleMethod === "maya" ? "border-emerald-500 bg-emerald-500/20 text-white font-bold" : "border-white/10 text-white/70 hover:bg-white/5",
+                      )}
+                    >
+                      <span className="block text-xs font-bold">Maya</span>
+                      <span className="text-[10px] text-white/50">Wallet</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettleMethod("card")}
+                      className={cn(
+                        "rounded-xl border p-3 text-center transition-all",
+                        settleMethod === "card" ? "border-purple-500 bg-purple-500/20 text-white font-bold" : "border-white/10 text-white/70 hover:bg-white/5",
+                      )}
+                    >
+                      <span className="block text-xs font-bold">Card</span>
+                      <span className="text-[10px] text-white/50">Visa/MC</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <Dialog.Close asChild>
+                    <button className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 transition-colors">
+                      Cancel
+                    </button>
+                  </Dialog.Close>
+                  <button
+                    type="submit"
+                    disabled={settling}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                  >
+                    {settling && <Loader2 className="size-4 animate-spin" />}
+                    Confirm & Settle
+                  </button>
+                </div>
+              </form>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </main>
     </div>
   );
