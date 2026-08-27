@@ -344,10 +344,12 @@ export function useUpdateCitationStatus() {
 }
 
 export let MOCK_CAMERAS: Camera[] = [
-  { id: "CAM-1", code: "QC-CAM-1001", location: "Commonwealth Ave", status: "online", lat: 14.6563, lng: 121.0697 },
-  { id: "CAM-2", code: "QC-CAM-1002", location: "Tandang Sora Intersection", status: "online", lat: 14.6723, lng: 121.0507 },
-  { id: "CAM-3", code: "QC-CAM-1003", location: "Visayas Ave", status: "maintenance", lat: 14.6623, lng: 121.0423 },
-  { id: "CAM-4", code: "QC-CAM-1004", location: "Mindanao Ave", status: "offline", lat: 14.6789, lng: 121.0345 },
+  { id: "CAM-1", code: "QC-CAM-1001", location: "Commonwealth Ave cor. Tandang Sora", status: "online", lat: 14.6563, lng: 121.0697 },
+  { id: "CAM-2", code: "QC-CAM-1002", location: "Commonwealth Ave (Luzon Overpass Eastbound)", status: "online", lat: 14.6723, lng: 121.0507 },
+  { id: "CAM-3", code: "QC-CAM-1003", location: "Visayas Ave near Central Market", status: "online", lat: 14.6623, lng: 121.0423 },
+  { id: "CAM-4", code: "QC-CAM-1004", location: "Mindanao Ave / Congressional Ext", status: "maintenance", lat: 14.6789, lng: 121.0345 },
+  { id: "CAM-5", code: "QC-CAM-1005", location: "EDSA Northbound QC Busway Corridor", status: "online", lat: 14.6512, lng: 121.0334 },
+  { id: "CAM-6", code: "QC-CAM-1006", location: "Culiat Elementary School Safety Zone", status: "offline", lat: 14.6645, lng: 121.0542 },
 ];
 
 export function useCameras() {
