@@ -23,7 +23,7 @@ export type PublicCitation = {
  * ticket. Only non-sensitive columns are returned (no officer, no violation id).
  */
 export const lookupCitation = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => schema.parse(data))
+  .validator((data: unknown) => schema.parse(data))
   .handler(async ({ data }): Promise<PublicCitation | null> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
