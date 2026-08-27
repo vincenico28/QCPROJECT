@@ -50,17 +50,69 @@ export type Officer = {
 };
 
 export let MOCK_OFFICERS: Officer[] = [
-  { id: "101", badge_number: "BADGE-101", full_name: "Juan Dela Cruz", rank: "Sergeant", unit: "Traffic Management", district: "District 1", contact_number: "0917-123-4567", status: "active", on_duty: true, citations_issued: 145 },
-  { id: "102", badge_number: "BADGE-102", full_name: "Maria Santos", rank: "Officer II", unit: "Patrol", district: "District 2", contact_number: null, status: "active", on_duty: false, citations_issued: 89 },
-  { id: "104", badge_number: "BADGE-104", full_name: "Field Officer", rank: "Officer I", unit: "Traffic Management", district: "District 1", contact_number: "0918-987-6543", status: "active", on_duty: true, citations_issued: 42 },
+  { id: "101", badge_number: "BADGE-101", full_name: "Juan Dela Cruz", rank: "Sergeant", unit: "Traffic Management", district: "District 6 (Culiat)", contact_number: "0917-123-4567", status: "active", on_duty: true, citations_issued: 145 },
+  { id: "102", badge_number: "BADGE-102", full_name: "Maria Santos", rank: "Officer II", unit: "Patrol / Commonwealth Grid", district: "District 6 (Culiat)", contact_number: "0920-555-1234", status: "active", on_duty: true, citations_issued: 89 },
+  { id: "103", badge_number: "BADGE-103", full_name: "Ramon Valderama", rank: "Master Sergeant", unit: "Mobile Interceptor Unit", district: "District 6 (Tandang Sora)", contact_number: "0919-444-9876", status: "active", on_duty: true, citations_issued: 210 },
+  { id: "104", badge_number: "BADGE-104", full_name: "Gabriel Mendoza", rank: "Officer I", unit: "DPOS Rapid Response", district: "District 6 (Visayas Ave)", contact_number: "0918-987-6543", status: "active", on_duty: false, citations_issued: 42 },
+  { id: "105", badge_number: "BADGE-105", full_name: "Corazon Aquino-Lim", rank: "Inspector", unit: "Traffic Supervision", district: "District 6 (Culiat)", contact_number: "0917-888-2345", status: "active", on_duty: true, citations_issued: 68 },
 ];
 
 export function useOfficers() {
   return useQuery({
     queryKey: ["officers"],
     queryFn: async () => {
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 300));
       return MOCK_OFFICERS;
+    },
+  });
+}
+
+export function useAddOfficer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      full_name: string;
+      badge_number: string;
+      rank: string;
+      unit: string;
+      district: string;
+      contact_number?: string;
+    }) => {
+      await new Promise((r) => setTimeout(r, 400));
+      const newOff: Officer = {
+        id: `OFF-${Date.now()}`,
+        badge_number: input.badge_number,
+        full_name: input.full_name,
+        rank: input.rank,
+        unit: input.unit,
+        district: input.district,
+        contact_number: input.contact_number || null,
+        status: "active",
+        on_duty: true,
+        citations_issued: 0,
+      };
+      MOCK_OFFICERS.unshift(newOff);
+      return newOff;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["officers"] });
+    },
+  });
+}
+
+export function useToggleOfficerDuty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      await new Promise((r) => setTimeout(r, 300));
+      const o = MOCK_OFFICERS.find((x) => x.id === id);
+      if (o) {
+        o.on_duty = !o.on_duty;
+      }
+      return o;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["officers"] });
     },
   });
 }
