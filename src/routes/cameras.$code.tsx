@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useCameras, useViolations, timeAgo, useUpdateCamera } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
-import { AiCameraFeed } from "@/components/camera/ai-camera-feed";
+import { Live4kWebcamEngine } from "@/components/camera/live-4k-webcam-engine";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/cameras/$code")({
@@ -180,10 +180,13 @@ function CameraDetailPage() {
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="flex flex-col gap-6 xl:col-span-2">
           {/* Live feed */}
-          <div className="panel overflow-hidden rounded-2xl">
-            <div className="relative aspect-video bg-panel-elevated">
+            <div className="relative bg-panel-elevated">
               {online ? (
-                <AiCameraFeed code={camera.code} bitrate={health.bitrate} />
+                <Live4kWebcamEngine
+                  cameraCode={camera.code}
+                  locationName={camera.location}
+                  bitrate={health.bitrate}
+                />
               ) : (
                 <>
                   <div className="absolute inset-0 grid place-items-center">
@@ -213,7 +216,6 @@ function CameraDetailPage() {
                 </>
               )}
             </div>
-          </div>
 
           {/* Health metrics */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

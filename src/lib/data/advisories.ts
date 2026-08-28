@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AdvisorySeverity = "Info" | "Warning" | "Critical";
 
@@ -11,7 +12,7 @@ export type Advisory = {
   publishedAt: string;
 };
 
-const MOCK_ADVISORIES: Advisory[] = [
+const DEFAULT_ADVISORIES: Advisory[] = [
   {
     id: "ADV-101",
     title: "Heavy Traffic on Commonwealth Ave",
@@ -41,9 +42,46 @@ const MOCK_ADVISORIES: Advisory[] = [
 export function useAdvisories() {
   return useQuery({
     queryKey: ["advisories"],
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return MOCK_ADVISORIES;
-    }
+    queryFn: async (): Promise<Advisory[]> => {
+      try {
+        const { data, error } = await supabase
+          .from("traffic_advisories")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id,
+            title: d.title,
+            message: d.message,
+            severity: (d.severity === "critical" ? "Critical" : d.severity === "warning" ? "Warning" : "Info") as AdvisorySeverity,
+            active: d.is_active,
+            publishedAt: d.created_at,
+          }));
+        }
+      } catch {
+        // fallback
+      }
+      return DEFAULT_ADVISORIES;
+    },
+  });
+}
+
+export function useCreateAdvisory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { title: string; message: string; severity: string; corridor: string }) => {
+      await supabase.from("traffic_advisories").insert({
+        title: input.title,
+        message: input.message,
+        severity: input.severity.toLowerCase(),
+        affected_corridor: input.corridor,
+        is_active: true,
+      });
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["advisories"] });
+    },
   });
 }

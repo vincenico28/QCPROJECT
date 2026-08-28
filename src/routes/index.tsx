@@ -96,7 +96,7 @@ function LandingPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
 
-  const handleMayHuliKaSearch = (e?: React.FormEvent, presetPlate?: string) => {
+  const handleMayHuliKaSearch = async (e?: React.FormEvent, presetPlate?: string) => {
     if (e) e.preventDefault();
     const query = (presetPlate || searchPlate).trim().toUpperCase().replace(/\s+/g, "-");
     if (!query) return;
@@ -104,31 +104,57 @@ function LandingPage() {
     setIsSearching(true);
     setSearchResult(null);
 
-    setTimeout(() => {
-      setIsSearching(false);
-      const clean = query.replace(/[^A-Z0-9]/g, "");
+    const clean = query.replace(/[^A-Z0-9]/g, "");
 
-      // Match known test plates or default
-      if (clean.includes("NDB8921") || clean.includes("ABC1234") || clean.includes("8921")) {
+    try {
+      const { serverFetchCitations } = await import("@/lib/server.functions");
+      const citations = await serverFetchCitations({ data: 100 });
+
+      const foundCit = citations?.find(
+        (c: any) =>
+          c.plate_number.replace(/[^A-Z0-9]/g, "").toUpperCase() === clean
+      );
+
+      if (foundCit) {
         setSearchResult({
           found: true,
           plateNumber: query,
-          novNumber: "NOV-2026-QC-09124",
-          violation: "Disregarding Traffic Signs (Red Light / Beating the Light)",
+          novNumber: foundCit.citation_number,
+          violation: foundCit.offense,
           ordinance: "MMDA Reg. No. 16-002 / QC Ord. SP-2938",
-          location: "Commonwealth Ave — Tandang Sora Intersection Cam #04",
-          amount: 2000,
-          dueDate: "2026-09-05",
-          ltoAlarmStatus: "WARNING_DUE_SOON",
+          location: "Commonwealth Ave — Tandang Sora Corridor",
+          amount: Number(foundCit.amount),
+          dueDate: "2026-09-15",
+          ltoAlarmStatus: foundCit.status === "paid" ? "CLEARED" : "WARNING_DUE_SOON",
         });
-      } else {
-        setSearchResult({
-          found: false,
-          plateNumber: query,
-          ltoAlarmStatus: "CLEARED",
-        });
+        setIsSearching(false);
+        return;
       }
-    }, 600);
+    } catch {
+      // fallback to mock check
+    }
+
+    setIsSearching(false);
+    // Match known test plates or default
+    if (clean.includes("NDB8921") || clean.includes("ABC1234") || clean.includes("8921")) {
+      setSearchResult({
+        found: true,
+        plateNumber: query,
+        novNumber: "NOV-2026-QC-09124",
+        violation: "Disregarding Traffic Signs (Red Light / Beating the Light)",
+        ordinance: "MMDA Reg. No. 16-002 / QC Ord. SP-2938",
+        location: "Commonwealth Ave — Tandang Sora Intersection Cam #04",
+        amount: 2000,
+        dueDate: "2026-09-05",
+        ltoAlarmStatus: "WARNING_DUE_SOON",
+      });
+    } else {
+      setSearchResult({
+        found: false,
+        plateNumber: query,
+        ltoAlarmStatus: "CLEARED",
+      });
+    }
   };
 
   return (

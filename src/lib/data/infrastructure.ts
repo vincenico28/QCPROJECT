@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type InfrastructureNode = {
   id: string;
@@ -10,7 +11,7 @@ export type InfrastructureNode = {
   lastMaintenance: string;
 };
 
-const MOCK_INFRASTRUCTURE: InfrastructureNode[] = [
+const DEFAULT_INFRASTRUCTURE: InfrastructureNode[] = [
   {
     id: "TL-N-012",
     type: "Traffic Light",
@@ -46,15 +47,54 @@ const MOCK_INFRASTRUCTURE: InfrastructureNode[] = [
     status: "Critical",
     predictedFailure: "Imminent (Within 48h)",
     lastMaintenance: "2024-05-10",
-  }
+  },
 ];
 
 export function useInfrastructureHealth() {
   return useQuery({
     queryKey: ["infrastructure-health"],
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return MOCK_INFRASTRUCTURE;
-    }
+    queryFn: async (): Promise<InfrastructureNode[]> => {
+      try {
+        const { data, error } = await supabase
+          .from("infrastructure_assets")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id.substring(0, 8).toUpperCase(),
+            type: d.asset_type.includes("Camera") || d.asset_type.includes("ANPR") ? "AI Camera" :
+                  d.asset_type.includes("Controller") || d.asset_type.includes("Light") ? "Traffic Light" :
+                  d.asset_type.includes("Loop") ? "Environmental Sensor" : "Server Node",
+            location: d.location,
+            healthPercent: d.status === "operational" ? 96 : d.status === "maintenance" ? 65 : 20,
+            status: d.status === "operational" ? "Healthy" : d.status === "maintenance" ? "Degraded" : "Critical",
+            predictedFailure: d.status === "operational" ? "> 12 months" : "Scheduled Maintenance",
+            lastMaintenance: d.last_inspected ? new Date(d.last_inspected).toISOString().split("T")[0] : "2026-06-01",
+          }));
+        }
+      } catch {
+        // fallback
+      }
+      return DEFAULT_INFRASTRUCTURE;
+    },
+  });
+}
+
+export function useCreateInfrastructureAsset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { name: string; assetType: string; location: string; status: string }) => {
+      await supabase.from("infrastructure_assets").insert({
+        name: input.name,
+        asset_type: input.assetType,
+        location: input.location,
+        status: input.status,
+      });
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["infrastructure-health"] });
+    },
   });
 }

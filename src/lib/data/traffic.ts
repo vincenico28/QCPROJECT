@@ -1,6 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  serverFetchViolations,
+  serverSaveViolation,
+  serverUpdateViolationStatus,
+  serverFetchCitations,
+  serverSaveCitation,
+  serverUpdateCitationStatus,
+  serverFetchOfficers,
+  serverSaveOfficer,
+  serverToggleOfficerDuty,
+  serverFetchCameras,
+  serverSaveCamera,
+  serverUpdateCamera,
+} from "@/lib/server.functions";
 
 export type Violation = {
   id: string;
@@ -82,12 +96,12 @@ export function useOfficers() {
     queryKey: ["officers"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase.from("officers").select("*").order("created_at", { ascending: false });
-        if (!error && data && data.length > 0) {
-          return data as Officer[];
+        const rows = await serverFetchOfficers();
+        if (rows && rows.length > 0) {
+          return rows as Officer[];
         }
       } catch {
-        // Fallback to local store
+        // Fallback
       }
       return MOCK_OFFICERS;
     },
@@ -105,8 +119,9 @@ export function useAddOfficer() {
       district: string;
       contact_number?: string;
     }) => {
-      const newOff: Officer = {
-        id: `OFF-${Date.now()}`,
+      const saved = await serverSaveOfficer({ data: input });
+      const off: Officer = {
+        id: (saved as any)?.id || `OFF-${Date.now()}`,
         badge_number: input.badge_number,
         full_name: input.full_name,
         rank: input.rank,
@@ -117,26 +132,8 @@ export function useAddOfficer() {
         on_duty: true,
         citations_issued: 0,
       };
-
-      try {
-        await supabase.from("officers").insert({
-          id: newOff.id,
-          badge_number: newOff.badge_number,
-          full_name: newOff.full_name,
-          rank: newOff.rank,
-          unit: newOff.unit,
-          district: newOff.district,
-          contact_number: newOff.contact_number,
-          status: newOff.status,
-          on_duty: newOff.on_duty,
-          citations_issued: newOff.citations_issued,
-        });
-      } catch {
-        // Fallback store
-      }
-
-      MOCK_OFFICERS.unshift(newOff);
-      return newOff;
+      MOCK_OFFICERS.unshift(off);
+      return off;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["officers"] });
@@ -151,11 +148,7 @@ export function useToggleOfficerDuty() {
       const o = MOCK_OFFICERS.find((x) => x.id === id);
       if (o) {
         o.on_duty = !o.on_duty;
-        try {
-          await supabase.from("officers").update({ on_duty: o.on_duty }).eq("id", id);
-        } catch {
-          // fallback
-        }
+        await serverToggleOfficerDuty({ data: { id, on_duty: o.on_duty } });
       }
       return o;
     },
@@ -171,7 +164,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "NDB-8921",
     violation_type: "Red Light",
     location: "Commonwealth Ave / Tandang Sora",
-    confidence: 0.96,
+    confidence: 96,
     status: "pending",
     evidence_url: "/assets/violation-1.jpg",
     ai_detected: true,
@@ -183,7 +176,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "ABC-1234",
     violation_type: "Illegal Parking",
     location: "Visayas Ave near Central Market",
-    confidence: 0.94,
+    confidence: 94,
     status: "pending",
     evidence_url: "/assets/violation-2.jpg",
     ai_detected: true,
@@ -195,7 +188,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "XYZ-987",
     violation_type: "Counterflow",
     location: "Tandang Sora Ave (Westbound)",
-    confidence: 0.91,
+    confidence: 91,
     status: "pending",
     evidence_url: "/assets/violation-3.jpg",
     ai_detected: true,
@@ -207,7 +200,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "NBP-5412",
     violation_type: "Yellow Box Infraction",
     location: "Commonwealth Ave / Luzon Overpass",
-    confidence: 0.89,
+    confidence: 89,
     status: "pending",
     evidence_url: "/assets/violation-1.jpg",
     ai_detected: true,
@@ -219,7 +212,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "CAS-3901",
     violation_type: "Bus Lane Violation",
     location: "EDSA Northbound QC Corridor",
-    confidence: 0.97,
+    confidence: 97,
     status: "confirmed",
     evidence_url: "/assets/violation-2.jpg",
     ai_detected: true,
@@ -231,7 +224,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
     plate_number: "WXY-1122",
     violation_type: "No Helmet",
     location: "Visayas Ave Intersection",
-    confidence: 0.72,
+    confidence: 72,
     status: "dismissed",
     evidence_url: "/assets/violation-3.jpg",
     ai_detected: true,
@@ -240,7 +233,7 @@ export let MOCK_VIOLATIONS: Violation[] = [
   },
 ];
 
-export function useViolations(limit = 20) {
+export function useViolations(limit = 50) {
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -256,7 +249,7 @@ export function useViolations(limit = 20) {
         supabase.removeChannel(channel);
       };
     } catch {
-      // Supabase realtime fallback
+      // Realtime fallback
     }
   }, [qc]);
 
@@ -264,20 +257,16 @@ export function useViolations(limit = 20) {
     queryKey: ["violations", limit],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("violations")
-          .select("*")
-          .order("detected_at", { ascending: false })
-          .limit(limit);
-
-        if (!error && data && data.length > 0) {
-          return data as Violation[];
+        const rows = await serverFetchViolations({ data: limit });
+        if (rows && rows.length > 0) {
+          return rows as Violation[];
         }
       } catch {
         // Fallback
       }
       return MOCK_VIOLATIONS.slice(0, limit);
     },
+    staleTime: 5_000,
     refetchInterval: 15_000,
   });
 }
@@ -304,7 +293,7 @@ export let MOCK_CITATIONS: Citation[] = [
     offense: "Illegal Parking",
     amount: 1500,
     status: "paid",
-    officer_name: "Sgt. Juan Dela Cruz",
+    officer_name: "AI Auto-Validator",
     issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
   },
   {
@@ -322,13 +311,13 @@ export let MOCK_CITATIONS: Citation[] = [
   {
     id: "CIT-00150",
     citation_number: "NOV-2026-QC-00150",
-    violation_id: "V-105",
+    violation_id: "V-106",
     plate_number: "CAS-3901",
     vehicle_model: "Toyota Fortuner (Black)",
     offense: "Bus Lane Violation",
     amount: 5000,
     status: "overdue",
-    officer_name: "Officer Field Team",
+    officer_name: "AI Auto-Validator",
     issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 18).toISOString(),
   },
   {
@@ -345,7 +334,7 @@ export let MOCK_CITATIONS: Citation[] = [
   },
 ];
 
-export function useCitations(limit = 20) {
+export function useCitations(limit = 50) {
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -361,7 +350,7 @@ export function useCitations(limit = 20) {
         supabase.removeChannel(channel);
       };
     } catch {
-      // Supabase realtime fallback
+      // Realtime fallback
     }
   }, [qc]);
 
@@ -369,20 +358,16 @@ export function useCitations(limit = 20) {
     queryKey: ["citations", limit],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("citations")
-          .select("*")
-          .order("issued_at", { ascending: false })
-          .limit(limit);
-
-        if (!error && data && data.length > 0) {
-          return data as Citation[];
+        const rows = await serverFetchCitations({ data: limit });
+        if (rows && rows.length > 0) {
+          return rows as Citation[];
         }
       } catch {
         // Fallback
       }
       return MOCK_CITATIONS.slice(0, limit);
     },
+    staleTime: 5_000,
   });
 }
 
@@ -391,15 +376,9 @@ export function useCitation(citationNumber: string) {
     queryKey: ["citation", citationNumber],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("citations")
-          .select("*")
-          .eq("citation_number", citationNumber)
-          .maybeSingle();
-
-        if (!error && data) {
-          return data as Citation;
-        }
+        const rows = await serverFetchCitations({ data: 100 });
+        const found = rows?.find((c: any) => c.citation_number === citationNumber);
+        if (found) return found as Citation;
       } catch {
         // fallback
       }
@@ -424,36 +403,30 @@ export function useCreateCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewCitation) => {
-      const id = "CIT-" + Math.floor(10000 + Math.random() * 90000).toString();
+      const row = await serverSaveCitation({
+        data: {
+          violation_id: input.violation_id || null,
+          plate_number: input.plate_number,
+          vehicle_model: input.vehicle_model || null,
+          offense: input.offense,
+          amount: input.amount,
+          status: "unpaid",
+          officer_name: input.officer_name || "QC Enforcer",
+        },
+      });
+
       const c: Citation = {
-        id,
-        citation_number: `NOV-2026-QC-${Math.floor(10000 + Math.random() * 90000)}`,
+        id: (row as any)?.id || "CIT-" + Math.floor(10000 + Math.random() * 90000),
+        citation_number: (row as any)?.citation_number || `NOV-2026-QC-${Math.floor(10000 + Math.random() * 90000)}`,
         violation_id: input.violation_id ?? null,
         plate_number: input.plate_number.toUpperCase(),
         vehicle_model: input.vehicle_model ?? null,
         offense: input.offense,
         amount: input.amount,
         status: "unpaid",
-        issued_at: new Date().toISOString(),
+        issued_at: (row as any)?.issued_at || new Date().toISOString(),
         officer_name: input.officer_name ?? "QC Enforcer",
       };
-
-      try {
-        await supabase.from("citations").insert({
-          id: c.id,
-          citation_number: c.citation_number,
-          violation_id: c.violation_id,
-          plate_number: c.plate_number,
-          vehicle_model: c.vehicle_model,
-          offense: c.offense,
-          amount: c.amount,
-          status: c.status,
-          issued_at: c.issued_at,
-          officer_name: c.officer_name,
-        });
-      } catch {
-        // fallback
-      }
 
       MOCK_CITATIONS.unshift(c);
       return c;
@@ -468,14 +441,9 @@ export function useUpdateCitationStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ citationId, status }: { citationId: string; status: string }) => {
-      try {
-        await supabase
-          .from("citations")
-          .update({ status })
-          .eq("citation_number", citationId);
-      } catch {
-        // fallback
-      }
+      await serverUpdateCitationStatus({
+        data: { citationNumber: citationId, status },
+      });
 
       const idx = MOCK_CITATIONS.findIndex((c) => c.citation_number === citationId);
       if (idx !== -1) {
@@ -514,7 +482,7 @@ export function useCameras() {
         supabase.removeChannel(channel);
       };
     } catch {
-      // Supabase realtime fallback
+      // Realtime fallback
     }
   }, [qc]);
 
@@ -522,9 +490,9 @@ export function useCameras() {
     queryKey: ["cameras"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase.from("cameras").select("*");
-        if (!error && data && data.length > 0) {
-          return data as Camera[];
+        const rows = await serverFetchCameras();
+        if (rows && rows.length > 0) {
+          return rows as Camera[];
         }
       } catch {
         // fallback
@@ -539,27 +507,24 @@ export function useCreateCamera() {
   return useMutation({
     mutationFn: async (input: { location: string; lat?: number; lng?: number }) => {
       const code = `QC-CAM-${Math.floor(1000 + Math.random() * 9000)}`;
+      const row = await serverSaveCamera({
+        data: {
+          code,
+          location: input.location,
+          lat: input.lat || 14.6563,
+          lng: input.lng || 121.0697,
+          status: "online",
+        },
+      });
+
       const c: Camera = {
-        id: code,
+        id: (row as any)?.id || code,
         code,
         location: input.location,
         lat: input.lat || 14.6563,
         lng: input.lng || 121.0697,
         status: "online",
       };
-
-      try {
-        await supabase.from("cameras").insert({
-          id: c.id,
-          code: c.code,
-          location: c.location,
-          lat: c.lat,
-          lng: c.lng,
-          status: c.status,
-        });
-      } catch {
-        // fallback
-      }
 
       MOCK_CAMERAS.push(c);
       return c;
@@ -574,17 +539,7 @@ export function useUpdateCamera() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; status?: string; location?: string }) => {
-      try {
-        await supabase
-          .from("cameras")
-          .update({
-            ...(input.status && { status: input.status }),
-            ...(input.location && { location: input.location }),
-          })
-          .eq("id", input.id);
-      } catch {
-        // fallback
-      }
+      await serverUpdateCamera({ data: input });
 
       const cam = MOCK_CAMERAS.find((c) => c.id === input.id);
       if (cam) {

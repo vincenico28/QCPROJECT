@@ -85,6 +85,47 @@ export type Database = {
           },
         ];
       };
+      disputes: {
+        Row: {
+          admin_notes: string | null;
+          citation_id: string;
+          created_at: string;
+          id: string;
+          reason: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          status: string;
+        };
+        Insert: {
+          admin_notes?: string | null;
+          citation_id: string;
+          created_at?: string;
+          id?: string;
+          reason: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+        };
+        Update: {
+          admin_notes?: string | null;
+          citation_id?: string;
+          created_at?: string;
+          id?: string;
+          reason?: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "disputes_citation_id_fkey";
+            columns: ["citation_id"];
+            isOneToOne: false;
+            referencedRelation: "citations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       dispatches: {
         Row: {
           acknowledged_at: string | null;
@@ -238,6 +279,231 @@ export type Database = {
           plate_number?: string;
           status?: string;
           violation_type?: string;
+        };
+        Relationships: [];
+      };
+      vehicles: {
+        Row: {
+          chassis_number: string | null;
+          color: string | null;
+          contact_number: string | null;
+          created_at: string;
+          engine_number: string | null;
+          id: string;
+          lto_alarm_tagged: boolean;
+          make_model: string;
+          plate_number: string;
+          registered_owner: string;
+          registration_status: string;
+          risk_level: string;
+          updated_at: string;
+          year: number | null;
+        };
+        Insert: {
+          chassis_number?: string | null;
+          color?: string | null;
+          contact_number?: string | null;
+          created_at?: string;
+          engine_number?: string | null;
+          id?: string;
+          lto_alarm_tagged?: boolean;
+          make_model: string;
+          plate_number: string;
+          registered_owner: string;
+          registration_status?: string;
+          risk_level?: string;
+          updated_at?: string;
+          year?: number | null;
+        };
+        Update: {
+          chassis_number?: string | null;
+          color?: string | null;
+          contact_number?: string | null;
+          created_at?: string;
+          engine_number?: string | null;
+          id?: string;
+          lto_alarm_tagged?: boolean;
+          make_model?: string;
+          plate_number?: string;
+          registered_owner?: string;
+          registration_status?: string;
+          risk_level?: string;
+          updated_at?: string;
+          year?: number | null;
+        };
+        Relationships: [];
+      };
+      hazard_reports: {
+        Row: {
+          category: string;
+          contact_number: string | null;
+          created_at: string;
+          description: string;
+          id: string;
+          image_url: string | null;
+          location: string;
+          reporter_name: string;
+          resolved_at: string | null;
+          status: string;
+        };
+        Insert: {
+          category: string;
+          contact_number?: string | null;
+          created_at?: string;
+          description: string;
+          id?: string;
+          image_url?: string | null;
+          location: string;
+          reporter_name: string;
+          resolved_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          category?: string;
+          contact_number?: string | null;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          image_url?: string | null;
+          location?: string;
+          reporter_name?: string;
+          resolved_at?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      email_logs: {
+        Row: {
+          citation_number: string | null;
+          error_message: string | null;
+          id: string;
+          recipient_email: string;
+          recipient_name: string;
+          sent_at: string;
+          status: string;
+          subject: string;
+          template_name: string;
+        };
+        Insert: {
+          citation_number?: string | null;
+          error_message?: string | null;
+          id?: string;
+          recipient_email: string;
+          recipient_name: string;
+          sent_at?: string;
+          status?: string;
+          subject: string;
+          template_name: string;
+        };
+        Update: {
+          citation_number?: string | null;
+          error_message?: string | null;
+          id?: string;
+          recipient_email?: string;
+          recipient_name?: string;
+          sent_at?: string;
+          status?: string;
+          subject?: string;
+          template_name?: string;
+        };
+        Relationships: [];
+      };
+      traffic_advisories: {
+        Row: {
+          affected_corridor: string;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          message: string;
+          severity: string;
+          title: string;
+        };
+        Insert: {
+          affected_corridor: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          message: string;
+          severity?: string;
+          title: string;
+        };
+        Update: {
+          affected_corridor?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          message?: string;
+          severity?: string;
+          title?: string;
+        };
+        Relationships: [];
+      };
+      infrastructure_assets: {
+        Row: {
+          asset_type: string;
+          created_at: string;
+          id: string;
+          last_inspected: string;
+          location: string;
+          name: string;
+          next_maintenance: string | null;
+          notes: string | null;
+          status: string;
+        };
+        Insert: {
+          asset_type: string;
+          created_at?: string;
+          id?: string;
+          last_inspected?: string;
+          location: string;
+          name: string;
+          next_maintenance?: string | null;
+          notes?: string | null;
+          status?: string;
+        };
+        Update: {
+          asset_type?: string;
+          created_at?: string;
+          id?: string;
+          last_inspected?: string;
+          location?: string;
+          name?: string;
+          next_maintenance?: string | null;
+          notes?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      audit_logs: {
+        Row: {
+          action: string;
+          actor_name: string;
+          actor_role: string;
+          created_at: string;
+          details: string | null;
+          id: string;
+          target_id: string | null;
+          target_resource: string;
+        };
+        Insert: {
+          action: string;
+          actor_name: string;
+          actor_role?: string;
+          created_at?: string;
+          details?: string | null;
+          id?: string;
+          target_id?: string | null;
+          target_resource: string;
+        };
+        Update: {
+          action?: string;
+          actor_name?: string;
+          actor_role?: string;
+          created_at?: string;
+          details?: string | null;
+          id?: string;
+          target_id?: string | null;
+          target_resource?: string;
         };
         Relationships: [];
       };

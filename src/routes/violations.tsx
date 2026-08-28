@@ -78,7 +78,75 @@ function ViolationsPage() {
   const [manualPlate, setManualPlate] = useState("");
   const [manualType, setManualType] = useState("Illegal Parking");
   const [manualLocation, setManualLocation] = useState("Tandang Sora Ave / Culiat Market");
-  const [manualCam, setManualCam] = useState("PATROL-MANUAL-01");
+  const [manualCam, setManualCam] = useState("QC-CAM-1002");
+  const [manualEvidenceUrl, setManualEvidenceUrl] = useState<string>("/assets/violation-1.jpg");
+  const [autoIssueCitation, setAutoIssueCitation] = useState(true);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setManualEvidenceUrl(event.target.result as string);
+          toast.success("Evidence photo attached successfully");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPlate) return;
+
+    try {
+      const { serverSaveViolation, serverSaveCitation } = await import("@/lib/server.functions");
+      const fineAmount = fineFor(manualType);
+
+      const savedViolation = await serverSaveViolation({
+        data: {
+          plateNumber: manualPlate,
+          violationType: manualType,
+          location: manualLocation,
+          confidence: 99,
+          cameraCode: manualCam,
+          aiDetected: false,
+          evidenceUrl: manualEvidenceUrl,
+        },
+      });
+
+      if (autoIssueCitation) {
+        await serverSaveCitation({
+          data: {
+            violation_id: savedViolation.id,
+            plate_number: manualPlate,
+            offense: manualType,
+            amount: fineAmount,
+            officer_name: "Field Traffic Enforcer",
+          },
+        });
+      }
+
+      toast.success(`Violation Logged & Synced for ${manualPlate}`, {
+        description: autoIssueCitation
+          ? `Notice of Violation generated (Fine: ${formatPeso(fineAmount)}).`
+          : `Record stored in pending review queue.`,
+      });
+
+      setManualModalOpen(false);
+      setManualPlate("");
+    } catch {
+      addManual.mutate({
+        plate_number: manualPlate,
+        violation_type: manualType,
+        location: manualLocation,
+        camera_code: manualCam,
+      });
+      setManualModalOpen(false);
+      setManualPlate("");
+    }
+  };
 
   const filtered = useMemo(() => {
     return violations.filter((v) => {
@@ -189,26 +257,6 @@ function ViolationsPage() {
     document.body.removeChild(link);
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualPlate) return;
-    addManual.mutate(
-      {
-        plate_number: manualPlate,
-        violation_type: manualType,
-        location: manualLocation,
-        camera_code: manualCam,
-      },
-      {
-        onSuccess: (v) => {
-          toast.success(`Manual violation logged for plate ${v.plate_number}.`);
-          setManualModalOpen(false);
-          setManualPlate("");
-        },
-      },
-    );
-  };
-
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
       {/* Header Banner */}
@@ -313,6 +361,49 @@ function ViolationsPage() {
                     />
                   </label>
 
+                  {/* Photo / 4K Snapshot Evidence Attachment */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+                      Photo / CCTV Evidence Frame
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-black">
+                        <img
+                          src={manualEvidenceUrl}
+                          alt="Evidence Frame"
+                          className="size-full object-cover"
+                        />
+                      </div>
+                      <label className="flex-1 cursor-pointer rounded-xl border border-dashed border-border bg-background/50 p-2.5 text-center text-xs text-muted-foreground hover:border-primary/60 transition-colors">
+                        <span className="font-semibold text-primary">Browse photo</span> or snapshot
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Instant Citation Issuance Checkbox */}
+                  <label className="flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoIssueCitation}
+                      onChange={(e) => setAutoIssueCitation(e.target.checked)}
+                      className="size-4 rounded accent-primary"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-emerald-400">
+                        Generate Digital Citation (NOV)
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Automatically creates linked citation ticket in the public cashier ledger.
+                      </span>
+                    </div>
+                  </label>
+
                   <div className="mt-4 flex justify-end gap-3 border-t border-border pt-4">
                     <Dialog.Close asChild>
                       <button className="rounded-lg px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated">
@@ -321,11 +412,10 @@ function ViolationsPage() {
                     </Dialog.Close>
                     <button
                       type="submit"
-                      disabled={addManual.isPending || !manualPlate}
+                      disabled={!manualPlate}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
                     >
-                      {addManual.isPending && <Loader2 className="size-3.5 animate-spin" />}
-                      Submit Detection
+                      Commit to Supabase Database
                     </button>
                   </div>
                 </form>

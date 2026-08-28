@@ -106,7 +106,15 @@ function CamerasPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/cameras/$code"
+            params={{ code: "CAM-042" }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all shadow-lg shadow-emerald-500/10"
+          >
+            <CameraIcon className="size-3.5" />
+            Launch 4K Live Webcam
+          </Link>
           <Link
             to="/map"
             className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-4 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"

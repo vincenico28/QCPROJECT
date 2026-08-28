@@ -204,7 +204,7 @@ function VehiclesPage() {
     }
   };
 
-  const handleRegisterVehicle = (e: React.FormEvent) => {
+  const handleRegisterVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plateInput) return;
     const cleanP = plateInput.toUpperCase().trim();
@@ -222,6 +222,23 @@ function VehiclesPage() {
       risk: "clean",
       ltoAlarm: false,
     };
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("vehicles").insert({
+        plate_number: cleanP,
+        make_model: makeModel || "Registered Vehicle",
+        registered_owner: ownerName || "Registered Owner",
+        color: color || "Silver",
+        chassis_number: chassis || null,
+        registration_status: "CURRENT",
+        risk_level: "Clean",
+        lto_alarm_tagged: false,
+      });
+    } catch {
+      // fallback
+    }
+
     setCustomVehicles((prev) => [newV, ...prev]);
     toast.success(`Vehicle ${cleanP} Registered`, {
       description: `Added to QC Barangay Culiat enforcement database.`,

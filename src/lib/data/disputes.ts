@@ -1,4 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  serverFetchDisputes,
+  serverSaveDispute,
+  serverResolveDispute,
+} from "@/lib/server.functions";
 
 export type MockCitation = {
   id: string;
@@ -97,10 +104,37 @@ let MOCK_DISPUTES: Dispute[] = [
 ];
 
 export function useDisputes() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel("realtime-disputes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "disputes" }, () => {
+          qc.invalidateQueries({ queryKey: ["disputes"] });
+          qc.invalidateQueries({ queryKey: ["citizen-disputes"] });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch {
+      // fallback
+    }
+  }, [qc]);
+
   return useQuery({
     queryKey: ["disputes"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      try {
+        const rows = await serverFetchDisputes();
+        if (rows && rows.length > 0) {
+          return rows as any as Dispute[];
+        }
+      } catch {
+        // fallback
+      }
       return [...MOCK_DISPUTES].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -112,7 +146,14 @@ export function useCitizenDisputes() {
   return useQuery({
     queryKey: ["citizen-disputes"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      try {
+        const rows = await serverFetchDisputes();
+        if (rows && rows.length > 0) {
+          return rows as any as Dispute[];
+        }
+      } catch {
+        // fallback
+      }
       return [...MOCK_DISPUTES].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -128,16 +169,22 @@ export function useCreateDispute() {
       reason: string;
       statutoryGround?: string;
     }) => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      const row = await serverSaveDispute({
+        data: {
+          citationNumber: input.citation_id,
+          reason: input.reason,
+          statutoryGround: input.statutoryGround,
+        },
+      });
 
       const newDispute: Dispute = {
-        id: `TAB-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        id: (row as any)?.id || `TAB-2026-${Math.floor(1000 + Math.random() * 9000)}`,
         citation_id: input.citation_id,
         statutoryGround: input.statutoryGround || "Factual / Signal Discrepancy",
         reason: input.reason,
         status: "pending",
         admin_notes: null,
-        created_at: new Date().toISOString(),
+        created_at: (row as any)?.created_at || new Date().toISOString(),
         resolved_at: null,
         resolved_by: null,
         citation: {
@@ -156,6 +203,7 @@ export function useCreateDispute() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-disputes"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
     },
   });
 }
@@ -169,22 +217,32 @@ export function useUpdateDispute() {
       admin_notes?: string;
       resolved_by?: string;
     }) => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      const d = MOCK_DISPUTES.find((x) => x.id === input.id);
+      const citNum = d?.citation_id || "";
 
-      const idx = MOCK_DISPUTES.findIndex((d) => d.id === input.id);
-      if (idx === -1) throw new Error("Dispute not found");
+      await serverResolveDispute({
+        data: {
+          disputeId: input.id,
+          citationNumber: citNum,
+          action: input.status === "approved" ? "grant" : "uphold",
+          resolutionNotes: input.admin_notes,
+        },
+      });
 
-      MOCK_DISPUTES[idx] = {
-        ...MOCK_DISPUTES[idx],
-        status: input.status,
-        ...(input.admin_notes && { admin_notes: input.admin_notes }),
-        resolved_by: input.resolved_by || "Traffic Adjudication Board Hearing Officer",
-        resolved_at: new Date().toISOString(),
-      };
+      const idx = MOCK_DISPUTES.findIndex((x) => x.id === input.id);
+      if (idx !== -1) {
+        MOCK_DISPUTES[idx] = {
+          ...MOCK_DISPUTES[idx],
+          status: input.status,
+          ...(input.admin_notes && { admin_notes: input.admin_notes }),
+          resolved_by: input.resolved_by || "Traffic Adjudication Board Hearing Officer",
+          resolved_at: new Date().toISOString(),
+        };
 
-      if (MOCK_DISPUTES[idx].citation) {
-        if (input.status === "approved") MOCK_DISPUTES[idx].citation!.status = "waived";
-        if (input.status === "rejected") MOCK_DISPUTES[idx].citation!.status = "unpaid";
+        if (MOCK_DISPUTES[idx].citation) {
+          if (input.status === "approved") MOCK_DISPUTES[idx].citation!.status = "waived";
+          if (input.status === "rejected") MOCK_DISPUTES[idx].citation!.status = "unpaid";
+        }
       }
 
       return MOCK_DISPUTES[idx];

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type EmailLog = {
   id: string;
@@ -12,7 +13,7 @@ export type EmailLog = {
   previewBody?: string;
 };
 
-let MOCK_EMAILS: EmailLog[] = [
+const DEFAULT_EMAILS: EmailLog[] = [
   {
     id: "MSG-00195",
     recipient: "juan.delacruz@gmail.com",
@@ -73,9 +74,29 @@ let MOCK_EMAILS: EmailLog[] = [
 export function useEmailLogs() {
   return useQuery({
     queryKey: ["email-logs"],
-    queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return MOCK_EMAILS;
+    queryFn: async (): Promise<EmailLog[]> => {
+      try {
+        const { data, error } = await supabase
+          .from("email_logs")
+          .select("*")
+          .order("sent_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id,
+            recipient: d.recipient_email,
+            subject: d.subject,
+            type: (d.template_name as EmailLog["type"]) || "Citation Notice",
+            status: (d.status === "delivered" ? "Delivered" : d.status === "bounced" ? "Bounced" : "Pending"),
+            timestamp: d.sent_at,
+            citationNumber: d.citation_number || undefined,
+            previewBody: d.subject,
+          }));
+        }
+      } catch {
+        // fallback
+      }
+      return DEFAULT_EMAILS;
     },
   });
 }
@@ -91,20 +112,19 @@ export function useSendNotificationEmail() {
       plateNumber?: string;
       body: string;
     }) => {
-      await new Promise((r) => setTimeout(r, 400));
-      const newEmail: EmailLog = {
-        id: `MSG-${Math.floor(10000 + Math.random() * 90000)}`,
-        recipient: input.recipient,
-        subject: input.subject,
-        type: input.type,
-        status: "Delivered",
-        citationNumber: input.citationNumber,
-        plateNumber: input.plateNumber,
-        timestamp: new Date().toISOString(),
-        previewBody: input.body,
-      };
-      MOCK_EMAILS.unshift(newEmail);
-      return newEmail;
+      try {
+        await supabase.from("email_logs").insert({
+          recipient_email: input.recipient,
+          recipient_name: input.recipient.split("@")[0],
+          citation_number: input.citationNumber || null,
+          subject: input.subject,
+          template_name: input.type,
+          status: "delivered",
+        });
+      } catch {
+        // silent fallback
+      }
+      return true;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["email-logs"] });

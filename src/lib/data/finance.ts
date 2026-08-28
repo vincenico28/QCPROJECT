@@ -1,16 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { serverUpdateCitationStatus } from "@/lib/server.functions";
 
 export type PaymentQueueItem = {
   id: string;
   citationId: string;
   plateNumber: string;
-  payerName: string;
   amount: number;
-  method: "over-the-counter" | "gcash" | "maya" | "landbank";
+  method: "gcash" | "maya" | "landbank" | "over-the-counter";
   referenceNumber: string;
-  status: "pending_verification" | "verified";
-  timestamp: string;
-  proofUrl?: string;
+  proofUrl: string;
+  status: "pending_verification" | "verified" | "rejected";
+  submittedDate: string;
 };
 
 export type RefundQueueItem = {
@@ -19,8 +19,8 @@ export type RefundQueueItem = {
   plateNumber: string;
   amount: number;
   claimant: string;
-  reason: "TAB Appeal Dismissal" | "Overpayment" | "Duplicate Transaction";
-  status: "pending" | "processed";
+  reason: string;
+  status: "pending" | "processed" | "rejected";
   approvedDate: string;
 };
 
@@ -37,39 +37,37 @@ export type CashDrawer = {
 
 let MOCK_PAYMENTS: PaymentQueueItem[] = [
   {
-    id: "PAY-9012",
+    id: "PAY-001",
     citationId: "NOV-2026-QC-00129",
     plateNumber: "NDB-8921",
-    payerName: "Juan Dela Cruz",
     amount: 2000,
     method: "gcash",
-    referenceNumber: "GC-98210491823",
-    status: "pending_verification",
-    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    referenceNumber: "GCASH-9821039812",
     proofUrl: "/assets/violation-1.jpg",
+    status: "pending_verification",
+    submittedDate: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
   },
   {
-    id: "PAY-9013",
+    id: "PAY-002",
     citationId: "NOV-2026-QC-00142",
     plateNumber: "XYZ-987",
-    payerName: "Roberto Santos",
     amount: 2500,
     method: "maya",
-    referenceNumber: "MY-7819204128",
-    status: "pending_verification",
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+    referenceNumber: "MAYA-7712398412",
     proofUrl: "/assets/violation-3.jpg",
+    status: "pending_verification",
+    submittedDate: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
   },
   {
-    id: "PAY-9014",
-    citationId: "NOV-2026-QC-00164",
-    plateNumber: "NBP-5412",
-    payerName: "Elena Ramos",
-    amount: 1500,
+    id: "PAY-003",
+    citationId: "NOV-2026-QC-00150",
+    plateNumber: "CAS-3901",
+    amount: 5000,
     method: "over-the-counter",
-    referenceNumber: "OTC-QC-2026-081",
+    referenceNumber: "OTC-CULIAT-88129",
+    proofUrl: "/assets/violation-2.jpg",
     status: "verified",
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+    submittedDate: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
   },
 ];
 
@@ -111,7 +109,7 @@ export function useFinanceQueue() {
   return useQuery({
     queryKey: ["finance-queue"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       return {
         pendingPayments: MOCK_PAYMENTS,
         pendingRefunds: MOCK_REFUNDS,
@@ -135,7 +133,6 @@ export function useVerifyPayment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ paymentId }: { paymentId: string }) => {
-      await new Promise((r) => setTimeout(r, 400));
       const p = MOCK_PAYMENTS.find((x) => x.id === paymentId);
       if (p) {
         p.status = "verified";
@@ -145,12 +142,18 @@ export function useVerifyPayment() {
         } else {
           MOCK_DRAWER.digitalCollected += p.amount;
         }
+
+        // Persist citation status update to Supabase
+        await serverUpdateCitationStatus({
+          data: { citationNumber: p.citationId, status: "paid" },
+        });
       }
       return p;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });
       qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["violations"] });
     },
   });
 }
@@ -159,7 +162,6 @@ export function useProcessRefund() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ refundId }: { refundId: string }) => {
-      await new Promise((r) => setTimeout(r, 400));
       const r = MOCK_REFUNDS.find((x) => x.id === refundId);
       if (r) {
         r.status = "processed";
@@ -176,7 +178,6 @@ export function useSettleCashDrawer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      await new Promise((r) => setTimeout(r, 500));
       MOCK_DRAWER.shiftStatus = "SETTLED";
       return MOCK_DRAWER;
     },

@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  serverFetchDispatches,
+  serverSaveDispatch,
+  serverUpdateDispatchStatus,
+} from "@/lib/server.functions";
 
 export type DispatchStatus = "queued" | "en_route" | "on_scene" | "resolved" | "cancelled";
 export type DispatchPriority = "low" | "medium" | "high" | "critical";
@@ -116,21 +121,16 @@ export function useDispatches(limit = 50) {
     queryKey: ["dispatches", limit],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("dispatches")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (!error && data && data.length > 0) {
-          return data as Dispatch[];
+        const rows = await serverFetchDispatches({ data: limit });
+        if (rows && rows.length > 0) {
+          return rows as Dispatch[];
         }
       } catch {
         // fallback
       }
       return MOCK_DISPATCHES.slice(0, limit);
     },
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
   });
 }
 
@@ -148,10 +148,21 @@ export function useCreateDispatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewDispatch) => {
-      const id = `DSP-${Date.now()}`;
+      const row = await serverSaveDispatch({
+        data: {
+          officer_id: input.officer_id || null,
+          officer_name: input.officer_name || null,
+          badge_number: input.badge_number || null,
+          violation_id: input.violation_id || null,
+          location: input.location,
+          priority: input.priority,
+          instructions: input.instructions || null,
+        },
+      });
+
       const d: Dispatch = {
-        id,
-        reference: `REF-${Math.floor(1000 + Math.random() * 9000)}`,
+        id: (row as any)?.id || `DSP-${Date.now()}`,
+        reference: (row as any)?.reference || `REF-${Math.floor(1000 + Math.random() * 9000)}`,
         officer_id: input.officer_id,
         officer_name: input.officer_name,
         badge_number: input.badge_number,
@@ -162,26 +173,8 @@ export function useCreateDispatch() {
         status: "queued",
         acknowledged_at: null,
         resolved_at: null,
-        created_at: new Date().toISOString(),
+        created_at: (row as any)?.created_at || new Date().toISOString(),
       };
-
-      try {
-        await supabase.from("dispatches").insert({
-          id: d.id,
-          reference: d.reference,
-          officer_id: d.officer_id,
-          officer_name: d.officer_name,
-          badge_number: d.badge_number,
-          violation_id: d.violation_id,
-          location: d.location,
-          priority: d.priority,
-          instructions: d.instructions,
-          status: d.status,
-          created_at: d.created_at,
-        });
-      } catch {
-        // fallback
-      }
 
       MOCK_DISPATCHES.unshift(d);
       return d;
@@ -194,27 +187,15 @@ export function useUpdateDispatchStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: DispatchStatus }) => {
-      const ack = status === "en_route" || status === "on_scene" ? new Date().toISOString() : undefined;
-      const res = status === "resolved" || status === "cancelled" ? new Date().toISOString() : undefined;
-
-      try {
-        await supabase
-          .from("dispatches")
-          .update({
-            status,
-            ...(ack && { acknowledged_at: ack }),
-            ...(res && { resolved_at: res }),
-          })
-          .eq("id", id);
-      } catch {
-        // fallback
-      }
+      await serverUpdateDispatchStatus({
+        data: { id, status },
+      });
 
       const d = MOCK_DISPATCHES.find((x) => x.id === id);
       if (d) {
         d.status = status;
-        if (ack) d.acknowledged_at = ack;
-        if (res) d.resolved_at = res;
+        if (status === "en_route" || status === "on_scene") d.acknowledged_at = new Date().toISOString();
+        if (status === "resolved" || status === "cancelled") d.resolved_at = new Date().toISOString();
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatches"] }),
