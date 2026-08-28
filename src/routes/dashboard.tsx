@@ -11,8 +11,9 @@ import {
 } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles, Flame } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles, Flame, Crown, DollarSign, Scale } from "lucide-react";
 import { toast } from "sonner";
+import { type SystemRole } from "@/lib/rbac";
 
 import qcMap from "@/assets/qc-map.jpg";
 import cctv1 from "@/assets/cctv-1.jpg";
@@ -46,7 +47,7 @@ const CCTV_FEEDS = [
   {
     img: cctv1,
     code: "CAM-042",
-    location: "COMMONWEALTH AVE",
+    location: "COMMONWEALTH-TANDANG SORA",
     status: "detection",
     label: "DETECTION ACTIVE",
   },
@@ -68,7 +69,23 @@ const CCTV_FEEDS = [
 
 const FEED_IMAGES = [violation1, violation2, violation3];
 
-const ROLE_INFO = {
+const ROLE_INFO: Record<
+  SystemRole,
+  {
+    label: string;
+    clearance: string;
+    badge: string;
+    dot: string;
+    icon: any;
+  }
+> = {
+  super_admin: {
+    label: "Super Administrator",
+    clearance: "Level 5 · Executive Command & Root System Clearance",
+    badge: "border-purple-500/40 bg-purple-500/10 text-purple-400",
+    dot: "bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]",
+    icon: Crown,
+  },
   admin: {
     label: "Administrator",
     clearance: "Level 4 · Full System & Root Admin Clearance",
@@ -89,6 +106,20 @@ const ROLE_INFO = {
     badge: "border-success/40 bg-success/10 text-success",
     dot: "bg-success shadow-[0_0_8px_var(--color-success)]",
     icon: ShieldCheck,
+  },
+  finance: {
+    label: "Treasury & Finance Officer",
+    clearance: "Level 3 · Revenue, Cashier & Financial Reconciliation",
+    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    dot: "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]",
+    icon: DollarSign,
+  },
+  adjudicator: {
+    label: "Hearing Adjudicator",
+    clearance: "Level 3 · Legal Dispute Adjudication & Appeals",
+    badge: "border-cyan-500/40 bg-cyan-500/10 text-cyan-400",
+    dot: "bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]",
+    icon: Scale,
   },
   citizen: {
     label: "Citizen / Visitor",
