@@ -40,7 +40,9 @@ CREATE POLICY "Staff can update disputes"
 
 -- Also add a trigger to update the citation status when a dispute is created
 CREATE OR REPLACE FUNCTION set_citation_contested()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SET search_path = ''
+AS $$
 BEGIN
     UPDATE public.citations
     SET status = 'contested'
