@@ -106,8 +106,8 @@ function EmployeesPage() {
     [employees],
   );
 
-  // Role Access Guard - ADMIN ONLY
-  if (role !== "admin") {
+  // Role Access Guard - ADMIN & SUPER ADMIN ONLY
+  if (role !== "admin" && role !== "super_admin") {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center p-6 text-center">
         <div className="grid size-16 place-items-center rounded-2xl border border-danger/30 bg-danger/10 text-danger shadow-xl">
