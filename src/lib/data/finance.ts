@@ -70,6 +70,7 @@ export function useFinanceQueue() {
         id: row.id,
         citationId: row.citation_id,
         plateNumber: row.plate_number,
+        amount: Number(row.amount),
         claimant: row.claimant,
         reason: row.reason,
         status: row.status,

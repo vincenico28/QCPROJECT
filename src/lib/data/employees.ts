@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { serverSaveOfficer } from "@/lib/server.functions";
 
 export type EmployeeRole = "admin" | "dispatcher" | "officer" | "adjudicator";
 export type EmployeeStatus = "active" | "on_leave" | "suspended";
@@ -136,7 +137,36 @@ export function useEmployees() {
   return useQuery({
     queryKey: ["employees"],
     queryFn: async () => {
-      await new Promise((r) => setTimeout(r, 300));
+      try {
+        const { data: dbOfficers, error } = await supabase
+          .from("officers")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && dbOfficers && dbOfficers.length > 0) {
+          const officerEmployees: Employee[] = dbOfficers.map((o: any) => ({
+            id: o.id,
+            badge_number: o.badge_number,
+            full_name: o.full_name,
+            email: `${o.full_name.toLowerCase().replace(/\s+/g, ".")}@quezoncity.gov.ph`,
+            role: "officer",
+            rank: o.rank,
+            unit: o.unit,
+            district: o.district,
+            contact_number: o.contact_number,
+            status: (o.status as EmployeeStatus) || "active",
+            on_duty: o.on_duty,
+            citations_issued: o.citations_issued || 0,
+            created_at: o.created_at,
+            last_active: o.updated_at || o.created_at,
+          }));
+
+          const nonOfficers = MOCK_EMPLOYEES.filter((e) => e.role !== "officer");
+          return [...nonOfficers, ...officerEmployees];
+        }
+      } catch (err) {
+        console.warn("Supabase fetch employees fallback:", err);
+      }
       return [...MOCK_EMPLOYEES];
     },
   });
@@ -146,9 +176,6 @@ export function useCreateEmployee() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewEmployeeInput) => {
-      await new Promise((r) => setTimeout(r, 600));
-
-      const id = `EMP-${String(MOCK_EMPLOYEES.length + 1).padStart(3, "0")}`;
       const badge =
         input.badge_number?.trim() ||
         (input.role === "officer"
@@ -159,8 +186,28 @@ export function useCreateEmployee() {
           ? `ADJ-${Math.floor(10 + Math.random() * 90)}`
           : `ADM-${Math.floor(10 + Math.random() * 90)}`);
 
+      let createdId = `EMP-${String(MOCK_EMPLOYEES.length + 1).padStart(3, "0")}`;
+
+      if (input.role === "officer") {
+        try {
+          const row = await serverSaveOfficer({
+            data: {
+              badge_number: badge,
+              full_name: input.full_name,
+              rank: input.rank,
+              unit: input.unit,
+              district: input.district,
+              contact_number: input.contact_number || null,
+            },
+          });
+          if (row?.id) createdId = row.id;
+        } catch (err) {
+          console.warn("Supabase officer save fallback:", err);
+        }
+      }
+
       const newEmp: Employee = {
-        id,
+        id: createdId,
         badge_number: badge,
         full_name: input.full_name,
         email: input.email.toLowerCase(),

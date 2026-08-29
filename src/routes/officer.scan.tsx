@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { Search, Loader2, ArrowLeft, LayoutDashboard, QrCode } from "lucide-react";
 import { toast } from "sonner";
-import { formatPeso, timeAgo } from "@/lib/data/traffic";
+import { formatPeso, timeAgo, useUpdateCitationStatus } from "@/lib/data/traffic";
 import { serverFetchCitations } from "@/lib/server.functions";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,7 @@ function ScannerPage() {
   const [citation, setCitation] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [manualInput, setManualInput] = useState("");
+  const updateCitation = useUpdateCitationStatus();
 
   useEffect(() => {
     // Initialize Scanner only if we are not showing a result
@@ -193,14 +194,21 @@ function ScannerPage() {
                 <div className="mt-3 grid gap-2">
                   <button
                     onClick={async () => {
-                      const cit = MOCK_CITATIONS.find(c => c.id === citation.id);
-                      if (cit) cit.status = "paid";
-                      toast.success("Citation marked as paid");
-                      setCitation({ ...citation, status: "paid" });
+                      try {
+                        await updateCitation.mutateAsync({
+                          citationId: citation.citation_number,
+                          status: "paid",
+                        });
+                        toast.success("Citation marked as paid (Cash)");
+                        setCitation({ ...citation, status: "paid" });
+                      } catch (err: any) {
+                        toast.error(err?.message || "Failed to update citation status");
+                      }
                     }}
-                    className="rounded-lg bg-success px-4 py-3 text-sm font-semibold text-success-foreground shadow-lg shadow-success/20"
+                    disabled={updateCitation.isPending}
+                    className="rounded-lg bg-success px-4 py-3 text-sm font-semibold text-success-foreground shadow-lg shadow-success/20 disabled:opacity-50 hover:bg-success/90 transition-colors"
                   >
-                    Mark as Paid (Cash)
+                    {updateCitation.isPending ? "Processing..." : "Mark as Paid (Cash)"}
                   </button>
                 </div>
               )}

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type EmergencyLevel = "Low" | "Moderate" | "Severe" | "Critical";
 
@@ -50,7 +51,27 @@ export function useHotlineCalls() {
   return useQuery({
     queryKey: ["hotline-calls"],
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      try {
+        const { data, error } = await supabase
+          .from("hazard_reports")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id.substring(0, 8).toUpperCase(),
+            caller: d.reporter_name,
+            phoneNumber: d.contact_number || "0917-000-0000",
+            location: d.location,
+            issue: `[${d.category}] ${d.description}`,
+            level: (d.category.includes("Accident") || d.category.includes("Flooding") ? "Critical" : "Moderate") as EmergencyLevel,
+            timeReceived: d.created_at,
+            status: (d.status === "resolved" ? "Resolved" : "Active") as HotlineCall["status"],
+          }));
+        }
+      } catch (err) {
+        console.warn("Hotline calls query fallback:", err);
+      }
       return MOCK_CALLS;
     }
   });

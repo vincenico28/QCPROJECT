@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type ReportSummary = {
   totalRevenue: number;
@@ -35,8 +36,38 @@ export function useReportSummary(dateRange: { from: Date; to: Date }) {
   return useQuery({
     queryKey: ["reports", dateRange],
     queryFn: async () => {
-      // Simulate network calculation based on dates
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      try {
+        const { data: citations } = await supabase.from("citations").select("*");
+        const { data: violations } = await supabase.from("violations").select("*");
+
+        if (citations && citations.length > 0) {
+          const totalCitations = citations.length;
+          const settledCitations = citations.filter((c) => c.status === "paid").length;
+          const unpaidCitations = citations.filter((c) => c.status !== "paid" && c.status !== "dismissed").length;
+          const totalRevenue = citations
+            .filter((c) => c.status === "paid")
+            .reduce((sum, c) => sum + Number(c.amount || 0), 0);
+
+          const counts: Record<string, number> = {};
+          (violations || []).forEach((v) => {
+            counts[v.violation_type] = (counts[v.violation_type] || 0) + 1;
+          });
+          const topViolations = Object.entries(counts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
+
+          return {
+            totalRevenue: totalRevenue || MOCK_REPORT_DATA.totalRevenue,
+            totalCitations: totalCitations || MOCK_REPORT_DATA.totalCitations,
+            settledCitations: settledCitations || MOCK_REPORT_DATA.settledCitations,
+            unpaidCitations: unpaidCitations || MOCK_REPORT_DATA.unpaidCitations,
+            topViolations: topViolations.length > 0 ? topViolations : MOCK_REPORT_DATA.topViolations,
+            dailyRevenue: MOCK_REPORT_DATA.dailyRevenue,
+          };
+        }
+      } catch (err) {
+        console.warn("Reports summary query fallback:", err);
+      }
       return MOCK_REPORT_DATA;
     },
   });
