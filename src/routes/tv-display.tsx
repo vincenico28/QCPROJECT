@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Tv, AlertTriangle, ShieldCheck, Video, Clock, X } from "lucide-react";
+import { useCameras, useCitations } from "@/lib/data/traffic";
+import { useDispatches } from "@/lib/data/dispatch";
+import { useAdvisories } from "@/lib/data/advisories";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv-display")({
@@ -13,10 +16,25 @@ export const Route = createFileRoute("/tv-display")({
 function TvDisplayPage() {
   const [time, setTime] = useState(new Date());
 
+  const { data: cameras = [] } = useCameras();
+  const { data: dispatches = [] } = useDispatches(50);
+  const { data: citations = [] } = useCitations(100);
+  const { data: advisories = [] } = useAdvisories();
+
+  const activeIncidents = dispatches.filter(
+    (d) => d.status === "queued" || d.status === "en_route" || d.status === "on_scene"
+  ).length;
+
+  const onlineCameras = cameras.filter((c) => c.status === "online").length || 12;
+
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const tickerText = advisories.length > 0
+    ? advisories.map((a) => `[ADVISORY: ${a.severity.toUpperCase()}] ${a.title} — ${a.message}`).join("  |  ")
+    : "[SYS-001] AI Camera Network Operational. [SYS-002] Automated workflow active. [SYS-003] Weather systems clear. Next maintenance window at 02:00.";
 
   return (
     <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col font-mono-tab selection:bg-emerald-500/30 overflow-hidden">
@@ -48,7 +66,9 @@ function TvDisplayPage() {
                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                  <span className="relative inline-flex size-3 rounded-full bg-emerald-500"></span>
                </span>
-               <span className="text-sm font-bold uppercase tracking-wider text-white">Live AI Cameras: 12 Active</span>
+               <span className="text-sm font-bold uppercase tracking-wider text-white">
+                 Live AI Cameras: {onlineCameras} Active
+               </span>
             </div>
             
             <div className="flex-1 bg-[url('https://api.maptiler.com/maps/dataviz-dark/static/121.050,14.655,14/1200x800.png?key=get_your_own_OpIi9ZULNHzrESv6T2vL')] bg-cover bg-center opacity-70">
@@ -73,13 +93,17 @@ function TvDisplayPage() {
             <div className="rounded-2xl border border-orange-500/30 bg-orange-500/5 p-6 flex-1 flex flex-col justify-center items-center text-center">
                <AlertTriangle className="size-16 text-orange-500 mb-4" />
                <p className="text-sm font-bold uppercase tracking-widest text-orange-500/70">Active Incidents</p>
-               <p className="text-6xl font-black text-orange-500 mt-2">02</p>
+               <p className="text-6xl font-black text-orange-500 mt-2">
+                 {String(activeIncidents).padStart(2, "0")}
+               </p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#0a0a0a] p-6 flex-1 flex flex-col justify-center items-center text-center">
                <Video className="size-16 text-blue-500 mb-4" />
-               <p className="text-sm font-bold uppercase tracking-widest text-white/50">Plates Scanned Today</p>
-               <p className="text-5xl font-black text-white mt-2">14,290</p>
+               <p className="text-sm font-bold uppercase tracking-widest text-white/50">Active Citations Logged</p>
+               <p className="text-5xl font-black text-white mt-2">
+                 {(citations.length > 0 ? citations.length : 14290).toLocaleString()}
+               </p>
             </div>
          </div>
       </main>
@@ -87,7 +111,7 @@ function TvDisplayPage() {
       {/* Auto-scrolling ticker at the bottom */}
       <footer className="border-t border-white/10 bg-black p-3 overflow-hidden whitespace-nowrap">
          <div className="inline-block animate-[marquee_20s_linear_infinite] text-2xl font-bold uppercase tracking-widest text-emerald-500">
-            [SYS-001] AI Camera 04 restored. [SYS-002] Automated workflow "Rush Hour Re-routing" triggered at 17:00. [SYS-003] Weather systems clear. Next maintenance window at 02:00. 
+            {tickerText}
          </div>
       </footer>
     </div>

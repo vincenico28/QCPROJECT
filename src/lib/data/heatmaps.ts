@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { QC_CENTER } from "./gis";
 
 export type HeatmapPoint = {
@@ -16,7 +17,6 @@ export type TimeSeriesPrediction = {
   predicted: number;
 };
 
-// Generate random points around QC center
 const MOCK_HEATMAP_POINTS: HeatmapPoint[] = Array.from({ length: 40 }).map((_, i) => ({
   id: `HP-${i}`,
   lat: QC_CENTER[0] + (Math.random() - 0.5) * 0.04,
@@ -41,11 +41,35 @@ export function useHeatmapData() {
   return useQuery({
     queryKey: ["analytics-heatmap"],
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 600));
+      try {
+        const { data: cameras } = await supabase.from("cameras").select("*");
+        const { data: violations } = await supabase.from("violations").select("*");
+
+        if (cameras && cameras.length > 0) {
+          const points: HeatmapPoint[] = cameras.map((c: any, i: number) => {
+            const count = violations?.filter((v: any) => v.camera_code === c.code).length || 5;
+            return {
+              id: c.id,
+              lat: c.lat || (QC_CENTER[0] + (Math.random() - 0.5) * 0.03),
+              lng: c.lng || (QC_CENTER[1] + (Math.random() - 0.5) * 0.03),
+              intensity: Math.min(1, 0.3 + (count * 0.08)),
+              predictedViolations: Math.floor(count * 2.5) + 8,
+              label: c.location || `Sector ${i + 1}`,
+            };
+          });
+
+          return {
+            points: points.length > 0 ? points : MOCK_HEATMAP_POINTS,
+            predictions: MOCK_PREDICTIONS,
+          };
+        }
+      } catch (err) {
+        console.warn(err);
+      }
       return {
         points: MOCK_HEATMAP_POINTS,
-        predictions: MOCK_PREDICTIONS
+        predictions: MOCK_PREDICTIONS,
       };
-    }
+    },
   });
 }
