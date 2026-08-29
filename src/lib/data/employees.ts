@@ -240,6 +240,14 @@ export function useCreateEmployee() {
             },
           });
         }
+
+        await supabase.from("audit_logs").insert({
+          actor_name: "Executive Staff Admin",
+          actor_role: "admin",
+          action: "EMPLOYEE_PROVISIONED",
+          target_resource: `${input.full_name} (${badge})`,
+          details: `Role: ${input.role}, Unit: ${input.unit}, District: ${input.district}`,
+        });
       } catch (err) {
         console.warn("Supabase auth user creation fallback:", err);
       }
@@ -279,6 +287,18 @@ export function useUpdateEmployee() {
         ...(input.contact_number !== undefined && { contact_number: input.contact_number }),
       };
 
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Executive Staff Admin",
+          actor_role: "admin",
+          action: "EMPLOYEE_PROFILE_UPDATED",
+          target_resource: `Employee ID: ${input.id}`,
+          details: `Updated fields: ${Object.keys(input).join(", ")}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
       return MOCK_EMPLOYEES[idx];
     },
     onSuccess: () => {
@@ -293,7 +313,20 @@ export function useDeleteEmployee() {
   return useMutation({
     mutationFn: async (id: string) => {
       await new Promise((r) => setTimeout(r, 400));
+      const emp = MOCK_EMPLOYEES.find((e) => e.id === id);
       MOCK_EMPLOYEES = MOCK_EMPLOYEES.filter((e) => e.id !== id);
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Executive Staff Admin",
+          actor_role: "admin",
+          action: "EMPLOYEE_REVOKED",
+          target_resource: `Employee ID: ${id} (${emp?.full_name || "Unknown"})`,
+          details: "Employee account and badge credentials revoked.",
+        });
+      } catch (err) {
+        console.warn(err);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employees"] });

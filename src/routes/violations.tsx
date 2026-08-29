@@ -234,7 +234,7 @@ function ViolationsPage() {
     );
   };
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
     const headers = ["ID", "Plate Number", "Violation Type", "Location", "Camera Code", "Confidence", "Status", "Detected At"];
     const rows = filtered.map((v) => [
       v.id,
@@ -255,6 +255,19 @@ function ViolationsPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Violations Review Officer",
+        actor_role: "admin",
+        action: "VIOLATIONS_EXPORTED_CSV",
+        target_resource: "Violations Ledger",
+        details: `Exported ${filtered.length} violation records.`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   return (

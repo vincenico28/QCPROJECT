@@ -154,6 +154,7 @@ export default function LeafletMap({
           <div>${escapeHtml(v.location)}</div>
           <div style="opacity:.7">Confidence ${Number(v.confidence).toFixed(1)}%</div>
           <div style="opacity:.7">${new Date(v.detected_at).toLocaleString()}</div>
+          <a href="/vehicles/${encodeURIComponent(v.plate_number)}" style="display:inline-block;margin-top:6px;padding:3px 8px;background:rgba(239,68,68,0.2);color:#f87171;border-radius:4px;text-decoration:none;font-weight:600">View Vehicle Record →</a>
         </div>`,
       );
       marker.addTo(layer);
@@ -185,6 +186,7 @@ export default function LeafletMap({
           <div style="font-weight:700">${escapeHtml(c.code)}</div>
           <div>${escapeHtml(c.location)}</div>
           <div style="opacity:.7;text-transform:uppercase">${escapeHtml(c.status)}</div>
+          <a href="/cameras/${encodeURIComponent(c.code)}" style="display:inline-block;margin-top:6px;padding:3px 8px;background:rgba(59,130,246,0.2);color:#60a5fa;border-radius:4px;text-decoration:none;font-weight:600">Open Camera Live Feed →</a>
         </div>`,
       );
       marker.addTo(layer);

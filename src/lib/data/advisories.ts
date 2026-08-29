@@ -75,9 +75,49 @@ export function useCreateAdvisory() {
         title: input.title,
         message: input.message,
         severity: input.severity.toLowerCase(),
-        affected_corridor: input.corridor,
+        affected_corridor: input.corridor || "All Corridors",
         is_active: true,
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Public Information Officer",
+          actor_role: "admin",
+          action: "TRAFFIC_ADVISORY_BROADCAST",
+          target_resource: input.title,
+          details: `Severity: ${input.severity}, Corridor: ${input.corridor || "All Corridors"}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["advisories"] });
+    },
+  });
+}
+
+export function useToggleAdvisoryStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, active, title }: { id: string; active: boolean; title?: string }) => {
+      await supabase
+        .from("traffic_advisories")
+        .update({ is_active: active })
+        .eq("id", id);
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Public Information Officer",
+          actor_role: "admin",
+          action: active ? "TRAFFIC_ADVISORY_ACTIVATED" : "TRAFFIC_ADVISORY_ARCHIVED",
+          target_resource: title || id,
+          details: `Status set to ${active ? "Live" : "Archived"}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
       return true;
     },
     onSuccess: () => {

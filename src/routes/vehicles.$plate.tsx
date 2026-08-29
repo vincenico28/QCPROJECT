@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft,
   Car,
@@ -9,6 +11,8 @@ import {
   Camera as CameraIcon,
   Radio,
   Ban,
+  CheckCircle2,
+  User,
 } from "lucide-react";
 import { useViolations, useCitations, formatPeso, timeAgo } from "@/lib/data/traffic";
 import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
@@ -43,12 +47,28 @@ function VehicleDetailPage() {
   const { data: violations = [], isLoading: vLoading } = useViolations(500);
   const { data: citations = [], isLoading: cLoading } = useCitations(500);
 
+  const { data: vehicleData } = useQuery({
+    queryKey: ["vehicle-record", plate],
+    queryFn: async () => {
+      try {
+        const { data } = await supabase
+          .from("vehicles")
+          .select("*")
+          .ilike("plate_number", plate.trim())
+          .maybeSingle();
+        return data;
+      } catch {
+        return null;
+      }
+    },
+  });
+
   const own = useMemo(
-    () => violations.filter((v) => v.plate_number === plate),
+    () => violations.filter((v) => v.plate_number.replace(/\s+/g, "").toUpperCase() === plate.replace(/\s+/g, "").toUpperCase()),
     [violations, plate],
   );
   const ownCitations = useMemo(
-    () => citations.filter((c) => c.plate_number === plate),
+    () => citations.filter((c) => c.plate_number.replace(/\s+/g, "").toUpperCase() === plate.replace(/\s+/g, "").toUpperCase()),
     [citations, plate],
   );
 
@@ -72,7 +92,8 @@ function VehicleDetailPage() {
           ? "watch"
           : "clean";
 
-  const model = ownCitations.find((c) => c.vehicle_model)?.vehicle_model ?? null;
+  const model = vehicleData?.make_model ?? (ownCitations.find((c) => c.vehicle_model)?.vehicle_model ?? null);
+  const owner = vehicleData?.registered_owner ?? null;
 
   const timeline = useMemo(() => {
     const items = [
@@ -108,7 +129,7 @@ function VehicleDetailPage() {
     );
   }
 
-  if (totalRecords === 0) {
+  if (totalRecords === 0 && !vehicleData) {
     return (
       <div className="flex flex-col items-center gap-4 p-16 text-center">
         <p className="text-sm text-subtle">No enforcement record found for plate {plate}.</p>

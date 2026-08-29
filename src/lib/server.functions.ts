@@ -510,6 +510,18 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       throw new Error(`Database Error: ${error.message}`);
     }
 
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: data.payerName,
+        actor_role: "citizen",
+        action: "CITATION_ONLINE_SETTLED",
+        target_resource: `Citation: ${data.citationNumber} (Plate: ${data.plateNumber})`,
+        details: `Amount: PHP ${data.amount}, Method: ${data.paymentMethod.toUpperCase()}, Ref: ${receiptNumber}`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
+
     return {
       receiptNumber,
       citationNumber: data.citationNumber,

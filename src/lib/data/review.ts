@@ -40,8 +40,20 @@ export function useReviewViolation() {
       id: string;
       status: "confirmed" | "dismissed" | "pending";
     }) => {
-      // Store in real database
       await serverUpdateViolationStatus({ data: { id, status } });
+
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        await supabase.from("audit_logs").insert({
+          actor_name: "Violation Review Officer",
+          actor_role: "admin",
+          action: `VIOLATION_REVIEW_${status.toUpperCase()}`,
+          target_resource: `Violation ID: ${id}`,
+          details: `Status updated to ${status}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["violations"] });
@@ -61,20 +73,21 @@ export function useBulkReviewViolations() {
     }) => {
       for (const id of ids) {
         await serverUpdateViolationStatus({ data: { id, status } });
-
-        if (status === "confirmed") {
-          // This requires fetching the violation first or refactoring server function to handle this.
-          // Since we are doing it entirely on the backend, we might need a better server function for this.
-          // For now, if we don't have the plate_number here, we can't easily save the citation without the violation record.
-          // Wait, the UI might need to provide the violation object if it wants to create a citation. 
-          // Let's check how useBulkReviewViolations is used. Actually, the mock version was picking from MOCK_VIOLATIONS.
-          // We must fetch the violation or have the UI pass the violations instead of just IDs!
-          // But I can't change the function signature without updating the caller.
-          // I'll leave the serverUpdateViolationStatus part, but creating the citation needs the violation details.
-          // Since this is a bulk review, the server could handle this in a single transaction if we create a server function for it,
-          // OR we just fetch the violations from the DB first. Let's do that for now.
-        }
       }
+
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        await supabase.from("audit_logs").insert({
+          actor_name: "Violation Review Officer",
+          actor_role: "admin",
+          action: `VIOLATION_BULK_${status.toUpperCase()}`,
+          target_resource: `${ids.length} Violations`,
+          details: `Bulk marked ${ids.length} items as ${status}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
       return { count: ids.length, status };
     },
     onSuccess: () => {
@@ -96,7 +109,6 @@ export function useIssueCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: IssueCitationInput) => {
-      // Save citation to real database
       const row = await serverSaveCitation({
         data: {
           violation_id: input.violation.id,
@@ -109,10 +121,22 @@ export function useIssueCitation() {
         },
       });
 
-      // Update violation status to confirmed
       await serverUpdateViolationStatus({
         data: { id: input.violation.id, status: "confirmed" },
       });
+
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        await supabase.from("audit_logs").insert({
+          actor_name: input.officerName || "Adjudication Officer",
+          actor_role: "admin",
+          action: "CITATION_ISSUED_FROM_VIOLATION",
+          target_resource: `Plate: ${input.violation.plate_number}`,
+          details: `Offense: ${input.offense}, Amount: PHP ${input.amount}, Violation ID: ${input.violation.id}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
 
       return row as Citation;
     },
