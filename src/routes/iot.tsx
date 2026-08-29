@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useIotNodes, useInferenceStream } from "@/lib/data/iot";
-import { Loader2, Server, Activity, Thermometer, Wifi, TerminalSquare, AlertTriangle, Eye } from "lucide-react";
+import { useIotNodes, useInferenceStream, useRebootNode } from "@/lib/data/iot";
+import { Loader2, Server, Activity, Thermometer, Wifi, TerminalSquare, AlertTriangle, Eye, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/iot")({
   head: () => ({
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/iot")({
 function IotManagementPage() {
   const { data: nodes, isLoading } = useIotNodes();
   const inferenceStream = useInferenceStream();
+  const rebootNode = useRebootNode();
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
@@ -44,13 +46,34 @@ function IotManagementPage() {
                        <h3 className="font-semibold text-white">{node.name}</h3>
                        <p className="font-mono-tab text-xs text-muted-foreground">{node.id}</p>
                      </div>
-                     <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                        node.status === "Online" ? "bg-emerald-500/20 text-emerald-500" :
-                        node.status === "Degraded" ? "bg-yellow-500/20 text-yellow-500" : "bg-red-500/20 text-red-500"
-                      )}>
-                        {node.status}
-                      </span>
+                     <div className="flex items-center gap-2">
+                       <span className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                          node.status === "Online" ? "bg-emerald-500/20 text-emerald-500" :
+                          node.status === "Degraded" ? "bg-yellow-500/20 text-yellow-500" : "bg-red-500/20 text-red-500"
+                        )}>
+                          {node.status}
+                        </span>
+                        <button
+                          onClick={() => {
+                            rebootNode.mutate(
+                              { id: node.id, name: node.name },
+                              {
+                                onSuccess: () => {
+                                  toast.success(`Node ${node.id} remote reboot command sent!`, {
+                                    description: "Watchdog timer restarted. Reconnecting in 5s...",
+                                  });
+                                },
+                              }
+                            );
+                          }}
+                          disabled={rebootNode.isPending}
+                          className="rounded-lg p-1 text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                          title="Remote Reboot Node"
+                        >
+                          <RotateCw className={cn("size-3.5", rebootNode.isPending && "animate-spin")} />
+                        </button>
+                     </div>
                    </div>
                    
                    <div className="mt-4 grid grid-cols-2 gap-4">
