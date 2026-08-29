@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { QrCode, FilePlus2, Map as MapIcon, LogOut, Loader2 } from "lucide-react";
+import { QrCode, FilePlus2, Map as MapIcon, LogOut, Loader2, LayoutDashboard } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -7,6 +7,7 @@ import { SignInScreen } from "@/components/auth/sign-in-screen";
 import { supabase } from "@/integrations/supabase/client";
 
 const NAV = [
+  { to: "/officer", label: "Terminal", icon: LayoutDashboard, exact: true },
   { to: "/officer/scan", label: "Scan", icon: QrCode, exact: false },
   { to: "/officer/issue", label: "Issue", icon: FilePlus2, exact: false },
   { to: "/officer/dispatches", label: "Dispatches", icon: MapIcon, exact: false },
