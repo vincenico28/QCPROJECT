@@ -4,6 +4,7 @@ import { Settings2, Shield, BrainCircuit, Users, Save, CheckCircle2, XCircle, Lo
 import { toast } from "sonner";
 import { SYSTEM_ROLES, type SystemRole } from "@/lib/rbac";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({
@@ -34,7 +35,18 @@ function SettingsPage() {
   const { role, setSimulatedRole } = useAuth();
   const [selectedRoleForDetail, setSelectedRoleForDetail] = useState<SystemRole>("admin");
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    try {
+      await supabase.from("audit_logs").insert({
+        actor_name: "Chief Security Officer",
+        actor_role: role,
+        action: "SYSTEM_SETTINGS_UPDATED",
+        target_resource: "RBAC & Fine Penalty Matrix",
+        details: "Updated AI confidence thresholds and discount penalty rules.",
+      });
+    } catch (err) {
+      console.warn(err);
+    }
     toast.success("Security policies & RBAC matrix updated successfully.");
   };
 

@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useInfrastructureHealth } from "@/lib/data/infrastructure";
-import { Loader2, Cpu, Activity, AlertTriangle, CheckCircle2, Wrench, Calendar, Server } from "lucide-react";
+import { useState } from "react";
+import { useInfrastructureHealth, useCreateInfrastructureAsset, useScheduleMaintenance } from "@/lib/data/infrastructure";
+import { Loader2, Cpu, Activity, AlertTriangle, CheckCircle2, Wrench, Calendar, Server, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import * as Dialog from "@radix-ui/react-dialog";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/infrastructure")({
   head: () => ({
@@ -12,6 +15,37 @@ export const Route = createFileRoute("/infrastructure")({
 
 function InfrastructureHealthPage() {
   const { data: nodes, isLoading } = useInfrastructureHealth();
+  const createAsset = useCreateInfrastructureAsset();
+  const scheduleRepair = useScheduleMaintenance();
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [assetType, setAssetType] = useState("AI Camera (ANPR)");
+  const [location, setLocation] = useState("");
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !location.trim()) return;
+
+    createAsset.mutate(
+      {
+        name: name.trim(),
+        assetType,
+        location: location.trim(),
+        status: "operational",
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Asset "${name}" registered successfully!`, {
+            description: "Telemetry node initialized & connected to health monitor.",
+          });
+          setCreateOpen(false);
+          setName("");
+          setLocation("");
+        },
+      }
+    );
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
@@ -23,6 +57,90 @@ function InfrastructureHealthPage() {
           </h1>
           <p className="text-sm text-muted-foreground">AI-driven predictive maintenance for city-wide hardware and network nodes.</p>
         </div>
+
+        <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
+          <Dialog.Trigger asChild>
+            <button className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-500">
+              <Plus className="size-4" />
+              Provision Asset
+            </button>
+          </Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="grid size-8 place-items-center rounded-lg bg-purple-500/20 text-purple-400">
+                    <Server className="size-4" />
+                  </div>
+                  <Dialog.Title className="text-lg font-bold text-white">Register Infrastructure Asset</Dialog.Title>
+                </div>
+                <Dialog.Close asChild>
+                  <button className="rounded-lg p-1 text-muted-foreground hover:bg-panel-elevated hover:text-white">
+                    <X className="size-5" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              <form onSubmit={handleCreate} className="mt-4 flex flex-col gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset / Device Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g., Quezon Ave Overpass ANPR 04"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-white placeholder:text-muted-foreground/50 focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Category</label>
+                    <select
+                      value={assetType}
+                      onChange={(e) => setAssetType(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-white focus:border-purple-500 focus:outline-none"
+                    >
+                      <option value="AI Camera (ANPR)">AI Camera (ANPR)</option>
+                      <option value="Signal Controller">Signal Controller</option>
+                      <option value="Environmental Loop">Environmental Loop</option>
+                      <option value="Edge AI Gateway">Edge AI Gateway</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Location</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., Commonwealth / Tandang Sora"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-white placeholder:text-muted-foreground/50 focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 flex justify-end gap-3 border-t border-border pt-4">
+                  <Dialog.Close asChild>
+                    <button type="button" className="rounded-lg px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated">
+                      Cancel
+                    </button>
+                  </Dialog.Close>
+                  <button
+                    type="submit"
+                    disabled={createAsset.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+                  >
+                    {createAsset.isPending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                    Register Asset
+                  </button>
+                </div>
+              </form>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </div>
 
       {isLoading || !nodes ? (
@@ -107,10 +225,25 @@ function InfrastructureHealthPage() {
                  </div>
                  
                  {node.status !== "Healthy" && (
-                    <button className={cn(
-                       "mt-2 flex w-full items-center justify-center gap-2 rounded p-2 text-xs font-bold uppercase tracking-wider transition-colors border",
-                       node.status === "Critical" ? "bg-red-500 hover:bg-red-600 text-white border-red-400" : "bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30"
-                    )}>
+                    <button
+                      onClick={() => {
+                        scheduleRepair.mutate(
+                          { id: node.id, location: node.location },
+                          {
+                            onSuccess: () => {
+                              toast.success(`Work Order Dispatched for ${node.id}!`, {
+                                description: `Field engineers alerted for ${node.location}.`,
+                              });
+                            },
+                          }
+                        );
+                      }}
+                      disabled={scheduleRepair.isPending}
+                      className={cn(
+                        "mt-2 flex w-full items-center justify-center gap-2 rounded p-2 text-xs font-bold uppercase tracking-wider transition-colors border",
+                        node.status === "Critical" ? "bg-red-500 hover:bg-red-600 text-white border-red-400" : "bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30"
+                      )}
+                    >
                        <Wrench className="size-3.5" /> Schedule Immediate Repair
                     </button>
                  )}

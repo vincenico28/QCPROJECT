@@ -91,6 +91,42 @@ export function useCreateInfrastructureAsset() {
         location: input.location,
         status: input.status,
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Operations Infrastructure Lead",
+          actor_role: "admin",
+          action: "INFRASTRUCTURE_ASSET_CREATED",
+          target_resource: `Asset: ${input.name} (${input.assetType})`,
+          details: `Location: ${input.location}, Status: ${input.status}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["infrastructure-health"] });
+    },
+  });
+}
+
+export function useScheduleMaintenance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, location }: { id: string; location: string }) => {
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Field Engineering Dispatcher",
+          actor_role: "admin",
+          action: "MAINTENANCE_WORK_ORDER_DISPATCHED",
+          target_resource: `Node: ${id}`,
+          details: `Immediate maintenance crew assigned to ${location}.`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
       return true;
     },
     onSuccess: () => {
