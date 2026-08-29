@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { SignInScreen } from "@/components/auth/sign-in-screen";
 import { supabase } from "@/integrations/supabase/client";
 
+import { SYSTEM_ROLES, hasRoleAccess, type SystemRole } from "@/lib/rbac";
+
 const NAV = [
   { to: "/officer", label: "Terminal", icon: LayoutDashboard, exact: true },
   { to: "/officer/scan", label: "Scan", icon: QrCode, exact: false },
@@ -28,22 +30,34 @@ export function OfficerShell({ children }: { children: ReactNode }) {
 
   if (!session) return <SignInScreen />;
 
-  if (role !== "officer" && role !== "admin") {
+  const isAllowed = hasRoleAccess(role, pathname) || ["super_admin", "admin", "officer", "dispatcher"].includes(role);
+
+  if (!isAllowed) {
     // Basic protection
     return (
       <div className="grid min-h-dvh place-items-center bg-background text-center px-6">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Unauthorized Access</h2>
-          <p className="mt-2 text-sm text-muted-foreground">You do not have field officer privileges.</p>
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              window.location.href = "/";
-            }}
-            className="mt-6 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
-          >
-            Sign out
-          </button>
+        <div className="max-w-md panel p-8 rounded-2xl border border-border">
+          <h2 className="text-xl font-bold text-foreground">Unauthorized Access</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your current role (<span className="font-semibold text-primary">{role}</span>) does not have field officer privileges.
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/dashboard"
+              className="w-full sm:w-auto rounded-lg bg-panel-elevated border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-panel"
+            >
+              Command Center
+            </Link>
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.href = "/";
+              }}
+              className="w-full sm:w-auto rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     );
