@@ -255,7 +255,7 @@ function VehiclesPage() {
     }
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     const headers = "Plate Number,Make & Model,Violations,Citations,Unpaid Fines,Outstanding Balance,Last Offense,Risk Level\n";
     const rows = filtered
       .map(
@@ -272,6 +272,19 @@ function VehiclesPage() {
     link.click();
     document.body.removeChild(link);
     toast.success("Vehicle registry exported to CSV");
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Vehicle Registry Officer",
+        actor_role: "admin",
+        action: "VEHICLE_REGISTRY_EXPORTED",
+        target_resource: "Vehicle Ledger",
+        details: `Exported ${filtered.length} vehicle records.`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   return (
