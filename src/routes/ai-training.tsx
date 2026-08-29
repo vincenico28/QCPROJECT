@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAiDatasets, useAiMetrics } from "@/lib/data/ai-training";
+import { useAiDatasets, useAiMetrics, useCreateAiDataset } from "@/lib/data/ai-training";
 import {
   Loader2,
   BrainCircuit,
@@ -49,6 +49,7 @@ const CLASS_PERFORMANCE = [
 function AiTrainingPage() {
   const { data: datasets, isLoading: loadingDatasets } = useAiDatasets();
   const { data: metrics, isLoading: loadingMetrics } = useAiMetrics();
+  const createDataset = useCreateAiDataset();
 
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
@@ -90,12 +91,24 @@ function AiTrainingPage() {
 
   const handleUploadDataset = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!datasetName) return;
-    toast.success(`Dataset "${datasetName}" uploaded & indexed`, {
-      description: `${imageCount} labeled annotations validated.`,
-    });
-    setUploadModalOpen(false);
-    setDatasetName("");
+    if (!datasetName.trim()) return;
+
+    createDataset.mutate(
+      {
+        name: datasetName.trim(),
+        images: parseInt(imageCount, 10) || 1000,
+        classes: selectedClasses.split(",").map((c) => c.trim()).filter(Boolean),
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Dataset "${datasetName}" uploaded & indexed`, {
+            description: `${imageCount} labeled annotations validated.`,
+          });
+          setUploadModalOpen(false);
+          setDatasetName("");
+        },
+      }
+    );
   };
 
   return (
