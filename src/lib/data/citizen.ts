@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { serverSaveCitizenReport, serverFetchCitizenReports } from "@/lib/server.functions";
 
 export type EvidenceFrame = {
   url: string;
@@ -326,6 +327,35 @@ export function useCitizenAuth() {
   };
 }
 
+export function useCitizenHazardReports() {
+  const { citizen } = useCitizenAuth();
+  
+  return useQuery({
+    queryKey: ["citizen-hazard-reports", citizen?.id],
+    queryFn: async () => {
+      try {
+        const rows = await serverFetchCitizenReports();
+        if (rows) {
+          // Filter by the current citizen's name (since we don't have a real citizen_id in the hazard_reports table yet)
+          // In a real app, hazard_reports would have a citizen_id foreign key.
+          return rows.filter((r: any) => r.reporter_name === citizen?.fullName).map((row: any) => ({
+            id: row.id,
+            category: row.category,
+            location: row.location,
+            description: row.description,
+            reportedAt: row.created_at,
+            status: row.status,
+          })) as CitizenHazardReport[];
+        }
+      } catch (err) {
+        console.error("Error fetching hazard reports", err);
+      }
+      return citizen?.hazards || [];
+    },
+    enabled: !!citizen,
+  });
+}
+
 export function useAddCitizenVehicle() {
   const qc = useQueryClient();
   return useMutation({
@@ -478,29 +508,36 @@ export function useSubmitHazardReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { category: CitizenHazardReport["category"]; location: string; description: string }) => {
-      await new Promise((r) => setTimeout(r, 300));
       const currentId = getStoredCitizenId();
       const all = loadCitizensFromStorage();
       const citizen = all.find((c) => c.id === currentId);
       if (!citizen) throw new Error("Not authenticated");
 
+      const row = await serverSaveCitizenReport({
+        data: {
+          reporter_name: citizen.fullName,
+          category: input.category,
+          location: input.location,
+          description: input.description,
+        },
+      });
+
       const report: CitizenHazardReport = {
-        id: `RPT-${Math.floor(1000 + Math.random() * 9000)}`,
+        id: (row as any)?.id || `RPT-${Math.floor(1000 + Math.random() * 9000)}`,
         category: input.category,
         location: input.location,
         description: input.description,
-        reportedAt: new Date().toISOString(),
-        status: "Under Review",
+        reportedAt: (row as any)?.created_at || new Date().toISOString(),
+        status: (row as any)?.status || "Under Review",
       };
-
-      if (!citizen.hazards) citizen.hazards = [];
-      citizen.hazards.unshift(report);
+      
       // Give 50 eco-reward tokens for reporting traffic hazards
       citizen.tokens = (citizen.tokens || 0) + 50;
       saveCitizensToStorage(all);
       return report;
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["citizen-hazard-reports"] });
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
     },
   });

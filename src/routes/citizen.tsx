@@ -9,6 +9,7 @@ import {
   useNominateActualDriver,
   useRedeemEcoReward,
   useSubmitHazardReport,
+  useCitizenHazardReports,
   type CitizenCitation,
   type CitizenHazardReport,
 } from "@/lib/data/citizen";
@@ -98,6 +99,7 @@ function CitizenPortal() {
   const nominateDriver = useNominateActualDriver();
   const redeemReward = useRedeemEcoReward();
   const submitHazard = useSubmitHazardReport();
+  const { data: citizenHazards = [], isLoading: loadingHazards } = useCitizenHazardReports();
 
   const currentCitizen = profile || citizen;
 

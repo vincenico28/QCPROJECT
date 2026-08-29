@@ -593,7 +593,7 @@ export const serverFetchDisputes = createServerFn({ method: "GET" })
     try {
       const { data, error } = await supabaseAdmin
         .from("disputes")
-        .select("*")
+        .select("*, citation:citations(*)")
         .order("created_at", { ascending: false });
       if (!error && data) {
         return data;
@@ -654,7 +654,6 @@ export const serverSaveDispute = createServerFn({ method: "POST" })
 
 const disputeResolveSchema = z.object({
   disputeId: z.string(),
-  citationNumber: z.string(),
   action: z.enum(["grant", "uphold"]),
   resolutionNotes: z.string().optional(),
 });
@@ -666,6 +665,17 @@ export const serverResolveDispute = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     const newStatus = data.action === "grant" ? "approved" : "rejected";
     const citationNewStatus = data.action === "grant" ? "waived" : "unpaid";
+
+    // First fetch the dispute to get the citation_id
+    const { data: disputeRow, error: disputeErr } = await supabaseAdmin
+      .from("disputes")
+      .select("citation_id")
+      .eq("id", data.disputeId)
+      .maybeSingle();
+
+    if (disputeErr || !disputeRow) {
+      throw new Error(`Dispute not found or database error`);
+    }
 
     const { error } = await supabaseAdmin
       .from("disputes")
@@ -681,13 +691,72 @@ export const serverResolveDispute = createServerFn({ method: "POST" })
       throw new Error(`Database Error: ${error.message}`);
     }
 
-    await supabaseAdmin
-      .from("citations")
-      .update({
-        status: citationNewStatus,
-        ...(data.action === "grant" && { amount: 0 }),
-      })
-      .eq("citation_number", data.citationNumber);
+    if (disputeRow.citation_id) {
+      await supabaseAdmin
+        .from("citations")
+        .update({
+          status: citationNewStatus,
+          ...(data.action === "grant" && { amount: 0 }),
+        })
+        .eq("id", disputeRow.citation_id);
+    }
 
     return { success: true, status: newStatus, resolvedAt: now };
   });
+
+// -------------------------------------------------------------
+// 9. CITIZEN HAZARD REPORTS
+// -------------------------------------------------------------
+export const serverFetchCitizenReports = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("hazard_reports")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        return data;
+      }
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Hazard Reports]", err);
+    }
+    return [];
+  });
+
+const hazardReportInsertSchema = z.object({
+  reporter_name: z.string().default("Anonymous Citizen"),
+  category: z.string(),
+  location: z.string(),
+  description: z.string(),
+});
+
+export const serverSaveCitizenReport = createServerFn({ method: "POST" })
+  .validator((data: unknown) => hazardReportInsertSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = generateUUID();
+    const now = new Date().toISOString();
+
+    const { data: row, error } = await supabaseAdmin
+      .from("hazard_reports")
+      .insert({
+        id,
+        reporter_name: data.reporter_name,
+        category: data.category,
+        location: data.location,
+        description: data.description,
+        status: "pending",
+        created_at: now,
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error("[Supabase Error: Save Hazard Report]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+
+    return row;
+  });
+
