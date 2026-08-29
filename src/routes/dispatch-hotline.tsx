@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useHotlineCalls } from "@/lib/data/hotline";
+import { useHotlineCalls, useDispatchHotlineCall, type HotlineCall } from "@/lib/data/hotline";
 import { Loader2, PhoneCall, AlertTriangle, ShieldAlert, CheckCircle2, PhoneForwarded, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/dispatch-hotline")({
   head: () => ({
@@ -12,6 +13,17 @@ export const Route = createFileRoute("/dispatch-hotline")({
 
 function DispatchHotlinePage() {
   const { data: calls, isLoading } = useHotlineCalls();
+  const dispatchCall = useDispatchHotlineCall();
+
+  const handleDispatch = (call: HotlineCall) => {
+    dispatchCall.mutate(call, {
+      onSuccess: () => {
+        toast.success(`Unit Dispatched for Call ${call.id}!`, {
+          description: `Rapid response unit routed to ${call.location}.`,
+        });
+      },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
@@ -84,8 +96,12 @@ function DispatchHotlinePage() {
                                  <Clock className="size-3" /> 00:02:14
                                </p>
                              </div>
-                             <button className="inline-flex items-center gap-2 justify-center rounded-lg bg-red-600 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 shadow-lg shadow-red-500/20">
-                                <PhoneForwarded className="size-4" />
+                             <button
+                               onClick={() => handleDispatch(call)}
+                               disabled={dispatchCall.isPending}
+                               className="inline-flex items-center gap-2 justify-center rounded-lg bg-red-600 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 shadow-lg shadow-red-500/20 disabled:opacity-50"
+                             >
+                                {dispatchCall.isPending ? <Loader2 className="size-4 animate-spin" /> : <PhoneForwarded className="size-4" />}
                                 Dispatch Unit
                              </button>
                           </div>

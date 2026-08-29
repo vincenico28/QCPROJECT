@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { serverSaveDispatch } from "@/lib/server.functions";
 
 export type EmergencyLevel = "Low" | "Moderate" | "Severe" | "Critical";
 
@@ -74,5 +75,40 @@ export function useHotlineCalls() {
       }
       return MOCK_CALLS;
     }
+  });
+}
+
+export function useDispatchHotlineCall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (call: HotlineCall) => {
+      await serverSaveDispatch({
+        data: {
+          location: call.location,
+          priority: call.level === "Critical" ? "critical" : "high",
+          instructions: `[Hotline Incident - ${call.caller}]: ${call.issue}`,
+          officer_id: null,
+          officer_name: null,
+          badge_number: null,
+        },
+      });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Hotline 911 Dispatcher",
+          actor_role: "dispatcher",
+          action: "HOTLINE_EMERGENCY_DISPATCHED",
+          target_resource: `Caller: ${call.caller} (${call.phoneNumber})`,
+          details: `Location: ${call.location}, Level: ${call.level}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hotline-calls"] });
+      qc.invalidateQueries({ queryKey: ["dispatches"] });
+    },
   });
 }
