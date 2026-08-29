@@ -60,10 +60,11 @@ export const lookupCitation = createServerFn({ method: "POST" })
     const cleanRef = data.reference.trim();
 
     try {
+      const cleanPlate = data.plate.trim();
       const { data: row, error } = await supabaseAdmin
         .from("citations")
         .select("id, citation_number, plate_number, offense, amount, status, issued_at, vehicle_model")
-        .ilike("citation_number", `%${cleanRef}%`)
+        .or(`citation_number.ilike.%${cleanRef}%,plate_number.ilike.%${cleanPlate}%`)
         .maybeSingle();
 
       if (!error && row) {

@@ -121,8 +121,16 @@ export function useSendNotificationEmail() {
           template_name: input.type,
           status: "delivered",
         });
-      } catch {
-        // silent fallback
+
+        await supabase.from("audit_logs").insert({
+          actor_name: "LGU Communications Dispatcher",
+          actor_role: "admin",
+          action: "OFFICIAL_NOTIFICATION_SENT",
+          target_resource: `Recipient: ${input.recipient}`,
+          details: `Type: ${input.type}, Subject: ${input.subject}`,
+        });
+      } catch (err) {
+        console.warn(err);
       }
       return true;
     },
