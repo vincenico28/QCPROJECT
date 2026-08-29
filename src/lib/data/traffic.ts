@@ -234,7 +234,7 @@ export function useCreateCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewCitation) => {
-      return await serverSaveCitation({
+      const res = await serverSaveCitation({
         data: {
           violation_id: input.violation_id || null,
           plate_number: input.plate_number,
@@ -245,6 +245,20 @@ export function useCreateCitation() {
           officer_name: input.officer_name || "QC Enforcer",
         },
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: input.officer_name || "QC Enforcer",
+          actor_role: "officer",
+          action: "CITATION_ISSUED",
+          target_resource: `Plate: ${input.plate_number}`,
+          details: `Offense: ${input.offense}, Amount: PHP ${input.amount}, Vehicle: ${input.vehicle_model || "N/A"}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      return res;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citations"] });
@@ -259,6 +273,18 @@ export function useUpdateCitationStatus() {
       await serverUpdateCitationStatus({
         data: { citationNumber: citationId, status },
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Adjudication Officer",
+          actor_role: "admin",
+          action: "CITATION_STATUS_UPDATED",
+          target_resource: `Citation: ${citationId}`,
+          details: `Status set to ${status.toUpperCase()}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
     },
     onSuccess: (_, { citationId }) => {
       qc.invalidateQueries({ queryKey: ["citations"] });

@@ -36,16 +36,34 @@ function OfficerDetailPage() {
   const { data: citations = [] } = useCitations(200);
   const { data: dispatches = [] } = useDispatches(200);
 
-  const officer = officers.find((o) => o.badge_number === badge);
+  const officer = officers.find(
+    (o) =>
+      o.badge_number?.toLowerCase() === badge?.toLowerCase() ||
+      o.id === badge ||
+      o.full_name?.toLowerCase() === decodeURIComponent(badge)?.toLowerCase(),
+  );
 
   const own = useMemo(
-    () => (officer ? citations.filter((c) => c.officer_name === officer.full_name) : []),
+    () =>
+      officer
+        ? citations.filter(
+            (c) =>
+              c.officer_name === officer.full_name ||
+              (officer.badge_number && c.officer_name?.includes(officer.badge_number)) ||
+              (officer.full_name && c.officer_name?.toLowerCase().includes(officer.full_name.toLowerCase())),
+          )
+        : [],
     [citations, officer],
   );
 
   const ownDispatches = useMemo(
-    () => dispatches.filter((d) => d.badge_number === badge),
-    [dispatches, badge],
+    () =>
+      dispatches.filter(
+        (d) =>
+          d.badge_number?.toLowerCase() === badge?.toLowerCase() ||
+          (officer && d.badge_number?.toLowerCase() === officer.badge_number?.toLowerCase()),
+      ),
+    [dispatches, badge, officer],
   );
 
   const collected = own

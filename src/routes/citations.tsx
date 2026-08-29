@@ -124,7 +124,7 @@ function CitationsPage() {
     };
   }, [citations]);
 
-  function exportCsv() {
+  async function exportCsv() {
     const rows = [
       ["Notice of Violation #", "Plate", "Vehicle", "Offense", "Amount", "Status", "Officer", "Issued"],
       ...filtered.map((c) => [
@@ -148,6 +148,19 @@ function CitationsPage() {
     a.download = `qc-citations-ledger-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Treasury & Adjudication Officer",
+        actor_role: "admin",
+        action: "CITATIONS_EXPORTED_CSV",
+        target_resource: "Citations Ledger",
+        details: `Exported ${filtered.length} citation records.`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
   }
 
   const handleCreateDirectCitation = (e: React.FormEvent) => {
