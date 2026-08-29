@@ -225,7 +225,7 @@ function VehiclesPage() {
 
     try {
       const { supabase } = await import("@/integrations/supabase/client");
-      await supabase.from("vehicles").insert({
+      const { error } = await supabase.from("vehicles").insert({
         plate_number: cleanP,
         make_model: makeModel || "Registered Vehicle",
         registered_owner: ownerName || "Registered Owner",
@@ -235,19 +235,24 @@ function VehiclesPage() {
         risk_level: "Clean",
         lto_alarm_tagged: false,
       });
-    } catch {
-      // fallback
-    }
 
-    setCustomVehicles((prev) => [newV, ...prev]);
-    toast.success(`Vehicle ${cleanP} Registered`, {
-      description: `Added to QC Barangay Culiat enforcement database.`,
-    });
-    setRegisterModalOpen(false);
-    setPlateInput("");
-    setMakeModel("");
-    setOwnerName("");
-    setChassis("");
+      if (error) throw error;
+
+      setCustomVehicles((prev) => [newV, ...prev]);
+      toast.success(`Vehicle ${cleanP} Registered`, {
+        description: `Added to QC Barangay Culiat enforcement database.`,
+      });
+      setRegisterModalOpen(false);
+      setPlateInput("");
+      setMakeModel("");
+      setOwnerName("");
+      setChassis("");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Failed to register vehicle", {
+        description: err.message || "A database error occurred.",
+      });
+    }
   };
 
   const handleExportCSV = () => {

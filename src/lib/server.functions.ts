@@ -26,7 +26,7 @@ export const serverFetchViolations = createServerFn({ method: "GET" })
         .select("*")
         .order("detected_at", { ascending: false })
         .limit(limit);
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {
@@ -112,7 +112,7 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
         .select("*")
         .order("issued_at", { ascending: false })
         .limit(limit);
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {
@@ -195,7 +195,7 @@ export const serverFetchOfficers = createServerFn({ method: "GET" })
         .from("officers")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {
@@ -278,7 +278,7 @@ export const serverFetchCameras = createServerFn({ method: "GET" })
         .from("cameras")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {
@@ -362,7 +362,7 @@ export const serverFetchDispatches = createServerFn({ method: "GET" })
         .select("*")
         .order("created_at", { ascending: false })
         .limit(limit);
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {
@@ -595,7 +595,7 @@ export const serverFetchDisputes = createServerFn({ method: "GET" })
         .from("disputes")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (err) {

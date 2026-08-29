@@ -64,13 +64,7 @@ export type Officer = {
   citations_issued: number;
 };
 
-export let MOCK_OFFICERS: Officer[] = [
-  { id: "101", badge_number: "BADGE-101", full_name: "Juan Dela Cruz", rank: "Sergeant", unit: "Traffic Management", district: "District 6 (Culiat)", contact_number: "0917-123-4567", status: "active", on_duty: true, citations_issued: 145 },
-  { id: "102", badge_number: "BADGE-102", full_name: "Maria Santos", rank: "Officer II", unit: "Patrol / Commonwealth Grid", district: "District 6 (Culiat)", contact_number: "0920-555-1234", status: "active", on_duty: true, citations_issued: 89 },
-  { id: "103", badge_number: "BADGE-103", full_name: "Ramon Valderama", rank: "Master Sergeant", unit: "Mobile Interceptor Unit", district: "District 6 (Tandang Sora)", contact_number: "0919-444-9876", status: "active", on_duty: true, citations_issued: 210 },
-  { id: "104", badge_number: "BADGE-104", full_name: "Gabriel Mendoza", rank: "Officer I", unit: "DPOS Rapid Response", district: "District 6 (Visayas Ave)", contact_number: "0918-987-6543", status: "active", on_duty: false, citations_issued: 42 },
-  { id: "105", badge_number: "BADGE-105", full_name: "Corazon Aquino-Lim", rank: "Inspector", unit: "Traffic Supervision", district: "District 6 (Culiat)", contact_number: "0917-888-2345", status: "active", on_duty: true, citations_issued: 68 },
-];
+export let MOCK_OFFICERS: Officer[] = [];
 
 export function useOfficers() {
   const qc = useQueryClient();
@@ -97,13 +91,10 @@ export function useOfficers() {
     queryFn: async () => {
       try {
         const rows = await serverFetchOfficers();
-        if (rows && rows.length > 0) {
-          return rows as Officer[];
-        }
+        return (rows as Officer[]) || [];
       } catch {
-        // Fallback
+        return [];
       }
-      return MOCK_OFFICERS;
     },
   });
 }
@@ -119,21 +110,7 @@ export function useAddOfficer() {
       district: string;
       contact_number?: string;
     }) => {
-      const saved = await serverSaveOfficer({ data: input });
-      const off: Officer = {
-        id: (saved as any)?.id || `OFF-${Date.now()}`,
-        badge_number: input.badge_number,
-        full_name: input.full_name,
-        rank: input.rank,
-        unit: input.unit,
-        district: input.district,
-        contact_number: input.contact_number || null,
-        status: "active",
-        on_duty: true,
-        citations_issued: 0,
-      };
-      MOCK_OFFICERS.unshift(off);
-      return off;
+      return await serverSaveOfficer({ data: input });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["officers"] });
@@ -144,13 +121,9 @@ export function useAddOfficer() {
 export function useToggleOfficerDuty() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      const o = MOCK_OFFICERS.find((x) => x.id === id);
-      if (o) {
-        o.on_duty = !o.on_duty;
-        await serverToggleOfficerDuty({ data: { id, on_duty: o.on_duty } });
-      }
-      return o;
+    mutationFn: async ({ id, currentDuty }: { id: string, currentDuty: boolean }) => {
+      await serverToggleOfficerDuty({ data: { id, on_duty: !currentDuty } });
+      return { id, on_duty: !currentDuty };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["officers"] });
@@ -158,80 +131,7 @@ export function useToggleOfficerDuty() {
   });
 }
 
-export let MOCK_VIOLATIONS: Violation[] = [
-  {
-    id: "V-101",
-    plate_number: "NDB-8921",
-    violation_type: "Red Light",
-    location: "Commonwealth Ave / Tandang Sora",
-    confidence: 96,
-    status: "pending",
-    evidence_url: "/assets/violation-1.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1002",
-    detected_at: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
-  },
-  {
-    id: "V-102",
-    plate_number: "ABC-1234",
-    violation_type: "Illegal Parking",
-    location: "Visayas Ave near Central Market",
-    confidence: 94,
-    status: "pending",
-    evidence_url: "/assets/violation-2.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1001",
-    detected_at: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-  },
-  {
-    id: "V-103",
-    plate_number: "XYZ-987",
-    violation_type: "Counterflow",
-    location: "Tandang Sora Ave (Westbound)",
-    confidence: 91,
-    status: "pending",
-    evidence_url: "/assets/violation-3.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1003",
-    detected_at: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-  },
-  {
-    id: "V-104",
-    plate_number: "NBP-5412",
-    violation_type: "Yellow Box Infraction",
-    location: "Commonwealth Ave / Luzon Overpass",
-    confidence: 89,
-    status: "pending",
-    evidence_url: "/assets/violation-1.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1004",
-    detected_at: new Date(Date.now() - 1000 * 60 * 52).toISOString(),
-  },
-  {
-    id: "V-105",
-    plate_number: "CAS-3901",
-    violation_type: "Bus Lane Violation",
-    location: "EDSA Northbound QC Corridor",
-    confidence: 97,
-    status: "confirmed",
-    evidence_url: "/assets/violation-2.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1005",
-    detected_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-  },
-  {
-    id: "V-106",
-    plate_number: "WXY-1122",
-    violation_type: "No Helmet",
-    location: "Visayas Ave Intersection",
-    confidence: 72,
-    status: "dismissed",
-    evidence_url: "/assets/violation-3.jpg",
-    ai_detected: true,
-    camera_code: "QC-CAM-1001",
-    detected_at: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-  },
-];
+export let MOCK_VIOLATIONS: Violation[] = [];
 
 export function useViolations(limit = 50) {
   const qc = useQueryClient();
@@ -258,81 +158,17 @@ export function useViolations(limit = 50) {
     queryFn: async () => {
       try {
         const rows = await serverFetchViolations({ data: limit });
-        if (rows && rows.length > 0) {
-          return rows as Violation[];
-        }
+        return (rows as Violation[]) || [];
       } catch {
-        // Fallback
+        return [];
       }
-      return MOCK_VIOLATIONS.slice(0, limit);
     },
     staleTime: 5_000,
     refetchInterval: 15_000,
   });
 }
 
-export let MOCK_CITATIONS: Citation[] = [
-  {
-    id: "CIT-00129",
-    citation_number: "NOV-2026-QC-00129",
-    violation_id: "V-101",
-    plate_number: "NDB-8921",
-    vehicle_model: "Toyota Vios 1.3E (Silver)",
-    offense: "Red Light",
-    amount: 2000,
-    status: "unpaid",
-    officer_name: "AI Auto-Validator",
-    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-  },
-  {
-    id: "CIT-00135",
-    citation_number: "NOV-2026-QC-00135",
-    violation_id: "V-102",
-    plate_number: "ABC-1234",
-    vehicle_model: "Mitsubishi Mirage G4 (Gray)",
-    offense: "Illegal Parking",
-    amount: 1500,
-    status: "paid",
-    officer_name: "AI Auto-Validator",
-    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
-  },
-  {
-    id: "CIT-00142",
-    citation_number: "NOV-2026-QC-00142",
-    violation_id: "V-103",
-    plate_number: "XYZ-987",
-    vehicle_model: "Honda Civic 1.5 RS",
-    offense: "Counterflow",
-    amount: 2500,
-    status: "contested",
-    officer_name: "AI Auto-Validator",
-    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(),
-  },
-  {
-    id: "CIT-00150",
-    citation_number: "NOV-2026-QC-00150",
-    violation_id: "V-106",
-    plate_number: "CAS-3901",
-    vehicle_model: "Toyota Fortuner (Black)",
-    offense: "Bus Lane Violation",
-    amount: 5000,
-    status: "overdue",
-    officer_name: "AI Auto-Validator",
-    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 18).toISOString(),
-  },
-  {
-    id: "CIT-00164",
-    citation_number: "NOV-2026-QC-00164",
-    violation_id: "V-104",
-    plate_number: "NBP-5412",
-    vehicle_model: "Hyundai Tucson (White)",
-    offense: "Yellow Box Infraction",
-    amount: 1500,
-    status: "paid",
-    officer_name: "AI Auto-Validator",
-    issued_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(),
-  },
-];
+export let MOCK_CITATIONS: Citation[] = [];
 
 export function useCitations(limit = 50) {
   const qc = useQueryClient();
@@ -359,13 +195,10 @@ export function useCitations(limit = 50) {
     queryFn: async () => {
       try {
         const rows = await serverFetchCitations({ data: limit });
-        if (rows && rows.length > 0) {
-          return rows as Citation[];
-        }
+        return (rows as Citation[]) || [];
       } catch {
-        // Fallback
+        return [];
       }
-      return MOCK_CITATIONS.slice(0, limit);
     },
     staleTime: 5_000,
   });
@@ -382,9 +215,7 @@ export function useCitation(citationNumber: string) {
       } catch {
         // fallback
       }
-      const cit = MOCK_CITATIONS.find((c) => c.citation_number === citationNumber);
-      if (!cit) throw new Error("Citation not found");
-      return cit;
+      throw new Error("Citation not found");
     },
     enabled: !!citationNumber,
   });
@@ -403,7 +234,7 @@ export function useCreateCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewCitation) => {
-      const row = await serverSaveCitation({
+      return await serverSaveCitation({
         data: {
           violation_id: input.violation_id || null,
           plate_number: input.plate_number,
@@ -414,22 +245,6 @@ export function useCreateCitation() {
           officer_name: input.officer_name || "QC Enforcer",
         },
       });
-
-      const c: Citation = {
-        id: (row as any)?.id || "CIT-" + Math.floor(10000 + Math.random() * 90000),
-        citation_number: (row as any)?.citation_number || `NOV-2026-QC-${Math.floor(10000 + Math.random() * 90000)}`,
-        violation_id: input.violation_id ?? null,
-        plate_number: input.plate_number.toUpperCase(),
-        vehicle_model: input.vehicle_model ?? null,
-        offense: input.offense,
-        amount: input.amount,
-        status: "unpaid",
-        issued_at: (row as any)?.issued_at || new Date().toISOString(),
-        officer_name: input.officer_name ?? "QC Enforcer",
-      };
-
-      MOCK_CITATIONS.unshift(c);
-      return c;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citations"] });
@@ -444,11 +259,6 @@ export function useUpdateCitationStatus() {
       await serverUpdateCitationStatus({
         data: { citationNumber: citationId, status },
       });
-
-      const idx = MOCK_CITATIONS.findIndex((c) => c.citation_number === citationId);
-      if (idx !== -1) {
-        MOCK_CITATIONS[idx].status = status as any;
-      }
     },
     onSuccess: (_, { citationId }) => {
       qc.invalidateQueries({ queryKey: ["citations"] });
@@ -457,14 +267,7 @@ export function useUpdateCitationStatus() {
   });
 }
 
-export let MOCK_CAMERAS: Camera[] = [
-  { id: "CAM-1", code: "QC-CAM-1001", location: "Commonwealth Ave cor. Tandang Sora", status: "online", lat: 14.6563, lng: 121.0697 },
-  { id: "CAM-2", code: "QC-CAM-1002", location: "Commonwealth Ave (Luzon Overpass Eastbound)", status: "online", lat: 14.6723, lng: 121.0507 },
-  { id: "CAM-3", code: "QC-CAM-1003", location: "Visayas Ave near Central Market", status: "online", lat: 14.6623, lng: 121.0423 },
-  { id: "CAM-4", code: "QC-CAM-1004", location: "Mindanao Ave / Congressional Ext", status: "maintenance", lat: 14.6789, lng: 121.0345 },
-  { id: "CAM-5", code: "QC-CAM-1005", location: "EDSA Northbound QC Busway Corridor", status: "online", lat: 14.6512, lng: 121.0334 },
-  { id: "CAM-6", code: "QC-CAM-1006", location: "Culiat Elementary School Safety Zone", status: "offline", lat: 14.6645, lng: 121.0542 },
-];
+export let MOCK_CAMERAS: Camera[] = [];
 
 export function useCameras() {
   const qc = useQueryClient();
@@ -491,13 +294,10 @@ export function useCameras() {
     queryFn: async () => {
       try {
         const rows = await serverFetchCameras();
-        if (rows && rows.length > 0) {
-          return rows as Camera[];
-        }
+        return (rows as Camera[]) || [];
       } catch {
-        // fallback
+        return [];
       }
-      return MOCK_CAMERAS;
     },
   });
 }
@@ -507,7 +307,7 @@ export function useCreateCamera() {
   return useMutation({
     mutationFn: async (input: { location: string; lat?: number; lng?: number }) => {
       const code = `QC-CAM-${Math.floor(1000 + Math.random() * 9000)}`;
-      const row = await serverSaveCamera({
+      return await serverSaveCamera({
         data: {
           code,
           location: input.location,
@@ -516,18 +316,6 @@ export function useCreateCamera() {
           status: "online",
         },
       });
-
-      const c: Camera = {
-        id: (row as any)?.id || code,
-        code,
-        location: input.location,
-        lat: input.lat || 14.6563,
-        lng: input.lng || 121.0697,
-        status: "online",
-      };
-
-      MOCK_CAMERAS.push(c);
-      return c;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cameras"] });
@@ -540,13 +328,6 @@ export function useUpdateCamera() {
   return useMutation({
     mutationFn: async (input: { id: string; status?: string; location?: string }) => {
       await serverUpdateCamera({ data: input });
-
-      const cam = MOCK_CAMERAS.find((c) => c.id === input.id);
-      if (cam) {
-        if (input.status) cam.status = input.status;
-        if (input.location) cam.location = input.location;
-      }
-      return cam;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cameras"] });
