@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { serverFetchFinanceAnalytics } from "@/lib/server.functions";
 
 export type MonthlyRevenue = {
   month: string;
@@ -32,11 +33,37 @@ export function useFinanceAnalytics() {
   return useQuery({
     queryKey: ["finance-analytics"],
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 400));
+      const data = await serverFetchFinanceAnalytics();
+      const rawRev = data.revenue || [];
+      const rawBud = data.budget || [];
+
+      let revenue: MonthlyRevenue[] = rawRev.map((r: any) => ({
+        month: r.month,
+        citations: Number(r.citations),
+        towing: Number(r.towing),
+        evCharging: Number(r.ev_charging),
+      }));
+
+      // Fallback to mocks if DB is completely empty (for nice UI charts)
+      if (revenue.length === 0) {
+        revenue = MOCK_REVENUE_DATA;
+      }
+
+      let budget: BudgetAllocation[] = rawBud.map((b: any) => ({
+        category: b.category,
+        amount: Number(b.amount),
+      }));
+
+      if (budget.length === 0) {
+        budget = MOCK_BUDGET;
+      }
+
+      const ytdTotal = revenue.reduce((sum, r) => sum + r.citations + r.towing + r.evCharging, 0);
+
       return {
-        revenue: MOCK_REVENUE_DATA,
-        budget: MOCK_BUDGET,
-        ytdTotal: 6690000,
+        revenue,
+        budget,
+        ytdTotal,
         projectedSavings: 2400000,
       };
     }

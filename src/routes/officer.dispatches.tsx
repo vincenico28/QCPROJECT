@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { timeAgo } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
+import { useDispatches, useUpdateDispatchStatus, DispatchStatus } from "@/lib/data/dispatch";
+
 export const Route = createFileRoute("/officer/dispatches")({
   head: () => ({
     meta: [{ title: "My Dispatches · Culiat Traffic Ops" }],
@@ -13,51 +15,10 @@ export const Route = createFileRoute("/officer/dispatches")({
   component: DispatchesPage,
 });
 
-const MOCK_DISPATCHES = [
-  {
-    id: "DSP-001",
-    location: "Commonwealth Ave & Tandang Sora",
-    status: "assigned",
-    instructions: "Respond to reported collision blocking 2 lanes.",
-    created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    officer_id: "104",
-    violation: { violation_type: "Accident / Obstruction", plate_number: "UNKNOWN" }
-  },
-  {
-    id: "DSP-002",
-    location: "Quezon Memorial Circle",
-    status: "in_progress",
-    instructions: "Direct traffic, broken traffic light.",
-    created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    officer_id: "104",
-    violation: null
-  }
-];
-
 function DispatchesPage() {
   const { user } = useAuth();
-  const qc = useQueryClient();
-
-  const { data: dispatches = [], isLoading } = useQuery({
-    queryKey: ["my_dispatches", user?.id],
-    queryFn: async () => {
-      await new Promise(r => setTimeout(r, 500));
-      return MOCK_DISPATCHES;
-    },
-  });
-
-  const updateDispatch = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      await new Promise(r => setTimeout(r, 400));
-      const d = MOCK_DISPATCHES.find(x => x.id === id);
-      if (d) d.status = status;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["my_dispatches"] });
-      toast.success("Dispatch status updated");
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const { data: dispatches = [], isLoading } = useDispatches(20);
+  const updateDispatch = useUpdateDispatchStatus();
 
   if (isLoading) {
     return (
@@ -115,11 +76,13 @@ function DispatchesPage() {
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-white",
-                    dispatch.status === "assigned"
-                      ? "bg-warning"
-                      : dispatch.status === "in_progress"
-                      ? "bg-primary"
-                      : "bg-success"
+                    dispatch.status === "queued"
+                      ? "bg-amber-500/80"
+                      : dispatch.status === "en_route"
+                      ? "bg-blue-600"
+                      : dispatch.status === "on_scene"
+                      ? "bg-purple-600"
+                      : "bg-emerald-600"
                   )}
                 >
                   {dispatch.status.replace("_", " ")}
@@ -128,34 +91,41 @@ function DispatchesPage() {
 
               <div className="py-2 text-sm text-foreground">
                 <p>{dispatch.instructions || "No specific instructions provided."}</p>
-                {dispatch.violation && (
-                  <div className="mt-3 rounded-lg bg-panel-elevated p-3">
-                    <p className="font-mono text-[10px] font-semibold text-subtle uppercase">Target Violation</p>
-                    <p className="text-xs font-bold">{dispatch.violation.violation_type}</p>
-                    <p className="text-xs">{dispatch.violation.plate_number}</p>
-                  </div>
+                {dispatch.officer_name && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Assigned: <span className="text-white font-medium">{dispatch.officer_name}</span> (Badge #{dispatch.badge_number || "N/A"})
+                  </p>
                 )}
               </div>
 
-              {dispatch.status !== "resolved" && (
+              {dispatch.status !== "resolved" && dispatch.status !== "cancelled" && (
                 <div className="mt-4 flex gap-2">
-                  {dispatch.status === "assigned" && (
+                  {dispatch.status === "queued" && (
                     <button
-                      onClick={() => updateDispatch.mutate({ id: dispatch.id, status: "in_progress" })}
+                      onClick={() => updateDispatch.mutate({ id: dispatch.id, status: "en_route" })}
                       disabled={updateDispatch.isPending}
-                      className="flex flex-1 items-center justify-center rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20"
+                      className="flex flex-1 items-center justify-center rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
                     >
-                      Accept
+                      Acknowledge & En Route
                     </button>
                   )}
-                  {dispatch.status === "in_progress" && (
+                  {dispatch.status === "en_route" && (
+                    <button
+                      onClick={() => updateDispatch.mutate({ id: dispatch.id, status: "on_scene" })}
+                      disabled={updateDispatch.isPending}
+                      className="flex flex-1 items-center justify-center rounded-lg bg-purple-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-600/20 hover:bg-purple-500 transition-colors"
+                    >
+                      Mark Arrived On Scene
+                    </button>
+                  )}
+                  {dispatch.status === "on_scene" && (
                     <button
                       onClick={() => updateDispatch.mutate({ id: dispatch.id, status: "resolved" })}
                       disabled={updateDispatch.isPending}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-success py-2.5 text-sm font-semibold text-success-foreground shadow-lg shadow-success/20"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 transition-colors"
                     >
                       <CheckCircle2 className="size-4" />
-                      Complete
+                      Resolve Incident
                     </button>
                   )}
                 </div>

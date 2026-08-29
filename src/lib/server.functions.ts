@@ -482,6 +482,24 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
     const receiptNumber = `OR-2026-${Math.floor(100000 + Math.random() * 900000)}`;
     const paidAt = new Date().toISOString();
 
+    const { error: insertErr } = await supabaseAdmin
+      .from("payments")
+      .insert({
+        citation_id: data.citationNumber,
+        plate_number: data.plateNumber,
+        payer_name: data.payerName,
+        amount: data.amount,
+        method: data.paymentMethod,
+        reference_number: receiptNumber,
+        status: "pending_verification",
+        submitted_date: paidAt,
+      });
+
+    if (insertErr) {
+      console.error("[Supabase Error: Payment Insert]", insertErr);
+      // We log but don't strictly fail the user if the payment log fails for some reason
+    }
+
     const { error } = await supabaseAdmin
       .from("citations")
       .update({ status: "paid" })
@@ -758,5 +776,87 @@ export const serverSaveCitizenReport = createServerFn({ method: "POST" })
     }
 
     return row;
+  });
+
+// -------------------------------------------------------------
+// 10. FINANCE & PAYMENTS
+// -------------------------------------------------------------
+export const serverFetchFinanceQueue = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const [paymentsReq, refundsReq] = await Promise.all([
+        supabaseAdmin.from("payments").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("refunds").select("*").order("created_at", { ascending: false })
+      ]);
+      return {
+        pendingPayments: paymentsReq.data || [],
+        pendingRefunds: refundsReq.data || []
+      };
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Finance Queue]", err);
+      return { pendingPayments: [], pendingRefunds: [] };
+    }
+  });
+
+const verifyPaymentSchema = z.object({
+  paymentId: z.string(),
+  citationId: z.string(),
+});
+
+export const serverVerifyPayment = createServerFn({ method: "POST" })
+  .validator((data: unknown) => verifyPaymentSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    // 1. Update Payment status
+    const { error: payErr } = await supabaseAdmin
+      .from("payments")
+      .update({ status: "verified" })
+      .eq("id", data.paymentId);
+    if (payErr) throw new Error(`Database Error: ${payErr.message}`);
+
+    // 2. Update Citation status
+    // Note: citation_id in the mock was actually citation_number (e.g. NOV-2026-QC-00129)
+    await supabaseAdmin
+      .from("citations")
+      .update({ status: "paid" })
+      .eq("citation_number", data.citationId);
+
+    return { success: true };
+  });
+
+const processRefundSchema = z.object({
+  refundId: z.string(),
+});
+
+export const serverProcessRefund = createServerFn({ method: "POST" })
+  .validator((data: unknown) => processRefundSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("refunds")
+      .update({ status: "processed", approved_date: new Date().toISOString() })
+      .eq("id", data.refundId);
+    if (error) throw new Error(`Database Error: ${error.message}`);
+    return { success: true };
+  });
+
+export const serverFetchFinanceAnalytics = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const [revReq, budReq] = await Promise.all([
+        supabaseAdmin.from("revenue_reports").select("*"),
+        supabaseAdmin.from("budget_allocations").select("*")
+      ]);
+      return {
+        revenue: revReq.data || [],
+        budget: budReq.data || [],
+      };
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Finance Analytics]", err);
+      return { revenue: [], budget: [] };
+    }
   });
 

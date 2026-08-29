@@ -50,7 +50,7 @@ function FinanceDashboard() {
 
   const handleVerify = (payment: PaymentQueueItem) => {
     verifyPayment.mutate(
-      { paymentId: payment.id },
+      { paymentId: payment.id, citationId: payment.citationId },
       {
         onSuccess: () => {
           toast.success(`Payment ${payment.referenceNumber} Verified`, {

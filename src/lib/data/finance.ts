@@ -1,16 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { serverUpdateCitationStatus } from "@/lib/server.functions";
+import { 
+  serverUpdateCitationStatus,
+  serverFetchFinanceQueue,
+  serverVerifyPayment,
+  serverProcessRefund,
+} from "@/lib/server.functions";
 
 export type PaymentQueueItem = {
   id: string;
   citationId: string;
   plateNumber: string;
+  payerName?: string;
   amount: number;
-  method: "gcash" | "maya" | "landbank" | "over-the-counter";
+  method: "gcash" | "maya" | "landbank" | "over-the-counter" | string;
   referenceNumber: string;
   proofUrl: string;
-  status: "pending_verification" | "verified" | "rejected";
+  status: "pending_verification" | "verified" | "rejected" | string;
   submittedDate: string;
+  timestamp: string;
 };
 
 export type RefundQueueItem = {
@@ -20,7 +27,7 @@ export type RefundQueueItem = {
   amount: number;
   claimant: string;
   reason: string;
-  status: "pending" | "processed" | "rejected";
+  status: "pending" | "processed" | "rejected" | string;
   approvedDate: string;
 };
 
@@ -35,95 +42,74 @@ export type CashDrawer = {
   shiftStatus: "OPEN" | "SETTLED";
 };
 
-let MOCK_PAYMENTS: PaymentQueueItem[] = [
-  {
-    id: "PAY-001",
-    citationId: "NOV-2026-QC-00129",
-    plateNumber: "NDB-8921",
-    amount: 2000,
-    method: "gcash",
-    referenceNumber: "GCASH-9821039812",
-    proofUrl: "/assets/violation-1.jpg",
-    status: "pending_verification",
-    submittedDate: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
-  },
-  {
-    id: "PAY-002",
-    citationId: "NOV-2026-QC-00142",
-    plateNumber: "XYZ-987",
-    amount: 2500,
-    method: "maya",
-    referenceNumber: "MAYA-7712398412",
-    proofUrl: "/assets/violation-3.jpg",
-    status: "pending_verification",
-    submittedDate: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-  },
-  {
-    id: "PAY-003",
-    citationId: "NOV-2026-QC-00150",
-    plateNumber: "CAS-3901",
-    amount: 5000,
-    method: "over-the-counter",
-    referenceNumber: "OTC-CULIAT-88129",
-    proofUrl: "/assets/violation-2.jpg",
-    status: "verified",
-    submittedDate: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-  },
-];
-
-let MOCK_REFUNDS: RefundQueueItem[] = [
-  {
-    id: "REF-001",
-    citationId: "NOV-2026-QC-00042",
-    plateNumber: "CAR-9912",
-    amount: 2000,
-    claimant: "Dr. Manuel Quezon",
-    reason: "TAB Appeal Dismissal",
-    status: "pending",
-    approvedDate: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-  {
-    id: "REF-002",
-    citationId: "NOV-2026-QC-00018",
-    plateNumber: "WXY-1122",
-    amount: 1500,
-    claimant: "Ana Dela Rosa",
-    reason: "Overpayment",
-    status: "pending",
-    approvedDate: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-  },
-];
-
-let MOCK_DRAWER: CashDrawer = {
-  openingBalance: 5000,
-  cashCollected: 18500,
-  digitalCollected: 42000,
-  totalVerified: 60500,
-  pendingAmount: 4500,
-  refundAmount: 3500,
-  cashierName: "Treasury Officer M. Santos",
-  shiftStatus: "OPEN",
-};
+let DRAWER_SETTLED = false;
 
 export function useFinanceQueue() {
   return useQuery({
     queryKey: ["finance-queue"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      const data = await serverFetchFinanceQueue();
+      const p = data.pendingPayments || [];
+      const r = data.pendingRefunds || [];
+      
+      const payments: PaymentQueueItem[] = p.map((row: any) => ({
+        id: row.id,
+        citationId: row.citation_id,
+        plateNumber: row.plate_number,
+        payerName: row.payer_name || "Registered Vehicle Owner",
+        amount: Number(row.amount),
+        method: row.method,
+        referenceNumber: row.reference_number,
+        proofUrl: row.proof_url || "",
+        status: row.status,
+        submittedDate: row.submitted_date || row.created_at,
+        timestamp: row.submitted_date || row.created_at,
+      }));
+
+      const refunds: RefundQueueItem[] = r.map((row: any) => ({
+        id: row.id,
+        citationId: row.citation_id,
+        plateNumber: row.plate_number,
+        claimant: row.claimant,
+        reason: row.reason,
+        status: row.status,
+        approvedDate: row.approved_date || row.created_at,
+      }));
+
+      // Calculate the drawer base state + dynamic state from payments/refunds
+      const openingBalance = 5000;
+      
+      const cashCollected = payments
+        .filter(x => x.status === "verified" && x.method === "over-the-counter")
+        .reduce((sum, x) => sum + x.amount, 0);
+
+      const digitalCollected = payments
+        .filter(x => x.status === "verified" && x.method !== "over-the-counter")
+        .reduce((sum, x) => sum + x.amount, 0);
+
+      const totalVerified = cashCollected + digitalCollected;
+
+      const pendingAmount = payments
+        .filter(x => x.status === "pending_verification")
+        .reduce((sum, x) => sum + x.amount, 0);
+
+      const refundAmount = refunds
+        .filter(x => x.status === "pending")
+        .reduce((sum, x) => sum + x.amount, 0);
+
       return {
-        pendingPayments: MOCK_PAYMENTS,
-        pendingRefunds: MOCK_REFUNDS,
+        pendingPayments: payments.filter(x => x.status === "pending_verification"),
+        pendingRefunds: refunds.filter(x => x.status === "pending"),
         dailyDrawer: {
-          ...MOCK_DRAWER,
-          pendingAmount: MOCK_PAYMENTS.filter((p) => p.status === "pending_verification").reduce(
-            (sum, p) => sum + p.amount,
-            0
-          ),
-          refundAmount: MOCK_REFUNDS.filter((r) => r.status === "pending").reduce(
-            (sum, r) => sum + r.amount,
-            0
-          ),
-        },
+          openingBalance,
+          cashCollected,
+          digitalCollected,
+          totalVerified,
+          pendingAmount,
+          refundAmount,
+          cashierName: "Treasury Officer M. Santos",
+          shiftStatus: DRAWER_SETTLED ? "SETTLED" : "OPEN",
+        } as CashDrawer,
       };
     },
   });
@@ -132,28 +118,11 @@ export function useFinanceQueue() {
 export function useVerifyPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ paymentId }: { paymentId: string }) => {
-      const p = MOCK_PAYMENTS.find((x) => x.id === paymentId);
-      if (p) {
-        p.status = "verified";
-        MOCK_DRAWER.totalVerified += p.amount;
-        if (p.method === "over-the-counter") {
-          MOCK_DRAWER.cashCollected += p.amount;
-        } else {
-          MOCK_DRAWER.digitalCollected += p.amount;
-        }
-
-        // Persist citation status update to Supabase
-        await serverUpdateCitationStatus({
-          data: { citationNumber: p.citationId, status: "paid" },
-        });
-      }
-      return p;
+    mutationFn: async ({ paymentId, citationId }: { paymentId: string, citationId: string }) => {
+      await serverVerifyPayment({ data: { paymentId, citationId } });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });
-      qc.invalidateQueries({ queryKey: ["citations"] });
-      qc.invalidateQueries({ queryKey: ["violations"] });
     },
   });
 }
@@ -162,11 +131,7 @@ export function useProcessRefund() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ refundId }: { refundId: string }) => {
-      const r = MOCK_REFUNDS.find((x) => x.id === refundId);
-      if (r) {
-        r.status = "processed";
-      }
-      return r;
+      await serverProcessRefund({ data: { refundId } });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });
@@ -178,8 +143,8 @@ export function useSettleCashDrawer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      MOCK_DRAWER.shiftStatus = "SETTLED";
-      return MOCK_DRAWER;
+      DRAWER_SETTLED = true;
+      return { success: true, shiftStatus: "SETTLED" };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });

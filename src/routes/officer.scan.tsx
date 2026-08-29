@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { Search, Loader2, ArrowLeft, LayoutDashboard, QrCode } from "lucide-react";
 import { toast } from "sonner";
-import { formatPeso, timeAgo, MOCK_CITATIONS } from "@/lib/data/traffic";
+import { formatPeso, timeAgo } from "@/lib/data/traffic";
+import { serverFetchCitations } from "@/lib/server.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/scan")({
@@ -51,19 +52,28 @@ function ScannerPage() {
     // We expect the QR code to contain the citation_number or we fallback to plate search
     async function lookup(query: string) {
       setLoading(true);
-      await new Promise(r => setTimeout(r, 600));
-      const data = MOCK_CITATIONS.find(c => 
-        c.citation_number.toLowerCase() === query.toLowerCase() || 
-        c.plate_number.toLowerCase() === query.toLowerCase()
-      );
+      try {
+        const rows = await serverFetchCitations({ data: 100 });
+        const cleanQuery = query.trim().toLowerCase();
+        const data = rows?.find((c: any) => 
+          c.citation_number?.toLowerCase() === cleanQuery || 
+          c.plate_number?.toLowerCase() === cleanQuery ||
+          cleanQuery.includes(c.citation_number?.toLowerCase() || "___")
+        );
 
-
-      if (!data) {
-        toast.error("No active citation found for this reference.");
-      } else {
-        setCitation(data);
+        if (!data) {
+          toast.error("No active citation found for this reference.");
+          setCitation(null);
+        } else {
+          setCitation(data);
+          toast.success("Citation record loaded successfully");
+        }
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to query database for citation");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     lookup(scanResult);
   }, [scanResult]);

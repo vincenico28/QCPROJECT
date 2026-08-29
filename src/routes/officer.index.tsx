@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut, LayoutDashboard, ArrowLeft } from "lucide-react";
+import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useDispatches } from "@/lib/data/dispatch";
 
 export const Route = createFileRoute("/officer/")({
   head: () => ({
@@ -13,6 +14,10 @@ export const Route = createFileRoute("/officer/")({
 
 function OfficerTerminalHome() {
   const { user } = useAuth();
+  const { data: dispatches = [] } = useDispatches();
+  const activeDispatchesCount = dispatches.filter(
+    (d) => d.status === "queued" || d.status === "en_route" || d.status === "on_scene"
+  ).length;
   
   return (
     <div className="flex h-screen flex-col bg-[#0b0c10] text-white">
@@ -97,11 +102,13 @@ function OfficerTerminalHome() {
               </div>
               <div>
                 <h3 className="font-bold text-white">Active Dispatches</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">2 pending tasks from HQ</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {activeDispatchesCount} pending {activeDispatchesCount === 1 ? "task" : "tasks"} from HQ
+                </p>
               </div>
             </div>
             <div className="flex size-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
-              2
+              {activeDispatchesCount}
             </div>
          </Link>
       </main>

@@ -507,6 +507,132 @@ export type Database = {
         };
         Relationships: [];
       };
+      payments: {
+        Row: {
+          amount: number;
+          citation_id: string;
+          created_at: string;
+          id: string;
+          method: string;
+          payer_name: string | null;
+          plate_number: string;
+          proof_url: string | null;
+          reference_number: string;
+          status: string;
+          submitted_date: string;
+        };
+        Insert: {
+          amount: number;
+          citation_id: string;
+          created_at?: string;
+          id?: string;
+          method: string;
+          payer_name?: string | null;
+          plate_number: string;
+          proof_url?: string | null;
+          reference_number: string;
+          status?: string;
+          submitted_date?: string;
+        };
+        Update: {
+          amount?: number;
+          citation_id?: string;
+          created_at?: string;
+          id?: string;
+          method?: string;
+          payer_name?: string | null;
+          plate_number?: string;
+          proof_url?: string | null;
+          reference_number?: string;
+          status?: string;
+          submitted_date?: string;
+        };
+        Relationships: [];
+      };
+      refunds: {
+        Row: {
+          amount: number;
+          approved_date: string | null;
+          citation_id: string;
+          claimant: string;
+          created_at: string;
+          id: string;
+          plate_number: string;
+          reason: string;
+          status: string;
+        };
+        Insert: {
+          amount: number;
+          approved_date?: string | null;
+          citation_id: string;
+          claimant: string;
+          created_at?: string;
+          id?: string;
+          plate_number: string;
+          reason: string;
+          status?: string;
+        };
+        Update: {
+          amount?: number;
+          approved_date?: string | null;
+          citation_id?: string;
+          claimant?: string;
+          created_at?: string;
+          id?: string;
+          plate_number?: string;
+          reason?: string;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      revenue_reports: {
+        Row: {
+          citations: number;
+          created_at: string;
+          ev_charging: number;
+          id: string;
+          month: string;
+          towing: number;
+        };
+        Insert: {
+          citations?: number;
+          created_at?: string;
+          ev_charging?: number;
+          id?: string;
+          month: string;
+          towing?: number;
+        };
+        Update: {
+          citations?: number;
+          created_at?: string;
+          ev_charging?: number;
+          id?: string;
+          month?: string;
+          towing?: number;
+        };
+        Relationships: [];
+      };
+      budget_allocations: {
+        Row: {
+          amount: number;
+          category: string;
+          created_at: string;
+          id: string;
+        };
+        Insert: {
+          amount: number;
+          category: string;
+          created_at?: string;
+          id?: string;
+        };
+        Update: {
+          amount?: number;
+          category?: string;
+          created_at?: string;
+          id?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
