@@ -133,7 +133,7 @@ function AnalyticsPage() {
     };
   }, [scopedViolations, scopedCitations]);
 
-  function exportReport() {
+  async function exportReport() {
     const rows = [
       ["date", "detections", "citations", "revenue_php"],
       ...trend.map((t) => [t.day, t.detections, t.citations, t.revenue]),
@@ -145,6 +145,19 @@ function AnalyticsPage() {
     a.download = `qc-enforcement-analytics-${range}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Operations Analyst",
+        actor_role: "admin",
+        action: "ANALYTICS_REPORT_EXPORTED",
+        target_resource: `Range: ${range}`,
+        details: `Exported ${rows.length - 1} daily records.`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
   }
 
   return (
