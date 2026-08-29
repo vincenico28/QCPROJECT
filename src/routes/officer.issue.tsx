@@ -37,6 +37,7 @@ function IssuePage() {
       {
         violation_id: null,
         plate_number: plate,
+        vehicle_model: model || null,
         offense,
         amount,
         officer_name: user?.email ?? "Unknown Officer",

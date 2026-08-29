@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export type OfficerShift = {
   id: string;
@@ -44,7 +45,29 @@ export function useOfficerShifts() {
   return useQuery({
     queryKey: ["officer-shifts"],
     queryFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      try {
+        const { data: officers } = await supabase
+          .from("officers")
+          .select("*")
+          .eq("on_duty", true);
+
+        if (officers && officers.length > 0) {
+          return officers.map((o: any, i: number) => ({
+            id: `SH-${o.id.substring(0, 6).toUpperCase()}`,
+            badgeNumber: o.badge_number,
+            shiftStart: new Date(new Date().setHours(7, 0, 0, 0)).toISOString(),
+            shiftEnd: null,
+            location: [
+              14.6548 + (i * 0.008) * (i % 2 === 0 ? 1 : -1),
+              121.0536 + (i * 0.006) * (i % 2 === 0 ? -1 : 1),
+            ] as [number, number],
+            currentTask: `Assigned to ${o.unit || "Sector Patrol"}`,
+            batteryLevel: 75 + ((i * 7) % 25),
+          }));
+        }
+      } catch (err) {
+        console.warn(err);
+      }
       return MOCK_SHIFTS;
     },
   });
