@@ -112,9 +112,23 @@ function CameraDetailPage() {
     );
   }, [detections, camera?.status, code, health.latency, health.firmware]);
 
-  function runAction(id: string, label: string, done: string) {
+  async function runAction(id: string, label: string, done: string) {
     setBusy(id);
     toast.loading(label, { id });
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Hardware Diagnostics Tech",
+        actor_role: role,
+        action: `CAMERA_ACTION_${id.toUpperCase()}`,
+        target_resource: `Node: ${camera?.code || code}`,
+        details: label,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
+
     window.setTimeout(() => {
       setBusy(null);
       toast.success(done, { id });
@@ -308,7 +322,7 @@ function CameraDetailPage() {
                   )
                 }
               />
-              {(role === "admin" || role === "dispatcher") && (
+              {(role === "super_admin" || role === "admin" || role === "dispatcher") && (
                 <ActionButton
                   icon={Power}
                   label={camera.status === "online" ? "Take offline" : "Bring online"}
