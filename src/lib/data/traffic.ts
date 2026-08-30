@@ -123,6 +123,19 @@ export function useToggleOfficerDuty() {
   return useMutation({
     mutationFn: async ({ id, currentDuty }: { id: string, currentDuty: boolean }) => {
       await serverToggleOfficerDuty({ data: { id, on_duty: !currentDuty } });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Enforcer Dispatch System",
+          actor_role: "officer",
+          action: !currentDuty ? "OFFICER_STATUS_ON_DUTY" : "OFFICER_STATUS_OFF_DUTY",
+          target_resource: `Officer ID: ${id}`,
+          details: `Shift status changed to ${!currentDuty ? "ON DUTY (ACTIVE PATROL)" : "OFF DUTY"}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
       return { id, on_duty: !currentDuty };
     },
     onSuccess: () => {

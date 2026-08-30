@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut, LayoutDashboard } from "lucide-react";
+import { QrCode, FileSignature, RadioReceiver, ShieldCheck, LogOut, LayoutDashboard, Power, FileCheck2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useDispatches } from "@/lib/data/dispatch";
+import { useOfficers, useToggleOfficerDuty, useCitations } from "@/lib/data/traffic";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/")({
   head: () => ({
@@ -14,10 +16,41 @@ export const Route = createFileRoute("/officer/")({
 
 function OfficerTerminalHome() {
   const { user } = useAuth();
+  const { data: officers = [] } = useOfficers();
   const { data: dispatches = [] } = useDispatches();
+  const { data: citations = [] } = useCitations(100);
+  const toggleDuty = useToggleOfficerDuty();
+
+  const currentOfficer = officers.find(
+    (o) => o.badge_number.toLowerCase() === user?.email?.split("@")[0].toLowerCase()
+  ) || officers[0];
+
+  const isOnDuty = currentOfficer ? Boolean(currentOfficer.on_duty) : true;
+
   const activeDispatchesCount = dispatches.filter(
     (d) => d.status === "queued" || d.status === "en_route" || d.status === "on_scene"
   ).length;
+
+  const todayCitationsCount = citations.filter(
+    (c) => c.officer_name?.toLowerCase().includes(user?.email?.split("@")[0].toLowerCase() || "enforcer")
+  ).length;
+
+  const handleToggleDuty = () => {
+    if (!currentOfficer) return;
+    toggleDuty.mutate(
+      { id: currentOfficer.id, currentDuty: isOnDuty },
+      {
+        onSuccess: (res) => {
+          toast.success(
+            res.on_duty
+              ? "Status changed to ON DUTY. GPS Telemetry Active."
+              : "Status changed to OFF DUTY. Rest Shift Logged."
+          );
+        },
+        onError: () => toast.error("Failed to update duty status"),
+      }
+    );
+  };
   
   return (
     <div className="flex h-screen flex-col bg-[#0b0c10] text-white">
@@ -29,7 +62,9 @@ function OfficerTerminalHome() {
           </div>
           <div>
             <h1 className="text-lg font-bold">Field Terminal</h1>
-            <p className="text-xs text-muted-foreground">Officer {user?.email?.split('@')[0] || 'Badge 104'}</p>
+            <p className="text-xs text-muted-foreground">
+              {currentOfficer ? `${currentOfficer.full_name} · Badge #${currentOfficer.badge_number}` : `Officer ${user?.email?.split('@')[0] || 'Badge 104'}`}
+            </p>
           </div>
         </div>
 
@@ -58,10 +93,32 @@ function OfficerTerminalHome() {
 
       {/* Main Actions */}
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
-         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wider text-blue-400">Current Status</p>
-            <h2 className="mt-1 text-2xl font-black text-white">ON PATROL</h2>
-            <p className="text-sm text-muted-foreground mt-1">Sector: Commonwealth Ave</p>
+         <div className={cn(
+           "rounded-xl border p-4 text-center transition-all",
+           isOnDuty ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"
+         )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Officer Shift Telemetry</span>
+              <button
+                onClick={handleToggleDuty}
+                disabled={toggleDuty.isPending}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all shadow-sm",
+                  isOnDuty
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                    : "bg-amber-500 text-black hover:bg-amber-600"
+                )}
+              >
+                <Power className="size-3" />
+                {isOnDuty ? "ON DUTY (ACTIVE)" : "OFF DUTY (REST)"}
+              </button>
+            </div>
+            <h2 className="mt-2 text-2xl font-black text-white">
+              {isOnDuty ? "ACTIVE ON PATROL" : "OFF DUTY / STANDBY"}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sector: {currentOfficer?.district || "District 6 - Culiat"} · Unit {currentOfficer?.unit || "QC-ENF"}
+            </p>
          </div>
 
          <div className="grid grid-cols-2 gap-4">
@@ -74,7 +131,7 @@ function OfficerTerminalHome() {
               </div>
               <div>
                 <h3 className="font-bold text-white">Scan QR</h3>
-                <p className="text-[10px] text-muted-foreground mt-1">Verify License / Apprehension</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Verify Notice / Apprehension</p>
               </div>
             </Link>
 
@@ -111,6 +168,19 @@ function OfficerTerminalHome() {
               {activeDispatchesCount}
             </div>
          </Link>
+
+         <div className="rounded-2xl border border-white/10 bg-[#12141a] p-4 shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-full bg-primary/20 text-primary">
+                <FileCheck2 className="size-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Citations Logged</h4>
+                <p className="text-xs text-muted-foreground">Assigned or issued by your unit</p>
+              </div>
+            </div>
+            <span className="font-mono text-lg font-bold text-primary">{todayCitationsCount}</span>
+         </div>
       </main>
     </div>
   );
