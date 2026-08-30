@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useOfficers } from "@/lib/data/traffic";
 import { useOfficerShifts } from "@/lib/data/officer-shifts";
 import { Loader2, MapPin, Battery, Clock, Radio, Activity } from "lucide-react";
@@ -107,9 +107,19 @@ function OfficerShiftsPage() {
                  return (
                    <Marker key={shift.id} position={shift.location}>
                      <Popup className="custom-popup">
-                       <div className="p-1">
-                         <p className="font-bold text-foreground">{officer.full_name}</p>
-                         <p className="text-xs text-muted-foreground mt-1">{shift.currentTask}</p>
+                       <div className="p-2 min-w-[160px]">
+                         <p className="font-bold text-foreground text-sm">{officer.full_name}</p>
+                         <p className="text-xs text-muted-foreground mt-0.5">Badge #{officer.badge_number} • {officer.unit}</p>
+                         <p className="text-xs text-foreground mt-2 font-medium bg-muted/30 p-1 rounded">{shift.currentTask}</p>
+                         <div className="mt-2 pt-2 border-t border-border">
+                           <Link
+                             to="/officers/$badge"
+                             params={{ badge: officer.badge_number }}
+                             className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                           >
+                             View Officer Profile →
+                           </Link>
+                         </div>
                        </div>
                      </Popup>
                    </Marker>
