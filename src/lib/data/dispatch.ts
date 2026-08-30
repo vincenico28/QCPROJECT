@@ -84,7 +84,7 @@ export function useCreateDispatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewDispatch) => {
-      return await serverSaveDispatch({
+      const res = await serverSaveDispatch({
         data: {
           officer_id: input.officer_id || null,
           officer_name: input.officer_name || null,
@@ -95,6 +95,20 @@ export function useCreateDispatch() {
           instructions: input.instructions || null,
         },
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Central Dispatcher",
+          actor_role: "dispatcher",
+          action: "DISPATCH_UNIT_ASSIGNED",
+          target_resource: `Officer: ${input.officer_name || "Unassigned Unit"}`,
+          details: `Location: ${input.location}, Priority: ${input.priority.toUpperCase()}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      return res;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatches"] }),
   });
@@ -107,6 +121,18 @@ export function useUpdateDispatchStatus() {
       await serverUpdateDispatchStatus({
         data: { id, status },
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Field Unit / Dispatcher",
+          actor_role: "dispatcher",
+          action: `DISPATCH_STATUS_${status.toUpperCase()}`,
+          target_resource: `Dispatch ID: ${id}`,
+          details: `Progressed to ${status.toUpperCase()}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatches"] }),
   });

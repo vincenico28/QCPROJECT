@@ -333,7 +333,7 @@ export function useCreateCamera() {
   return useMutation({
     mutationFn: async (input: { location: string; lat?: number; lng?: number }) => {
       const code = `QC-CAM-${Math.floor(1000 + Math.random() * 9000)}`;
-      return await serverSaveCamera({
+      const res = await serverSaveCamera({
         data: {
           code,
           location: input.location,
@@ -342,6 +342,20 @@ export function useCreateCamera() {
           status: "online",
         },
       });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Grid Operations Engineer",
+          actor_role: "admin",
+          action: "CAMERA_NODE_DEPLOYED",
+          target_resource: `Node: ${code}`,
+          details: `Location: ${input.location} (Lat: ${input.lat || 14.6563}, Lng: ${input.lng || 121.0697})`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      return res;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cameras"] });
@@ -354,6 +368,18 @@ export function useUpdateCamera() {
   return useMutation({
     mutationFn: async (input: { id: string; status?: string; location?: string }) => {
       await serverUpdateCamera({ data: input });
+
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Grid Operations Engineer",
+          actor_role: "admin",
+          action: "CAMERA_NODE_UPDATED",
+          target_resource: `Camera ID: ${input.id}`,
+          details: `Status: ${input.status || "unchanged"}, Location: ${input.location || "unchanged"}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cameras"] });

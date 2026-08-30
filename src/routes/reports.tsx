@@ -59,7 +59,7 @@ function ReportsPage() {
 
   const { data, isLoading } = useReportSummary(dateRange);
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     if (!data) return;
     const csvContent = generateReportCsv(data);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -75,6 +75,19 @@ function ReportsPage() {
     link.click();
     document.body.removeChild(link);
     toast.success("Executive CSV report exported successfully!");
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.from("audit_logs").insert({
+        actor_name: "Executive Compliance Officer",
+        actor_role: "admin",
+        action: "EXECUTIVE_REPORT_EXPORTED_CSV",
+        target_resource: "Compliance & Revenue Audit",
+        details: `Exported timeframe: ${timeframe}`,
+      });
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   const handlePrint = () => {

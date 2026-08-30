@@ -534,6 +534,20 @@ export function useSubmitHazardReport() {
       // Give 50 eco-reward tokens for reporting traffic hazards
       citizen.tokens = (citizen.tokens || 0) + 50;
       saveCitizensToStorage(all);
+
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        await supabase.from("audit_logs").insert({
+          actor_name: citizen.fullName,
+          actor_role: "citizen",
+          action: "CITIZEN_HAZARD_REPORT_SUBMITTED",
+          target_resource: input.category,
+          details: `Location: ${input.location}, Description: ${input.description}`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
       return report;
     },
     onSuccess: () => {
