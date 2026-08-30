@@ -349,46 +349,46 @@ function CitizenPortal() {
       </header>
 
       {/* Mobile Tab Navigation Bar */}
-      <div className="flex overflow-x-auto border-b border-white/10 bg-black/40 px-4 py-2 lg:hidden gap-2">
+      <div className="flex overflow-x-auto border-b border-border bg-panel/60 px-4 py-2 lg:hidden gap-2">
         <button
           onClick={() => setActiveTab("ncap")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "ncap" ? "bg-blue-600 text-white" : "text-white/70")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "ncap" ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground")}
         >
           NCAP Notices ({unpaidCitations.length})
         </button>
         <button
           onClick={() => setActiveTab("vehicles")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "vehicles" ? "bg-[#0066cc] text-white" : "text-white/70")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "vehicles" ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground")}
         >
           My Vehicles
         </button>
         <button
           onClick={() => setActiveTab("pass")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "pass" ? "bg-[#0066cc] text-white" : "text-white/70")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "pass" ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground")}
         >
           Digital Pass
         </button>
         <button
           onClick={() => setActiveTab("traffic")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "traffic" ? "bg-[#0066cc] text-white" : "text-white/70")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "traffic" ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground")}
         >
           Live Traffic
         </button>
         <button
           onClick={() => setActiveTab("hazard")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "hazard" ? "bg-orange-500 text-white" : "text-orange-400/80")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "hazard" ? "bg-orange-500 text-white font-bold" : "text-orange-400/80")}
         >
           Report Hazard
         </button>
         <button
           onClick={() => setActiveTab("disputes")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "disputes" ? "bg-[#0066cc] text-white" : "text-white/70")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "disputes" ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground")}
         >
           Appeals
         </button>
         <button
           onClick={() => setActiveTab("rewards")}
-          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "rewards" ? "bg-emerald-600 text-white" : "text-emerald-400")}
+          className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold", activeTab === "rewards" ? "bg-emerald-600 text-white font-bold" : "text-emerald-400")}
         >
           Eco-Rewards
         </button>
@@ -684,7 +684,7 @@ function CitizenPortal() {
 
               <button
                 onClick={() => setAddVehicleOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066cc] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0066cc]/90 transition-all"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all"
               >
                 <Plus className="size-4" /> Add Vehicle
               </button>
@@ -732,10 +732,10 @@ function CitizenPortal() {
                       </div>
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-3">
+                    <div className="mt-6 flex items-center justify-between border-t border-border pt-3">
                       <button
                         onClick={() => setActiveTab("pass")}
-                        className="text-xs font-semibold text-[#0066cc] hover:underline flex items-center gap-1"
+                        className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
                       >
                         <QrCode className="size-3" /> Motorist Pass
                       </button>
@@ -1243,7 +1243,7 @@ function CitizenPortal() {
         <Dialog.Root open={inspectNovModalOpen} onOpenChange={setInspectNovModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md animate-in fade-in" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/20 bg-[#0a0a0b] p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
               {selectedNov && (
                 <div>
                   <div className="flex items-start justify-between border-b border-white/10 pb-4">
@@ -1415,7 +1415,7 @@ function CitizenPortal() {
                   <button
                     type="submit"
                     disabled={nominateDriver.isPending || !nomineeName || !nomineeLicense}
-                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    className="rounded-xl bg-primary px-5 py-2 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 disabled:opacity-50 transition-all"
                   >
                     {nominateDriver.isPending && <Loader2 className="size-4 animate-spin inline mr-1" />}
                     Submit Nomination
@@ -1432,7 +1432,7 @@ function CitizenPortal() {
         <Dialog.Root open={clearanceModalOpen} onOpenChange={setClearanceModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/20 bg-[#0e1017] p-8 shadow-2xl">
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-8 shadow-2xl">
               {clearedCitation && (
                 <div>
                   <div className="flex items-center justify-between border-b border-white/10 pb-4 text-center">

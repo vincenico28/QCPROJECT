@@ -1,5 +1,5 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import {
   useViolations,
   useCitations,
@@ -11,9 +11,38 @@ import {
 } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, TrendingUp, Activity, Radio, ChevronRight, ShieldCheck, User, ShieldAlert, Sparkles, Flame, Crown, DollarSign, Scale } from "lucide-react";
+import {
+  ArrowUpRight,
+  TrendingUp,
+  Activity,
+  Radio,
+  ChevronRight,
+  ShieldCheck,
+  User,
+  ShieldAlert,
+  Sparkles,
+  Flame,
+  Crown,
+  DollarSign,
+  Scale,
+  Video,
+  FileText,
+  Car,
+  Filter,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  ExternalLink,
+  Eye,
+  Sliders,
+  Send,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { type SystemRole } from "@/lib/rbac";
+import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
 
 import qcMap from "@/assets/qc-map.jpg";
 import cctv1 from "@/assets/cctv-1.jpg";
@@ -50,20 +79,26 @@ const CCTV_FEEDS = [
     location: "COMMONWEALTH-TANDANG SORA",
     status: "detection",
     label: "DETECTION ACTIVE",
+    fps: "30 FPS",
+    res: "4K 60Hz",
   },
   {
     img: cctv2,
     code: "CAM-108",
-    location: "TOMAS MORATO",
+    location: "TOMAS MORATO INTERSECT",
     status: "alert",
     label: "ILLEGAL PARKING DETECTED",
+    fps: "28 FPS",
+    res: "1080p",
   },
   {
     img: cctv3,
     code: "CAM-059",
-    location: "EDSA-QUEZON AVE",
+    location: "EDSA-QUEZON AVE FLYOVER",
     status: "optimal",
     label: "FLOW OPTIMAL",
+    fps: "30 FPS",
+    res: "4K 60Hz",
   },
 ];
 
@@ -132,9 +167,13 @@ const ROLE_INFO: Record<
 
 function CommandDashboard() {
   const { user, role } = useAuth();
-  const { data: violations = [], isLoading: vLoading } = useViolations(6);
-  const { data: citations = [] } = useCitations(10);
+  const { data: violations = [], isLoading: vLoading } = useViolations(8);
+  const { data: citations = [] } = useCitations(15);
   const { data: cameras = [] } = useCameras();
+
+  const [citationFilter, setCitationFilter] = useState<string>("all");
+  const [citationSearch, setCitationSearch] = useState<string>("");
+  const [mapMode, setMapMode] = useState<"hotspots" | "anpr" | "patrols">("hotspots");
 
   const roleConfig = ROLE_INFO[role] || ROLE_INFO.admin;
   const RoleIcon = roleConfig.icon;
@@ -151,22 +190,34 @@ function CommandDashboard() {
       revenue: 428_000 + revenue,
       pending: 812 + pending,
       activeCameras,
-      totalCameras: cameras.length,
+      totalCameras: cameras.length || 120,
     };
   }, [violations, citations, cameras]);
 
+  const filteredCitations = useMemo(() => {
+    return citations.filter((c) => {
+      const matchFilter = citationFilter === "all" || c.status === citationFilter;
+      const matchSearch =
+        !citationSearch ||
+        c.citation_number.toLowerCase().includes(citationSearch.toLowerCase()) ||
+        c.plate_number.toLowerCase().includes(citationSearch.toLowerCase()) ||
+        c.offense.toLowerCase().includes(citationSearch.toLowerCase());
+      return matchFilter && matchSearch;
+    });
+  }, [citations, citationFilter, citationSearch]);
+
   return (
     <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-12 lg:p-8">
-      {/* OPERATOR ROLE INDICATOR BANNER */}
-      <div className="col-span-1 lg:col-span-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-border bg-panel p-4.5 shadow-sm">
-        <div className="flex items-center gap-3.5">
-          <div className={cn("grid size-11 place-items-center rounded-xl border", roleConfig.badge)}>
-            <RoleIcon className="size-5" />
+      {/* OPERATOR ROLE INDICATOR BANNER & TELEMETRY STRIP */}
+      <div className="col-span-1 lg:col-span-12 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 rounded-3xl border border-border bg-panel p-5 shadow-xl">
+        <div className="flex items-center gap-4">
+          <div className={cn("grid size-12 place-items-center rounded-2xl border shrink-0", roleConfig.badge)}>
+            <RoleIcon className="size-6" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-foreground text-sm">
-                Logged in as: <strong className="text-foreground">{user?.email || "Authorized Operator"}</strong>
+              <span className="font-bold text-foreground text-sm">
+                Active Console: <strong className="text-foreground">{user?.email || "Authorized Operator"}</strong>
               </span>
               <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase tracking-wider", roleConfig.badge)}>
                 <span className={cn("size-1.5 rounded-full", roleConfig.dot)} />
@@ -179,55 +230,69 @@ function CommandDashboard() {
           </div>
         </div>
 
-        {(role === "admin" || role === "super_admin") && (
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              to="/dispatch-hotline"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all"
-            >
-              911 Hotline Intake →
-            </Link>
-            <Link
-              to="/employees"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
-            >
-              Staff & Access Control →
-            </Link>
+        {/* Live Operational Status Pills */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 rounded-xl bg-panel-elevated border border-border px-3 py-1.5 font-mono-tab text-[11px]">
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-subtle">AI Inference:</span>
+            <span className="font-bold text-foreground">18ms (YOLOv11)</span>
           </div>
-        )}
+
+          <div className="flex items-center gap-2 rounded-xl bg-panel-elevated border border-border px-3 py-1.5 font-mono-tab text-[11px]">
+            <span className="size-2 rounded-full bg-primary" />
+            <span className="text-subtle">ANPR Grid:</span>
+            <span className="font-bold text-foreground">{kpis.activeCameras}/{kpis.totalCameras} Online</span>
+          </div>
+
+          <DispatchDialog
+            trigger={
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
+                <Radio className="size-3.5" /> Quick Dispatch
+              </button>
+            }
+          />
+        </div>
       </div>
-      {/* KPI ROW */}
+
+      {/* KPI STATS ROW */}
       <KpiCard
         label="Daily Violations"
         value="2,842"
-        delta="+14%"
+        delta="+14% Today"
         deltaKind="danger"
         icon={Activity}
+        sub="Auto-captured by ANPR"
       />
       <KpiCard
-        label="Active Officers"
+        label="Active Enforcers"
         value="156"
-        secondary={`/ ${kpis.officers.total} Total`}
-        deltaKind="muted"
+        secondary={`/ ${kpis.officers.total} Shift`}
+        delta="92% Coverage"
+        deltaKind="success"
+        icon={ShieldCheck}
+        sub="Patrol sectors online"
       />
       <KpiCard
-        label="Est. Revenue"
+        label="Settlement Revenue"
         value={formatPeso(kpis.revenue).replace("PHP", "₱")}
         delta="↑ Targeted"
         deltaKind="success"
         icon={TrendingUp}
+        sub="GCash, Maya & Landbank"
       />
       <KpiCard
-        label="Pending Payments"
+        label="Pending Citations"
         value={kpis.pending.toLocaleString()}
         delta="24h Overdue"
         deltaKind="warning"
+        icon={Clock}
+        sub="Awaiting LTO Tagging"
       />
 
-      {/* MAIN VISUAL AREA (map + cctv) */}
+      {/* MAIN VISUAL AREA (GIS Map + CCTV Grid + Citations Table) */}
       <section className="flex flex-col gap-6 lg:col-span-8">
-        {/* GIS MAP */}
-        <div className="panel relative overflow-hidden rounded-3xl">
+        {/* GIS MAP CARD */}
+        <div className="panel relative overflow-hidden rounded-3xl border border-border bg-panel shadow-2xl">
           <img
             src={qcMap}
             alt="Real-time GIS heatmap of Barangay Culiat, Quezon City traffic congestion"
@@ -236,50 +301,74 @@ function CommandDashboard() {
             height={900}
             loading="lazy"
           />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/80 via-background/10 to-transparent" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
 
-          <div className="absolute left-6 top-6 flex flex-col gap-2">
-            <MapPill color="danger" label="Heavy Congestion: EDSA North" />
-            <MapPill color="accent" label="Active Patrol: Fairview" />
-            <MapPill color="warning" label="AI Alert: Commonwealth Ave" />
+          {/* Top Map Pills */}
+          <div className="absolute left-6 top-6 flex flex-wrap gap-2">
+            <MapPill color="danger" label="Heavy Volume: EDSA Northbound" />
+            <MapPill color="accent" label="Active Sector: Tandang Sora" />
+            <MapPill color="warning" label="AI Alert: Commonwealth Overpass" />
           </div>
 
-          <div className="absolute right-6 top-6 rounded-xl border border-border bg-background/70 px-3 py-2 backdrop-blur-md">
-            <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-              Live Cameras
-            </p>
-            <p className="font-mono-tab text-2xl font-semibold text-foreground">
-              {kpis.activeCameras}
-              <span className="text-base text-subtle">/{kpis.totalCameras}</span>
-            </p>
+          {/* Mode Switcher */}
+          <div className="absolute right-6 top-6 flex items-center gap-1 rounded-2xl border border-border bg-background/80 p-1 backdrop-blur-md">
+            <button
+              onClick={() => setMapMode("hotspots")}
+              className={cn(
+                "rounded-xl px-2.5 py-1 text-[11px] font-mono-tab font-bold transition-all",
+                mapMode === "hotspots" ? "bg-primary text-primary-foreground shadow" : "text-subtle hover:text-foreground"
+              )}
+            >
+              Hotspots
+            </button>
+            <button
+              onClick={() => setMapMode("anpr")}
+              className={cn(
+                "rounded-xl px-2.5 py-1 text-[11px] font-mono-tab font-bold transition-all",
+                mapMode === "anpr" ? "bg-primary text-primary-foreground shadow" : "text-subtle hover:text-foreground"
+              )}
+            >
+              ANPR Grid
+            </button>
+            <button
+              onClick={() => setMapMode("patrols")}
+              className={cn(
+                "rounded-xl px-2.5 py-1 text-[11px] font-mono-tab font-bold transition-all",
+                mapMode === "patrols" ? "bg-primary text-primary-foreground shadow" : "text-subtle hover:text-foreground"
+              )}
+            >
+              Patrol Units
+            </button>
           </div>
 
-          {/* Fake pins */}
-          <MapPin top="34%" left="42%" tone="danger" />
-          <MapPin top="52%" left="55%" tone="warning" />
-          <MapPin top="46%" left="30%" tone="accent" />
-          <MapPin top="62%" left="48%" tone="success" />
+          {/* Simulated Location Pins */}
+          <MapPin top="34%" left="42%" tone="danger" label="EDSA Congestion" />
+          <MapPin top="52%" left="55%" tone="warning" label="Commonwealth Cam #04" />
+          <MapPin top="46%" left="30%" tone="accent" label="Patrol Unit #12" />
+          <MapPin top="62%" left="48%" tone="success" label="Tandang Sora Flow" />
 
-          <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between">
+          {/* Map Footer Bar */}
+          <div className="absolute bottom-4 left-6 right-6 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-foreground">
-                Barangay Culiat, Quezon City · Live Traffic Heatmap
+              <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                Barangay Culiat, Quezon City · GIS Telemetry Heatmap
               </p>
               <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                Updated · {new Date().toLocaleTimeString("en-PH")}
+                Live Sensor Feed &bull; Refreshed {new Date().toLocaleTimeString("en-PH")}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Link
                 to="/analytics/heatmaps"
-                className="inline-flex items-center gap-1 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-400 backdrop-blur-md hover:bg-orange-500/20 transition-all"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3.5 py-2 text-xs font-bold text-orange-400 backdrop-blur-md hover:bg-orange-500/20 transition-all shadow-sm"
               >
                 <Flame className="size-3.5 text-orange-500" />
                 AI Forecast
               </Link>
               <Link
                 to="/map"
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur-md hover:bg-panel-elevated transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel-elevated px-3.5 py-2 text-xs font-bold text-foreground backdrop-blur-md hover:bg-panel transition-all shadow-sm"
               >
                 Live GIS Map
                 <ArrowUpRight className="size-3.5" />
@@ -288,38 +377,66 @@ function CommandDashboard() {
           </div>
         </div>
 
-        {/* CCTV GRID */}
+        {/* CCTV MULTI-FEED GRID */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {CCTV_FEEDS.map((feed) => (
             <CctvTile key={feed.code} feed={feed} />
           ))}
         </div>
 
-        {/* CITATIONS TABLE */}
-        <div className="panel overflow-hidden rounded-3xl">
-          <div className="flex items-center justify-between border-b border-border p-5">
+        {/* CITATIONS TABLE WITH INTEGRATED FILTER & SEARCH */}
+        <div className="panel overflow-hidden rounded-3xl border border-border bg-panel shadow-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border p-5">
             <div>
-              <h3 className="text-sm font-semibold text-foreground">Recent Citations</h3>
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <FileText className="size-4 text-primary" />
+                Recent Citations Ledger ({filteredCitations.length})
+              </h3>
               <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                Digital citations · QC LGU
+                Digital Notice of Violation (NOV) Registry &bull; Quezon City LGU
               </p>
             </div>
-            <Link
-              to="/violations"
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-panel-elevated"
-            >
-              View all
-              <ChevronRight className="size-3.5" />
-            </Link>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
+                <input
+                  type="text"
+                  placeholder="Filter plate, ref, offense..."
+                  value={citationSearch}
+                  onChange={(e) => setCitationSearch(e.target.value)}
+                  className="rounded-xl border border-border bg-panel-elevated pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-subtle focus:outline-none focus:border-primary w-44 sm:w-56"
+                />
+              </div>
+
+              <select
+                value={citationFilter}
+                onChange={(e) => setCitationFilter(e.target.value)}
+                className="rounded-xl border border-border bg-panel-elevated px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Settled / Paid</option>
+                <option value="contested">Contested</option>
+              </select>
+
+              <Link
+                to="/citations"
+                className="inline-flex items-center gap-1 rounded-xl border border-border bg-panel-elevated px-3 py-1.5 text-xs font-bold text-foreground hover:bg-panel"
+              >
+                View all <ChevronRight className="size-3.5" />
+              </Link>
+            </div>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-border">
-                  {["Reference", "Plate", "Offense", "Officer", "Status", "Amount"].map((h) => (
+                <tr className="border-b border-border bg-panel-elevated/40">
+                  {["Reference", "Plate & Model", "Offense", "Officer / Unit", "Status", "Amount"].map((h) => (
                     <th
                       key={h}
-                      className="px-5 py-3 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle"
+                      className="px-5 py-3 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle"
                     >
                       {h}
                     </th>
@@ -327,13 +444,13 @@ function CommandDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {citations.slice(0, 6).map((c) => (
+                {filteredCitations.slice(0, 6).map((c) => (
                   <tr key={c.id} className="text-sm transition-colors hover:bg-panel-elevated/50">
-                    <td className="px-5 py-3 font-mono-tab text-foreground">
+                    <td className="px-5 py-3 font-mono-tab font-bold text-foreground">
                       #{c.citation_number}
                     </td>
                     <td className="px-5 py-3">
-                      <div className="font-mono-tab text-foreground">{c.plate_number}</div>
+                      <div className="font-mono-tab font-bold text-foreground">{c.plate_number}</div>
                       <div className="text-xs text-subtle">{c.vehicle_model}</div>
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">{c.offense}</td>
@@ -341,15 +458,15 @@ function CommandDashboard() {
                     <td className="px-5 py-3">
                       <StatusPill status={c.status} />
                     </td>
-                    <td className="px-5 py-3 text-right font-mono-tab font-medium text-foreground">
+                    <td className="px-5 py-3 text-right font-mono-tab font-bold text-foreground">
                       {formatPeso(Number(c.amount)).replace("PHP", "₱")}
                     </td>
                   </tr>
                 ))}
-                {citations.length === 0 && (
+                {filteredCitations.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-5 py-8 text-center text-sm text-subtle">
-                      No citations yet
+                      No citations matching current filters
                     </td>
                   </tr>
                 )}
@@ -360,22 +477,30 @@ function CommandDashboard() {
       </section>
 
       {/* LIVE VIOLATIONS FEED RAIL */}
-      <aside className="panel flex flex-col overflow-hidden rounded-3xl lg:col-span-4">
-        <div className="flex items-center justify-between border-b border-border p-5">
+      <aside className="panel flex flex-col overflow-hidden rounded-3xl border border-border bg-panel shadow-2xl lg:col-span-4">
+        <div className="flex items-center justify-between border-b border-border p-5 bg-panel-elevated/40">
           <div className="flex items-center gap-2">
-            <Radio className="size-4 text-danger" />
-            <h3 className="text-sm font-semibold text-foreground">LIVE VIOLATIONS FEED</h3>
+            <span className="relative flex size-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-danger" />
+            </span>
+            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
+              Live AI Detection Stream
+            </h3>
           </div>
-          <span className="rounded border border-danger/30 bg-danger/10 px-2 py-0.5 font-mono-tab text-[10px] font-medium text-danger">
-            PRIORITY
-          </span>
+          <Link
+            to="/violations"
+            className="rounded-lg border border-danger/30 bg-danger/10 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-danger hover:bg-danger/20 transition-colors"
+          >
+            REVIEW QUEUE
+          </Link>
         </div>
 
-        <div className="flex-1 divide-y divide-border overflow-y-auto">
+        <div className="flex-1 divide-y divide-border overflow-y-auto custom-scrollbar max-h-[900px]">
           {vLoading && (
             <div className="space-y-4 p-5">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl bg-panel-elevated" />
+                <div key={i} className="h-28 animate-pulse rounded-2xl bg-panel-elevated" />
               ))}
             </div>
           )}
@@ -388,7 +513,7 @@ function CommandDashboard() {
               />
             ))}
           {!vLoading && violations.length === 0 && (
-            <div className="p-8 text-center text-sm text-subtle">No live detections</div>
+            <div className="p-8 text-center text-sm text-subtle">No active AI detections</div>
           )}
         </div>
       </aside>
@@ -396,7 +521,7 @@ function CommandDashboard() {
   );
 }
 
-/* ---------- helpers ---------- */
+/* ---------- HELPER COMPONENTS ---------- */
 
 function KpiCard({
   label,
@@ -405,35 +530,48 @@ function KpiCard({
   delta,
   deltaKind = "muted",
   icon: Icon,
+  sub,
 }: {
   label: string;
   value: string;
   secondary?: string;
   delta?: string;
   deltaKind?: "success" | "warning" | "danger" | "muted";
-  icon?: typeof Activity;
+  icon?: any;
+  sub?: string;
 }) {
   const tone = {
-    success: "text-success",
-    warning: "text-warning",
-    danger: "text-danger",
-    muted: "text-subtle",
+    success: "text-success bg-success/10 border-success/30",
+    warning: "text-warning bg-warning/10 border-warning/30",
+    danger: "text-danger bg-danger/10 border-danger/30",
+    muted: "text-subtle bg-panel-elevated border-border",
   }[deltaKind];
 
   return (
-    <div className="panel col-span-1 rounded-2xl p-6 lg:col-span-3">
+    <div className="panel col-span-1 rounded-3xl border border-border bg-panel p-6 shadow-xl lg:col-span-3 transition-all hover:border-primary/40 hover:shadow-2xl">
       <div className="flex items-center justify-between">
-        <p className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+        <p className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle">
           {label}
         </p>
-        {Icon && <Icon className="size-4 text-subtle" strokeWidth={1.75} />}
+        {Icon && (
+          <div className="grid size-8 place-items-center rounded-xl bg-panel-elevated border border-border text-foreground">
+            <Icon className="size-4 text-primary" strokeWidth={2} />
+          </div>
+        )}
       </div>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="font-mono-tab text-4xl font-bold tracking-tighter text-foreground">
+        <span className="font-mono-tab text-3xl sm:text-4xl font-extrabold tracking-tighter text-foreground">
           {value}
         </span>
-        {secondary && <span className="text-sm text-subtle">{secondary}</span>}
-        {delta && <span className={cn("ml-auto text-xs font-medium", tone)}>{delta}</span>}
+        {secondary && <span className="text-xs text-subtle font-mono-tab">{secondary}</span>}
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
+        {delta && (
+          <span className={cn("rounded-full border px-2 py-0.5 font-mono-tab text-[10px] font-bold", tone)}>
+            {delta}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -453,9 +591,9 @@ function MapPill({
     success: "bg-success shadow-[0_0_10px_oklch(from_var(--success)_l_c_h_/_0.6)]",
   }[color];
   return (
-    <div className="flex items-center gap-3 rounded-full border border-border bg-background/70 px-4 py-2 backdrop-blur-md">
+    <div className="flex items-center gap-2 rounded-full border border-border bg-background/80 px-3.5 py-1.5 backdrop-blur-md shadow-sm">
       <span className={cn("size-2 rounded-full", tone)} />
-      <span className="text-xs font-medium text-foreground">{label}</span>
+      <span className="text-xs font-semibold text-foreground">{label}</span>
     </div>
   );
 }
@@ -464,10 +602,12 @@ function MapPin({
   top,
   left,
   tone,
+  label,
 }: {
   top: string;
   left: string;
   tone: "danger" | "warning" | "accent" | "success";
+  label?: string;
 }) {
   const toneClass = {
     danger: "bg-danger",
@@ -476,17 +616,17 @@ function MapPin({
     success: "bg-success",
   }[tone];
   return (
-    <span className="pointer-events-none absolute" style={{ top, left }} aria-hidden>
-      <span className="relative flex size-3">
+    <span className="pointer-events-none absolute group cursor-pointer" style={{ top, left }} aria-hidden>
+      <span className="relative flex size-3.5">
         <span
           className={cn(
-            "absolute inline-flex size-full animate-ping rounded-full opacity-60",
+            "absolute inline-flex size-full animate-ping rounded-full opacity-75",
             toneClass,
           )}
         />
         <span
           className={cn(
-            "relative inline-flex size-3 rounded-full ring-2 ring-background",
+            "relative inline-flex size-3.5 rounded-full ring-2 ring-background shadow-lg",
             toneClass,
           )}
         />
@@ -498,18 +638,18 @@ function MapPin({
 function CctvTile({
   feed,
 }: {
-  feed: { img: string; code: string; location: string; status: string; label: string };
+  feed: { img: string; code: string; location: string; status: string; label: string; fps: string; res: string };
 }) {
   const badgeTone =
     feed.status === "alert"
       ? "text-warning"
       : feed.status === "detection"
-        ? "text-success"
-        : "text-success";
-  const dot = feed.status === "alert" ? "bg-warning animate-pulse" : "bg-success";
+        ? "text-emerald-400"
+        : "text-emerald-400";
+  const dot = feed.status === "alert" ? "bg-warning animate-pulse" : "bg-emerald-400";
 
   return (
-    <div className="group relative aspect-video overflow-hidden rounded-2xl border border-border bg-panel">
+    <div className="group relative aspect-video overflow-hidden rounded-3xl border border-border bg-panel shadow-xl">
       <img
         src={feed.img}
         alt={`CCTV feed from ${feed.location}`}
@@ -518,18 +658,23 @@ function CctvTile({
         height={512}
         loading="lazy"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
-      {/* Live badge */}
-      <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur">
-        <span className="size-1.5 animate-pulse rounded-full bg-danger" />
-        <span className="font-mono-tab text-[9px] font-bold uppercase tracking-widest text-white">
-          LIVE
+      {/* Live badge & FPS */}
+      <div className="absolute right-3 top-3 flex items-center gap-2">
+        <span className="font-mono-tab text-[9px] font-bold text-white/70 bg-black/60 px-2 py-0.5 rounded backdrop-blur">
+          {feed.fps} &bull; {feed.res}
         </span>
+        <div className="flex items-center gap-1.5 rounded-full bg-black/70 px-2.5 py-0.5 backdrop-blur border border-white/10">
+          <span className="size-1.5 animate-pulse rounded-full bg-danger" />
+          <span className="font-mono-tab text-[9px] font-bold uppercase tracking-widest text-white">
+            LIVE
+          </span>
+        </div>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4">
-        <p className="font-mono-tab text-[10px] text-white/70">
+        <p className="font-mono-tab text-[10px] font-bold text-white/70">
           {feed.code} | {feed.location}
         </p>
         <p className={cn("flex items-center gap-2 text-xs font-bold text-white", badgeTone)}>
@@ -546,7 +691,7 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
 
   return (
     <article className="p-5 transition-colors hover:bg-panel-elevated/50">
-      <div className="relative mb-3 aspect-video overflow-hidden rounded-lg border border-border">
+      <div className="relative mb-3 aspect-video overflow-hidden rounded-2xl border border-border">
         <img
           src={image}
           alt={`AI detection: ${violation.violation_type}`}
@@ -555,11 +700,11 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
           height={512}
           loading="lazy"
         />
-        <div className="absolute left-2 top-2 rounded bg-danger/90 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold uppercase tracking-wider text-white">
+        <div className="absolute left-2.5 top-2.5 rounded-lg bg-danger/90 px-2 py-0.5 font-mono-tab text-[9px] font-bold uppercase tracking-wider text-white shadow">
           {violation.violation_type}
         </div>
-        <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary backdrop-blur">
-          {Math.round(Number(violation.confidence) > 1 ? Number(violation.confidence) : Number(violation.confidence) * 100)}%
+        <div className="absolute bottom-2.5 right-2.5 rounded-lg bg-black/80 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary backdrop-blur border border-white/10">
+          {Math.round(Number(violation.confidence) > 1 ? Number(violation.confidence) : Number(violation.confidence) * 100)}% Confidence
         </div>
       </div>
 
@@ -570,7 +715,7 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
           </p>
           <p className="mt-0.5 text-xs text-subtle">
             Plate{" "}
-            <span className="font-mono-tab text-muted-foreground">{violation.plate_number}</span>
+            <span className="font-mono-tab font-bold text-foreground">{violation.plate_number}</span>
             {" · "}
             {violation.location}
           </p>
@@ -582,8 +727,8 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
 
       <div className="flex gap-2">
         <button
-          onClick={() => toast.success("Violation dismissed")}
-          className="flex-1 rounded-md border border-border bg-panel-elevated py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => toast.success("Violation dismissed from feed")}
+          className="flex-1 rounded-xl border border-border bg-panel-elevated py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
         >
           Dismiss
         </button>
@@ -594,17 +739,17 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
                 violation_id: violation.id,
                 plate_number: violation.plate_number,
                 offense: violation.violation_type,
-                amount: 2500, // mock fixed penalty
+                amount: 2500,
                 officer_name: "Auto-AI Dispatch",
               },
               {
-                onSuccess: (data) => toast.success(`Citation ${data.citation_number} issued`),
+                onSuccess: (data) => toast.success(`Citation #${data.citation_number} issued for ${data.plate_number}`),
                 onError: (error) => toast.error(error.message),
               },
             );
           }}
           disabled={isPending}
-          className="flex-1 rounded-md bg-primary/20 py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-primary transition-colors hover:bg-primary/30 disabled:opacity-50"
+          className="flex-1 rounded-xl bg-primary px-3 py-2 font-mono-tab text-[10px] font-bold uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all disabled:opacity-50"
         >
           {isPending ? "Issuing..." : "Issue Citation"}
         </button>
@@ -623,7 +768,7 @@ function StatusPill({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 font-mono-tab text-[10px] font-bold uppercase",
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase",
         tone,
       )}
     >
