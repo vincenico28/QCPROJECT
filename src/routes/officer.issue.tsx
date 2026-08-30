@@ -5,6 +5,8 @@ import { Loader2, ArrowLeft, LayoutDashboard, FileSignature } from "lucide-react
 import { useCreateCitation } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 
+import { fineFor } from "@/lib/data/review";
+
 export const Route = createFileRoute("/officer/issue")({
   head: () => ({
     meta: [{ title: "Issue Citation · Culiat Traffic Ops" }],
@@ -13,11 +15,16 @@ export const Route = createFileRoute("/officer/issue")({
 });
 
 const OFFENSES = [
-  "No Helmet",
   "Illegal Parking",
-  "Beating the Red Light",
-  "Reckless Driving",
-  "Over speeding",
+  "Red Light",
+  "Counterflow",
+  "Yellow Box Infraction",
+  "Bus Lane Violation",
+  "No Helmet",
+  "Overspeeding",
+  "Obstruction",
+  "No Entry Zone",
+  "Number Coding",
 ];
 
 function IssuePage() {
@@ -27,7 +34,7 @@ function IssuePage() {
   const [plate, setPlate] = useState("");
   const [model, setModel] = useState("");
   const [offense, setOffense] = useState(OFFENSES[0]);
-  const [amount, setAmount] = useState(2500);
+  const [amount, setAmount] = useState(fineFor(OFFENSES[0]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,11 +115,15 @@ function IssuePage() {
           <label className="text-sm font-semibold">Offense</label>
           <select
             value={offense}
-            onChange={(e) => setOffense(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setOffense(val);
+              setAmount(fineFor(val));
+            }}
             className="rounded-lg border border-border bg-panel px-3 py-2 focus:border-primary focus:outline-none"
           >
             {OFFENSES.map((o) => (
-              <option key={o} value={o}>{o}</option>
+              <option key={o} value={o}>{o} (PHP {fineFor(o).toLocaleString()})</option>
             ))}
           </select>
         </div>

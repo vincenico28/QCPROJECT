@@ -54,20 +54,52 @@ function ScannerPage() {
     async function lookup(query: string) {
       setLoading(true);
       try {
-        const rows = await serverFetchCitations({ data: 100 });
-        const cleanQuery = query.trim().toLowerCase();
-        const data = rows?.find((c: any) => 
-          c.citation_number?.toLowerCase() === cleanQuery || 
-          c.plate_number?.toLowerCase() === cleanQuery ||
-          cleanQuery.includes(c.citation_number?.toLowerCase() || "___")
-        );
+        const { supabase } = await import("@/integrations/supabase/client");
+        const cleanQuery = query.trim();
+        
+        let foundCitation = null;
+        try {
+          const { data: dbRows, error } = await supabase
+            .from("citations")
+            .select("*")
+            .or(`citation_number.ilike.%${cleanQuery}%,plate_number.ilike.%${cleanQuery}%`)
+            .limit(1);
 
-        if (!data) {
+          if (!error && dbRows && dbRows.length > 0) {
+            foundCitation = dbRows[0];
+          }
+        } catch {
+          // fallback
+        }
+
+        if (!foundCitation) {
+          const rows = await serverFetchCitations({ data: 100 });
+          const lowerQuery = cleanQuery.toLowerCase();
+          foundCitation = rows?.find((c: any) => 
+            c.citation_number?.toLowerCase() === lowerQuery || 
+            c.plate_number?.toLowerCase() === lowerQuery ||
+            lowerQuery.includes(c.citation_number?.toLowerCase() || "___")
+          );
+        }
+
+        if (!foundCitation) {
           toast.error("No active citation found for this reference.");
           setCitation(null);
         } else {
-          setCitation(data);
+          setCitation(foundCitation);
           toast.success("Citation record loaded successfully");
+
+          try {
+            await supabase.from("audit_logs").insert({
+              actor_name: "Field Enforcement Officer",
+              actor_role: "officer",
+              action: "OFFICER_QR_SCAN_VERIFIED",
+              target_resource: `Citation: ${foundCitation.citation_number} (${foundCitation.plate_number})`,
+              details: `Status: ${foundCitation.status}, Amount: PHP ${foundCitation.amount}`,
+            });
+          } catch (err) {
+            console.warn(err);
+          }
         }
       } catch (err) {
         console.error(err);
