@@ -179,13 +179,21 @@ function CommandDashboard() {
           </div>
         </div>
 
-        {role === "admin" && (
-          <Link
-            to="/employees"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all shrink-0"
-          >
-            Staff & Access Control →
-          </Link>
+        {(role === "admin" || role === "super_admin") && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/dispatch-hotline"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all"
+            >
+              911 Hotline Intake →
+            </Link>
+            <Link
+              to="/employees"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+            >
+              Staff & Access Control →
+            </Link>
+          </div>
         )}
       </div>
       {/* KPI ROW */}

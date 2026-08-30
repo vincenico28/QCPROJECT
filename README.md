@@ -12,8 +12,7 @@ The system must have a premium government enterprise dashboard comparable to pro
 
 The UI must be clean, modern, responsive, animated, highly interactive, and optimized for desktop, tablet, and mobile devices.
 
-Capstone Title
-
+Capstone Title:
 DEVELOPMENT AND IMPLEMENTATION OF A WEB-BASED TRAFFIC ENFORCEMENT SYSTEM USING AI AND IOT FOR REAL-TIME TRAFFIC VIOLATION DETECTION, CAMERA TRACKING, DIGITAL CITATION, ONLINE PAYMENT, AND EMAIL NOTIFICATION FOR THE BARANGAY CULIAT QUEZON CITY LGU
 
 Objective

@@ -85,6 +85,21 @@ function AiTrainingPage() {
         toast.success("AI Model Training Run Complete!", {
           description: "New checkpoint weights exported: yolov11-culiat-v2.8.pt (mAP@50: 97.4%)",
         });
+
+        (async () => {
+          try {
+            const { supabase } = await import("@/integrations/supabase/client");
+            await supabase.from("audit_logs").insert({
+              actor_name: "Lead Computer Vision Engineer",
+              actor_role: "admin",
+              action: "AI_MODEL_TRAINING_EXECUTED",
+              target_resource: "YOLOv11 Edge Detector",
+              details: "Trained 10 epochs on QC CCTV annotated datasets. Checkpoint weights exported: yolov11-culiat-v2.8.pt (mAP@50: 97.4%).",
+            });
+          } catch (err) {
+            console.warn(err);
+          }
+        })();
       }
     }, 1000);
   };
