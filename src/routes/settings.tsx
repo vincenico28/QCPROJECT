@@ -35,6 +35,12 @@ function SettingsPage() {
   const { role, setSimulatedRole } = useAuth();
   const [selectedRoleForDetail, setSelectedRoleForDetail] = useState<SystemRole>("admin");
 
+  const [autoTicketThreshold, setAutoTicketThreshold] = useState(85);
+  const [manualReviewThreshold, setManualReviewThreshold] = useState(60);
+  const [earlyDiscount, setEarlyDiscount] = useState(20);
+  const [latePenalty, setLatePenalty] = useState(5);
+  const [appealWindow, setAppealWindow] = useState(15);
+
   const handleSave = async () => {
     try {
       await supabase.from("audit_logs").insert({
@@ -42,7 +48,7 @@ function SettingsPage() {
         actor_role: role,
         action: "SYSTEM_SETTINGS_UPDATED",
         target_resource: "RBAC & Fine Penalty Matrix",
-        details: "Updated AI confidence thresholds and discount penalty rules.",
+        details: `Auto-Ticket: ${autoTicketThreshold}%, Manual Review: ${manualReviewThreshold}%, Early Discount: ${earlyDiscount}%, Late Penalty: ${latePenalty}%, Appeal Window: ${appealWindow} days.`,
       });
     } catch (err) {
       console.warn(err);
@@ -226,18 +232,32 @@ function SettingsPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-medium">
                 <label className="text-white">Auto-Ticketing Threshold</label>
-                <span className="text-primary font-mono-tab">85%</span>
+                <span className="text-primary font-mono-tab">{autoTicketThreshold}%</span>
               </div>
-              <input type="range" min="50" max="99" defaultValue="85" className="w-full accent-primary" />
+              <input
+                type="range"
+                min="50"
+                max="99"
+                value={autoTicketThreshold}
+                onChange={(e) => setAutoTicketThreshold(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
               <p className="text-xs text-muted-foreground">Detections above this confidence score automatically generate a pending citation.</p>
             </div>
             
             <div className="space-y-2 mt-4">
               <div className="flex justify-between text-sm font-medium">
                 <label className="text-white">Manual Review Threshold</label>
-                <span className="text-orange-500 font-mono-tab">60%</span>
+                <span className="text-orange-500 font-mono-tab">{manualReviewThreshold}%</span>
               </div>
-              <input type="range" min="30" max="84" defaultValue="60" className="w-full accent-orange-500" />
+              <input
+                type="range"
+                min="30"
+                max="84"
+                value={manualReviewThreshold}
+                onChange={(e) => setManualReviewThreshold(Number(e.target.value))}
+                className="w-full accent-orange-500"
+              />
               <p className="text-xs text-muted-foreground">Detections within this range are sent to Dispatchers for manual verification.</p>
             </div>
           </div>
@@ -259,7 +279,12 @@ function SettingsPage() {
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Early Settlement Discount</label>
               <div className="relative">
-                <input type="number" defaultValue="20" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50" />
+                <input
+                  type="number"
+                  value={earlyDiscount}
+                  onChange={(e) => setEarlyDiscount(Number(e.target.value))}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50"
+                />
                 <span className="absolute right-3 top-2.5 text-muted-foreground">%</span>
               </div>
               <p className="text-[10px] text-muted-foreground">Discount applied if paid within 7 days.</p>
@@ -268,7 +293,12 @@ function SettingsPage() {
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Late Penalty Rate</label>
               <div className="relative">
-                <input type="number" defaultValue="5" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50" />
+                <input
+                  type="number"
+                  value={latePenalty}
+                  onChange={(e) => setLatePenalty(Number(e.target.value))}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50"
+                />
                 <span className="absolute right-3 top-2.5 text-muted-foreground">%</span>
               </div>
               <p className="text-[10px] text-muted-foreground">Applied monthly after 30 days unpaid.</p>
@@ -277,7 +307,12 @@ function SettingsPage() {
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Appeal Window</label>
               <div className="relative">
-                <input type="number" defaultValue="15" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50" />
+                <input
+                  type="number"
+                  value={appealWindow}
+                  onChange={(e) => setAppealWindow(Number(e.target.value))}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-white outline-none focus:border-primary/50"
+                />
                 <span className="absolute right-3 top-2.5 text-muted-foreground">days</span>
               </div>
               <p className="text-[10px] text-muted-foreground">Time limit to contest a citation.</p>

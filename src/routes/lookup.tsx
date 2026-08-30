@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Search, ShieldCheck, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, Search, ShieldCheck, FileText, CheckCircle2, Printer } from "lucide-react";
 import { lookupCitation, type PublicCitation } from "@/lib/citation-lookup.functions";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
@@ -191,7 +191,7 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
         <p className="mt-1 text-sm text-foreground">{citation.offense}</p>
       </div>
 
-      {citation.status !== "paid" && (
+      {citation.status !== "paid" ? (
         <div className="flex flex-col gap-4">
           <p className="text-xs text-muted-foreground">
             Settle this citation at any QC LGU treasury window or authorized payment center. Bring a
@@ -209,6 +209,19 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
               <FileDisputeDialog citationId={citation.id} citationNumber={citation.citation_number} />
             )}
           </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 pt-2">
+          <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
+            <CheckCircle2 className="size-4" /> Citation settled. LTO LTMS clearance certificate generated.
+          </div>
+          <Link
+            to="/portal/receipt/$citationId"
+            params={{ citationId: citation.citation_number }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors shadow-sm"
+          >
+            <Printer className="size-4" /> View Official Receipt & LTO Clearance
+          </Link>
         </div>
       )}
     </article>
