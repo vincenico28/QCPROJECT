@@ -408,7 +408,7 @@ function CitationsPage() {
                   onClick={() => setStatus(s)}
                   className={cn(
                     "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-[11px] font-bold uppercase tracking-wider transition-colors",
-                    active ? "bg-primary text-white shadow-sm" : "text-subtle hover:text-foreground",
+                    active ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground",
                   )}
                 >
                   {s}
@@ -515,7 +515,7 @@ function CitationsPage() {
                     <Building2 className="size-6" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Barangay Culiat, Quezon City</h3>
+                    <h3 className="text-base font-bold text-foreground">Barangay Culiat, Quezon City</h3>
                     <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
                       Unified MMDA NCAP Traffic Enforcement
                     </p>
@@ -529,11 +529,11 @@ function CitationsPage() {
               </div>
 
               {/* Official Slip Content */}
-              <div className="mt-6 rounded-2xl border border-border/80 bg-background/80 p-5 flex flex-col gap-4">
+              <div className="mt-6 rounded-2xl border border-border bg-panel-elevated p-5 flex flex-col gap-4">
                 <div className="flex items-center justify-between border-b border-border/50 pb-3">
                   <div>
                     <span className="text-[10px] font-mono-tab text-subtle uppercase">Official Serial Reference</span>
-                    <p className="font-mono-tab text-base font-black text-white">{selectedCitation.citation_number}</p>
+                    <p className="font-mono-tab text-base font-black text-foreground">{selectedCitation.citation_number}</p>
                   </div>
                   <span
                     className={cn(
@@ -554,37 +554,37 @@ function CitationsPage() {
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">License Plate</span>
-                    <p className="font-mono-tab text-sm font-bold text-white mt-0.5">{selectedCitation.plate_number}</p>
+                    <p className="font-mono-tab text-sm font-bold text-foreground mt-0.5">{selectedCitation.plate_number}</p>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Vehicle Model</span>
-                    <p className="font-medium text-white mt-0.5">{selectedCitation.vehicle_model || "Registered Vehicle"}</p>
+                    <p className="font-medium text-foreground mt-0.5">{selectedCitation.vehicle_model || "Registered Vehicle"}</p>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Violation Offense</span>
-                    <p className="font-semibold text-white mt-0.5">{selectedCitation.offense}</p>
+                    <p className="font-semibold text-foreground mt-0.5">{selectedCitation.offense}</p>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Fine Amount</span>
-                    <p className="font-mono-tab text-base font-black text-white mt-0.5">{formatPeso(selectedCitation.amount)}</p>
+                    <p className="font-mono-tab text-base font-black text-foreground mt-0.5">{formatPeso(selectedCitation.amount)}</p>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Issuing Authority</span>
-                    <p className="text-white mt-0.5">{selectedCitation.officer_name || "AI Automated Camera Grid"}</p>
+                    <p className="text-foreground mt-0.5">{selectedCitation.officer_name || "AI Automated Camera Grid"}</p>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Date & Time Issued</span>
-                    <p className="font-mono-tab text-white mt-0.5">{new Date(selectedCitation.issued_at).toLocaleString("en-PH")}</p>
+                    <p className="font-mono-tab text-foreground mt-0.5">{new Date(selectedCitation.issued_at).toLocaleString("en-PH")}</p>
                   </div>
                 </div>
 
                 {/* QR Code & LTO status */}
-                <div className="rounded-xl border border-white/5 bg-black/40 p-3 flex items-center justify-between">
+                <div className="rounded-xl border border-border bg-panel p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <QrCode className="size-10 text-white shrink-0" />
+                    <QrCode className="size-10 text-foreground shrink-0" />
                     <div>
-                      <p className="text-[11px] font-bold text-white">Digital Verification QR</p>
-                      <p className="text-[10px] text-white/50">LTO LTMS Hold release valid upon clearance</p>
+                      <p className="text-[11px] font-bold text-foreground">Digital Verification QR</p>
+                      <p className="text-[10px] text-muted-foreground">LTO LTMS Hold release valid upon clearance</p>
                     </div>
                   </div>
                   <span className="text-xs font-mono-tab font-bold text-emerald-400">
@@ -709,18 +709,18 @@ function CitationRow({
       <td className="px-5 py-3.5">
         <button
           onClick={onOpenDetail}
-          className="font-mono-tab font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5"
+          className="font-mono-tab font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1.5"
         >
           {c.citation_number}
         </button>
       </td>
-      <td className="px-5 py-3.5 font-mono-tab font-semibold text-white">{c.plate_number}</td>
+      <td className="px-5 py-3.5 font-mono-tab font-semibold text-foreground">{c.plate_number}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.vehicle_model ?? "—"}</td>
-      <td className="px-5 py-3.5 text-xs font-semibold text-white">{c.offense}</td>
-      <td className="px-5 py-3.5 font-mono-tab font-bold text-white">{formatPeso(Number(c.amount))}</td>
+      <td className="px-5 py-3.5 text-xs font-semibold text-foreground">{c.offense}</td>
+      <td className="px-5 py-3.5 font-mono-tab font-bold text-foreground">{formatPeso(Number(c.amount))}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.officer_name ?? "AI Camera Grid"}</td>
       <td className="px-5 py-3.5">
-        <div className="text-xs text-white">{timeAgo(c.issued_at)}</div>
+        <div className="text-xs text-foreground font-medium">{timeAgo(c.issued_at)}</div>
         <div className="font-mono-tab text-[10px] text-subtle">
           {new Date(c.issued_at).toLocaleDateString("en-PH")}
         </div>

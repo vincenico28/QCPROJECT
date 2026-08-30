@@ -284,7 +284,7 @@ function ViolationsPage() {
               <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
             Traffic Violations Review Console
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -450,14 +450,14 @@ function ViolationsPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="panel rounded-2xl border border-border p-4">
           <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Total Detections</span>
-          <p className="mt-2 font-mono-tab text-2xl font-black text-white">{counts.all}</p>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-foreground">{counts.all}</p>
           <span className="text-[10px] text-emerald-400 font-semibold mt-0.5 block">Live AI Stream Active</span>
         </div>
 
         <div className="panel rounded-2xl border border-orange-500/30 bg-orange-950/10 p-4">
           <span className="font-mono-tab text-[10px] uppercase tracking-widest text-orange-400">Pending Review</span>
           <p className="mt-2 font-mono-tab text-2xl font-black text-orange-300">{counts.pending}</p>
-          <span className="text-[10px] text-white/50 block">Requires Operator Action</span>
+          <span className="text-[10px] text-muted-foreground block">Requires Operator Action</span>
         </div>
 
         <div className="panel rounded-2xl border border-emerald-500/30 bg-emerald-950/10 p-4">
@@ -468,8 +468,8 @@ function ViolationsPage() {
 
         <div className="panel rounded-2xl border border-border p-4">
           <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Dismissed / False</span>
-          <p className="mt-2 font-mono-tab text-2xl font-black text-white/70">{counts.dismissed}</p>
-          <span className="text-[10px] text-white/40 block">Filtered by Operators</span>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-muted-foreground">{counts.dismissed}</p>
+          <span className="text-[10px] text-subtle block">Filtered by Operators</span>
         </div>
       </div>
 
@@ -486,7 +486,7 @@ function ViolationsPage() {
                   onClick={() => setStatus(s)}
                   className={cn(
                     "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-[11px] font-bold uppercase tracking-wider transition-colors",
-                    active ? "bg-primary text-white shadow-sm" : "text-subtle hover:text-foreground",
+                    active ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground",
                   )}
                 >
                   {s}
@@ -665,13 +665,13 @@ function ViolationRow({
       <td className="px-4 py-3.5">
         <button
           onClick={onReview}
-          className="group relative size-12 overflow-hidden rounded-lg border border-white/10 bg-black/60 shadow-sm block"
+          className="group relative size-12 overflow-hidden rounded-xl border border-border bg-panel-elevated shadow-sm block"
           title="Inspect Evidence Frame"
         >
           {v.evidence_url ? (
             <img src={v.evidence_url} alt="Evidence" className="size-full object-cover group-hover:scale-110 transition-transform" />
           ) : (
-            <div className="grid size-full place-items-center text-white/30">
+            <div className="grid size-full place-items-center text-subtle">
               <Camera className="size-4" />
             </div>
           )}
@@ -685,7 +685,7 @@ function ViolationRow({
       <td className="px-4 py-3.5">
         <button
           onClick={onReview}
-          className="font-mono-tab text-sm font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5"
+          className="font-mono-tab text-sm font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1.5"
         >
           {v.plate_number}
         </button>
@@ -696,7 +696,7 @@ function ViolationRow({
 
       {/* Violation Type */}
       <td className="px-4 py-3.5">
-        <span className="font-semibold text-xs text-white block">{v.violation_type}</span>
+        <span className="font-bold text-xs text-foreground block">{v.violation_type}</span>
         <span className="font-mono-tab text-[10px] text-muted-foreground">
           Est. Fine: {formatPeso(fineFor(v.violation_type))}
         </span>
@@ -705,7 +705,7 @@ function ViolationRow({
       {/* Location */}
       <td className="px-4 py-3.5">
         <div className="flex flex-col text-xs">
-          <span className="text-white/90 flex items-center gap-1">
+          <span className="text-foreground flex items-center gap-1 font-medium">
             <MapPin className="size-3 text-subtle shrink-0" />
             {v.location}
           </span>
@@ -718,7 +718,7 @@ function ViolationRow({
       {/* AI Confidence */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-2">
-          <div className="h-1.5 w-14 rounded-full bg-white/10 overflow-hidden">
+          <div className="h-1.5 w-14 rounded-full bg-border overflow-hidden">
             <div
               className={cn(
                 "h-full rounded-full",
