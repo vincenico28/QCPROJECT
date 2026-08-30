@@ -245,15 +245,15 @@ function CitizenPortal() {
   };
 
   return (
-    <div className="min-h-dvh bg-[#0a0a0b] text-white selection:bg-[#0066cc]/30">
+    <div className="min-h-dvh bg-background text-foreground selection:bg-primary/30">
       {/* Top Navigation */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0b]/85 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link to="/" className="flex items-center gap-3">
             <img src="/favico2.png" alt="Culiat LGU" className="size-8" />
             <div className="flex flex-col">
-              <span className="font-semibold tracking-tight text-white flex items-center gap-1.5">
-                Citizen<span className="text-[#0066cc]">Portal</span>
+              <span className="font-semibold tracking-tight text-foreground flex items-center gap-1.5">
+                Citizen<span className="text-primary">Portal</span>
                 <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-mono-tab font-bold text-blue-400 border border-blue-500/30">
                   MMDA NCAP
                 </span>
@@ -283,7 +283,7 @@ function CitizenPortal() {
                 onClick={() => setActiveTab("pass")}
                 className={cn(
                   "transition-colors flex items-center gap-1.5",
-                  activeTab === "pass" ? "text-[#0066cc] font-semibold" : "hover:text-white",
+                  activeTab === "pass" ? "text-primary font-semibold" : "hover:text-foreground",
                 )}
               >
                 <QrCode className="size-3.5" />
@@ -291,7 +291,7 @@ function CitizenPortal() {
               </button>
               <button
                 onClick={() => setActiveTab("traffic")}
-                className={cn("transition-colors", activeTab === "traffic" ? "text-white font-semibold" : "hover:text-white")}
+                className={cn("transition-colors", activeTab === "traffic" ? "text-foreground font-semibold" : "hover:text-foreground")}
               >
                 Live Traffic
               </button>
@@ -299,7 +299,7 @@ function CitizenPortal() {
                 onClick={() => setActiveTab("hazard")}
                 className={cn(
                   "transition-colors flex items-center gap-1.5",
-                  activeTab === "hazard" ? "text-orange-400 font-semibold" : "text-white/70 hover:text-white",
+                  activeTab === "hazard" ? "text-orange-400 font-semibold" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <AlertTriangle className="size-3.5" />
@@ -307,7 +307,7 @@ function CitizenPortal() {
               </button>
               <button
                 onClick={() => setActiveTab("disputes")}
-                className={cn("transition-colors", activeTab === "disputes" ? "text-white font-semibold" : "hover:text-white")}
+                className={cn("transition-colors", activeTab === "disputes" ? "text-foreground font-semibold" : "hover:text-foreground")}
               >
                 Adjudication & Appeals
               </button>
@@ -323,14 +323,14 @@ function CitizenPortal() {
               </button>
             </nav>
 
-            <div className="flex items-center gap-3 pl-6 border-l border-white/10">
+            <div className="flex items-center gap-3 pl-6 border-l border-border">
               <div className="flex items-center gap-2">
-                <div className="grid size-8 place-items-center rounded-full bg-[#0066cc]/20 text-[#0066cc]">
+                <div className="grid size-8 place-items-center rounded-full bg-primary/20 text-primary">
                   <User className="size-4" />
                 </div>
                 <div className="hidden flex-col md:flex">
-                  <span className="text-sm font-medium leading-none text-white">{currentCitizen.fullName}</span>
-                  <span className="text-xs text-white/50">{currentCitizen.id}</span>
+                  <span className="text-sm font-medium leading-none text-foreground">{currentCitizen.fullName}</span>
+                  <span className="text-xs text-subtle">{currentCitizen.id}</span>
                 </div>
               </div>
               <button
@@ -789,15 +789,15 @@ function CitizenPortal() {
 
             <div className="grid gap-8 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-br from-[#12141a] via-[#0e1017] to-[#0a0a0b] p-8 shadow-2xl">
-                  <div className="flex items-start justify-between border-b border-white/10 pb-6">
+                <div className="relative overflow-hidden rounded-3xl border border-border bg-panel p-8 shadow-2xl">
+                  <div className="flex items-start justify-between border-b border-border pb-6">
                     <div className="flex items-center gap-3">
                       <img src="/favico2.png" alt="LGU Seal" className="size-12" />
                       <div>
-                        <p className="text-[10px] uppercase font-mono-tab tracking-widest text-[#0066cc] font-bold">
+                        <p className="text-[10px] uppercase font-mono-tab tracking-widest text-primary font-bold">
                           Quezon City Traffic Operations
                         </p>
-                        <h2 className="text-xl font-black tracking-tight text-white">
+                        <h2 className="text-xl font-black tracking-tight text-foreground">
                           BARANGAY CULIAT MOTORIST PASS
                         </h2>
                       </div>
@@ -928,16 +928,16 @@ function CitizenPortal() {
 
             <div className="grid gap-8 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <form onSubmit={handleHazardSubmit} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl flex flex-col gap-4">
+                <form onSubmit={handleHazardSubmit} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="flex flex-col gap-1.5">
-                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
                         Incident Category *
                       </span>
                       <select
                         value={hazardCategory}
                         onChange={(e) => setHazardCategory(e.target.value as any)}
-                        className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-orange-500 focus:outline-none"
                       >
                         <option value="Stalled Vehicle">Stalled Vehicle / Breakdown</option>
                         <option value="Accident / Collision">Accident / Collision</option>
@@ -948,7 +948,7 @@ function CitizenPortal() {
                     </label>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                      <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
                         Approximate Location *
                       </span>
                       <input
@@ -957,13 +957,13 @@ function CitizenPortal() {
                         placeholder="e.g. Commonwealth Ave near Culiat Overpass"
                         value={hazardLocation}
                         onChange={(e) => setHazardLocation(e.target.value)}
-                        className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-orange-500 focus:outline-none"
                       />
                     </label>
                   </div>
 
                   <label className="flex flex-col gap-1.5">
-                    <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                    <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
                       Description & Details *
                     </span>
                     <textarea
@@ -972,7 +972,7 @@ function CitizenPortal() {
                       placeholder="Describe the situation (e.g. lane blocked, vehicle model, hazard severity)..."
                       value={hazardDesc}
                       onChange={(e) => setHazardDesc(e.target.value)}
-                      className="resize-none rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none"
+                      className="resize-none rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-orange-500 focus:outline-none"
                     />
                   </label>
 
@@ -1018,27 +1018,27 @@ function CitizenPortal() {
                 </Dialog.Trigger>
                 <Dialog.Portal>
                   <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
-                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
-                    <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
-                      <Scale className="size-5 text-blue-400" />
+                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl">
+                    <Dialog.Title className="text-lg font-bold text-foreground flex items-center gap-2">
+                      <Scale className="size-5 text-primary" />
                       File NCAP Citation Protest (TAB Form 01)
                     </Dialog.Title>
-                    <Dialog.Description className="mt-2 text-sm text-white/60">
+                    <Dialog.Description className="mt-2 text-sm text-muted-foreground">
                       Pursuant to MMDA NCAP Guidelines, formal appeals must be lodged within 10 calendar days of receipt.
                     </Dialog.Description>
 
                     <div className="mt-6 flex flex-col gap-4">
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Notice of Violation (NOV)</label>
+                        <label className="text-xs font-semibold uppercase tracking-wider text-subtle">Notice of Violation (NOV)</label>
                         {currentCitizen.citations && currentCitizen.citations.length > 0 ? (
                           <select
                             value={appealCitationId}
                             onChange={(e) => setAppealCitationId(e.target.value)}
-                            className="rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                            className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary"
                           >
-                            <option value="" className="bg-[#0a0a0b] text-white/60">-- Select NOV --</option>
+                            <option value="" className="bg-background text-muted-foreground">-- Select NOV --</option>
                             {currentCitizen.citations.map((c) => (
-                              <option key={c.id} value={c.id} className="bg-[#0a0a0b] text-white">
+                              <option key={c.id} value={c.id} className="bg-background text-foreground">
                                 {c.novNumber || c.id} · {c.plateNumber} — {c.violation} ({formatPeso(c.amount)})
                               </option>
                             ))}
@@ -1049,20 +1049,20 @@ function CitizenPortal() {
                             value={appealCitationId}
                             onChange={(e) => setAppealCitationId(e.target.value)}
                             placeholder="e.g. NOV-2026-QC-09124"
-                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                            className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary"
                           />
                         )}
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Statutory Ground for Appeal</label>
+                        <label className="text-xs font-semibold uppercase tracking-wider text-subtle">Statutory Ground for Appeal</label>
                         <select
                           value={appealGround}
                           onChange={(e) => setAppealGround(e.target.value)}
-                          className="rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-xs text-white outline-none focus:border-[#0066cc]"
+                          className="rounded-lg border border-border bg-background px-4 py-2.5 text-xs text-foreground outline-none focus:border-primary"
                         >
                           {NCAP_GROUNDS.map((g) => (
-                            <option key={g.value} value={g.label} className="bg-[#0a0a0b]">
+                            <option key={g.value} value={g.label} className="bg-background text-foreground">
                               {g.label}
                             </option>
                           ))}
@@ -1070,13 +1070,13 @@ function CitizenPortal() {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Supporting Statement & Defense</label>
+                        <label className="text-xs font-semibold uppercase tracking-wider text-subtle">Supporting Statement & Defense</label>
                         <textarea
                           rows={4}
                           value={appealReason}
                           onChange={(e) => setAppealReason(e.target.value)}
                           placeholder="Provide factual details (time of day, emergency situation, presence of traffic enforcer override, deed of sale date)..."
-                          className="resize-none rounded-lg border border-white/10 bg-[#0a0a0b] px-4 py-2.5 text-sm text-white outline-none focus:border-[#0066cc]"
+                          className="resize-none rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary"
                         />
                       </div>
                     </div>
@@ -1364,45 +1364,45 @@ function CitizenPortal() {
         <Dialog.Root open={nominateModalOpen} onOpenChange={setNominateModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
-              <div className="flex items-start justify-between border-b border-white/10 pb-3">
-                <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
-                  <UserCheck className="size-5 text-blue-400" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl">
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <Dialog.Title className="text-base font-bold text-foreground flex items-center gap-2">
+                  <UserCheck className="size-5 text-primary" />
                   Nominate Actual Driver (Transfer Liability)
                 </Dialog.Title>
                 <Dialog.Close asChild>
-                  <button className="rounded p-1 text-white/50 hover:text-white">
+                  <button className="rounded p-1 text-subtle hover:text-foreground">
                     <X className="size-4" />
                   </button>
                 </Dialog.Close>
               </div>
 
               <form onSubmit={handleNominateDriverSubmit} className="mt-4 flex flex-col gap-4">
-                <p className="text-xs text-white/60 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Under MMDA NCAP rules, if you were not the driver at the time of apprehension, you may transfer liability by submitting the driver's verified credentials.
                 </p>
 
                 <label className="flex flex-col gap-1.5">
-                  <span className="font-mono-tab text-[10px] uppercase text-white/50">Driver Full Name *</span>
+                  <span className="font-mono-tab text-[10px] uppercase text-subtle">Driver Full Name *</span>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Roberto M. Gomez"
                     value={nomineeName}
                     onChange={(e) => setNomineeName(e.target.value)}
-                    className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1.5">
-                  <span className="font-mono-tab text-[10px] uppercase text-white/50">Driver's License Number *</span>
+                  <span className="font-mono-tab text-[10px] uppercase text-subtle">Driver's License Number *</span>
                   <input
                     type="text"
                     required
                     placeholder="e.g. N01-14-192834"
                     value={nomineeLicense}
                     onChange={(e) => setNomineeLicense(e.target.value.toUpperCase())}
-                    className="rounded-lg border border-white/10 bg-[#0a0a0b] px-3.5 py-2.5 text-sm uppercase text-white focus:border-blue-500 focus:outline-none"
+                    className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm uppercase text-foreground focus:border-primary focus:outline-none"
                   />
                 </label>
 
@@ -1488,14 +1488,14 @@ function CitizenPortal() {
         <Dialog.Root open={settleModalOpen} onOpenChange={setSettleModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0a0a0b] p-6 shadow-2xl">
-              <div className="flex items-start justify-between border-b border-white/10 pb-3">
-                <Dialog.Title className="text-lg font-bold text-white flex items-center gap-2">
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl">
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <Dialog.Title className="text-lg font-bold text-foreground flex items-center gap-2">
                   <CreditCard className="size-5 text-emerald-400" />
                   Instant Online Citation Settlement
                 </Dialog.Title>
                 <Dialog.Close asChild>
-                  <button className="rounded p-1 text-white/50 hover:text-white">
+                  <button className="rounded p-1 text-subtle hover:text-foreground">
                     <X className="size-4" />
                   </button>
                 </Dialog.Close>

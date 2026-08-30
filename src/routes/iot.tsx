@@ -119,8 +119,8 @@ function IotManagementPage() {
         </div>
 
         {/* Live Inference Feed */}
-        <div className="xl:col-span-1 flex flex-col gap-4 rounded-2xl border border-border/50 bg-[#0a0a0b] p-0 shadow-lg overflow-hidden h-[600px]">
-          <div className="flex items-center justify-between border-b border-border/50 p-4 bg-panel">
+        <div className="xl:col-span-1 flex flex-col gap-4 rounded-2xl border border-border bg-panel p-0 shadow-lg overflow-hidden h-[600px]">
+          <div className="flex items-center justify-between border-b border-border p-4 bg-panel-elevated">
             <h2 className="font-semibold text-white flex items-center gap-2">
               <TerminalSquare className="size-5 text-emerald-500" />
               Live Inference Logs

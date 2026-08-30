@@ -30,6 +30,8 @@ import {
   ChevronDown,
   Lock,
   ArrowLeft,
+  Code2,
+  Wrench,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -65,9 +67,11 @@ const ALL_NAV: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/analytics/heatmaps", label: "AI Heatmaps", icon: Flame },
   { to: "/ai-training", label: "AI Training", icon: BrainCircuit },
+  { to: "/infrastructure", label: "Infrastructure", icon: Wrench },
+  { to: "/iot", label: "IoT Edge Nodes", icon: Server },
   { to: "/communications", label: "Communications", icon: Mail },
   { to: "/dispatch-hotline", label: "Emergency Hotline", icon: PhoneCall },
-  { to: "/iot", label: "IoT Edge Nodes", icon: Server },
+  { to: "/developer", label: "Developer API", icon: Code2 },
   { to: "/officer", label: "Officer Terminal", icon: Smartphone },
   { to: "/employees", label: "Employees", icon: UserCog },
   { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
@@ -366,9 +370,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/violations")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Violations Review</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">AI Violations Review</h1>
         <p className="text-xs text-subtle">
-          Automated camera detections awaiting review and verification.
+          Real-time YOLOv11 camera detections, confidence scoring, and citation verification.
         </p>
       </div>
     );
@@ -376,9 +380,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/citations")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Digital Citations</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Digital Citations & NOV Ledger</h1>
         <p className="text-xs text-subtle">
-          Notices of Violation (NOV), payment tracking, and digital clearance records.
+          Notices of Violation (NOV), penalty settlement status, and LTO clearance certificates.
         </p>
       </div>
     );
@@ -386,9 +390,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/cameras")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Camera Grid</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Live Camera Grid & ANPR</h1>
         <p className="text-xs text-subtle">
-          Real-time CCTV optical feeds and detection nodes across Barangay Culiat.
+          Real-time CCTV optical feeds, speed enforcement nodes, and IoT sensor health.
         </p>
       </div>
     );
@@ -396,9 +400,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/map")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">GIS Operations Map</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">GIS Spatial Operations Map</h1>
         <p className="text-xs text-subtle">
-          Live spatial monitoring of cameras, incidents, and enforcers on duty.
+          Live incident clustering, camera telemetry overlays, and active field officer GPS tracking.
         </p>
       </div>
     );
@@ -406,9 +410,19 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/vehicles")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Vehicle Registry</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Motorist Vehicle Registry</h1>
         <p className="text-xs text-subtle">
-          LTO database integration, repeated offenders, and registration alarms.
+          LTO LTMS database integration, repeat offender records, and hotlist registration alarms.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/officers/shifts")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Officer Shifts & Live GPS</h1>
+        <p className="text-xs text-subtle">
+          Real-time patrol unit coordinates, battery telemetry, and sector assignments.
         </p>
       </div>
     );
@@ -416,9 +430,19 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/officers")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Personnel & Shifts</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Field Enforcers & Personnel</h1>
         <p className="text-xs text-subtle">
-          Field traffic enforcers, active shift logs, and citation performance.
+          Duty roster, enforcer service records, and citation performance metrics.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/dispatch-hotline")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">911 Emergency Hotline Intake</h1>
+        <p className="text-xs text-subtle">
+          Citizen distress call queue, priority triage, and rapid response unit deployments.
         </p>
       </div>
     );
@@ -426,9 +450,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/dispatch")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Incident Dispatch</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Tactical Incident Dispatch</h1>
         <p className="text-xs text-subtle">
-          Live incident queue, officer dispatching, and rapid response coordination.
+          Incident response coordination, unit assignments, and field status telemetry.
         </p>
       </div>
     );
@@ -436,9 +460,29 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/disputes")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Traffic Adjudication Board</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Traffic Adjudication Board (TAB)</h1>
         <p className="text-xs text-subtle">
-          Citizen citation appeals, contest reviews, and formal resolution orders.
+          Citizen citation appeals, evidence deliberations, and formal resolution docket orders.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/transport")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Public Transport Coordination</h1>
+        <p className="text-xs text-subtle">
+          PUV route capacity, jeepney and bus terminal flow, and illegal terminal detection.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/finance-analytics")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Executive Financial Analytics</h1>
+        <p className="text-xs text-subtle">
+          Multi-stream revenue forecasting, collection trends, and municipal budget allocations.
         </p>
       </div>
     );
@@ -446,9 +490,9 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/finance")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Finance & Treasury</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Treasury & Cashier Reconciliations</h1>
         <p className="text-xs text-subtle">
-          Over-the-counter payments, cashier reconciliation, and revenue auditing.
+          Over-the-counter payments, cashier drawer balancing, and daily settlement audits.
         </p>
       </div>
     );
@@ -456,9 +500,109 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/reports")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Executive Reports</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Statutory Executive Reports</h1>
         <p className="text-xs text-subtle">
-          Audit-ready financial summaries, enforcement metrics, and CSV exports.
+          Quezon City statutory violation logs, revenue audit summaries, and official CSV exports.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/analytics/heatmaps")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Predictive Spatial AI Heatmaps</h1>
+        <p className="text-xs text-subtle">
+          GIS incident density calculations, 24-hour predictive traffic risk zones, and choke-point forecasts.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/analytics")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Operational Traffic Analytics</h1>
+        <p className="text-xs text-subtle">
+          Corridor velocity trends, violation distribution charts, and hourly congestion index.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/ai-training")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">YOLOv11 AI Training & Fine-Tuning</h1>
+        <p className="text-xs text-subtle">
+          Dataset annotation, model fine-tuning checkpoints, and inference accuracy benchmarks.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/infrastructure")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Predictive Infrastructure Health</h1>
+        <p className="text-xs text-subtle">
+          Traffic light controllers, sensor loop degradation, and automated maintenance work orders.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/iot")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">IoT Edge Nodes & Telemetry</h1>
+        <p className="text-xs text-subtle">
+          Edge compute nodes, live camera telemetry streaming, and remote hardware reboot watchdogs.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/automation")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Automated Rules Engine</h1>
+        <p className="text-xs text-subtle">
+          Autonomous IF-THIS-THEN-THAT protocols for instant dispatches and motorist advisories.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/developer")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Developer API Portal</h1>
+        <p className="text-xs text-subtle">
+          API token management, webhook feeds for Waze and MMDA, and integration documentation.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/communications")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Official Communications Dispatcher</h1>
+        <p className="text-xs text-subtle">
+          Automated email notices of violation, official electronic receipts, and emergency broadcast dispatch.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/employees")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Staff Directory & Access Control</h1>
+        <p className="text-xs text-subtle">
+          Personnel directory, RBAC credential provisioning, and security clearance management.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/audit-logs")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Enterprise Security & Audit Logs</h1>
+        <p className="text-xs text-subtle">
+          Immutable audit trail, administrative action tracking, and real-time security events.
         </p>
       </div>
     );
@@ -466,9 +610,19 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/settings")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">System Settings</h1>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">System Settings & Security Matrix</h1>
         <p className="text-xs text-subtle">
-          Fine schedules, AI confidence thresholds, and system preferences.
+          RBAC permission clearance matrix, AI threshold calibrations, and fine penalty schedules.
+        </p>
+      </div>
+    );
+  }
+  if (pathname.startsWith("/officer")) {
+    return (
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-foreground">Field Enforcer Terminal</h1>
+        <p className="text-xs text-subtle">
+          On-street citation issuance, QR citation verification, and tactical dispatch queue.
         </p>
       </div>
     );
