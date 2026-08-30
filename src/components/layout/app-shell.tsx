@@ -32,6 +32,9 @@ import {
   ArrowLeft,
   Code2,
   Wrench,
+  Bot,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -47,35 +50,68 @@ import * as Popover from "@radix-ui/react-popover";
 type NavItem = {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: any;
+  badge?: string;
 };
 
-const ALL_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Command", icon: LayoutDashboard },
-  { to: "/violations", label: "Violations", icon: FileText },
-  { to: "/citations", label: "Citations", icon: CreditCard },
-  { to: "/cameras", label: "Cameras", icon: Video },
-  { to: "/map", label: "GIS Map", icon: MapIcon },
-  { to: "/vehicles", label: "Vehicles", icon: Car },
-  { to: "/officers", label: "Officers", icon: Users },
-  { to: "/dispatch", label: "Dispatch", icon: Radio },
-  { to: "/disputes", label: "Disputes", icon: Scale },
-  { to: "/transport", label: "Transport", icon: Bus },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/finance", label: "Finance", icon: Landmark },
-  { to: "/finance-analytics", label: "Executive Finance", icon: TrendingUp },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/analytics/heatmaps", label: "AI Heatmaps", icon: Flame },
-  { to: "/ai-training", label: "AI Training", icon: BrainCircuit },
-  { to: "/infrastructure", label: "Infrastructure", icon: Wrench },
-  { to: "/iot", label: "IoT Edge Nodes", icon: Server },
-  { to: "/communications", label: "Communications", icon: Mail },
-  { to: "/dispatch-hotline", label: "Emergency Hotline", icon: PhoneCall },
-  { to: "/developer", label: "Developer API", icon: Code2 },
-  { to: "/officer", label: "Officer Terminal", icon: Smartphone },
-  { to: "/employees", label: "Employees", icon: UserCog },
-  { to: "/audit-logs", label: "Audit Logs", icon: ShieldAlert },
-  { to: "/settings", label: "Settings", icon: Settings2 },
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Operations",
+    items: [
+      { to: "/dashboard", label: "Command Center", icon: LayoutDashboard },
+      { to: "/violations", label: "AI Violations", icon: FileText },
+      { to: "/citations", label: "Citations & NOV", icon: CreditCard },
+      { to: "/cameras", label: "Camera Grid", icon: Video },
+      { to: "/map", label: "GIS Operations Map", icon: MapIcon },
+      { to: "/vehicles", label: "Vehicle Registry", icon: Car },
+    ],
+  },
+  {
+    title: "Field & Response",
+    items: [
+      { to: "/dispatch", label: "Tactical Dispatch", icon: Radio },
+      { to: "/officers/shifts", label: "Officer Shifts & GPS", icon: Users },
+      { to: "/officers", label: "Personnel Roster", icon: Users },
+      { to: "/dispatch-hotline", label: "Emergency Hotline", icon: PhoneCall },
+      { to: "/transport", label: "Public Transport", icon: Bus },
+      { to: "/officer", label: "Enforcer Terminal", icon: Smartphone },
+    ],
+  },
+  {
+    title: "Intelligence & AI",
+    items: [
+      { to: "/analytics/heatmaps", label: "Predictive Heatmaps", icon: Flame },
+      { to: "/analytics", label: "Traffic Analytics", icon: BarChart3 },
+      { to: "/ai-training", label: "YOLOv11 AI Training", icon: BrainCircuit },
+      { to: "/infrastructure", label: "Infrastructure Health", icon: Wrench },
+      { to: "/iot", label: "IoT Edge Nodes", icon: Server },
+      { to: "/automation", label: "Automated Rules", icon: Bot },
+    ],
+  },
+  {
+    title: "Treasury & Legal",
+    items: [
+      { to: "/finance", label: "Treasury Cashier", icon: Landmark },
+      { to: "/finance-analytics", label: "Executive Analytics", icon: TrendingUp },
+      { to: "/disputes", label: "TAB Disputes", icon: Scale },
+      { to: "/reports", label: "Statutory Reports", icon: FileText },
+    ],
+  },
+  {
+    title: "System & Security",
+    items: [
+      { to: "/communications", label: "Official Notices", icon: Mail },
+      { to: "/developer", label: "Developer API", icon: Code2 },
+      { to: "/employees", label: "Staff Directory", icon: UserCog },
+      { to: "/audit-logs", label: "Security Audit Logs", icon: ShieldAlert },
+      { to: "/settings", label: "Settings & RBAC", icon: Settings2 },
+    ],
+  },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -84,6 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const email = user?.email ?? null;
   const palette = useCommandPalette();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Public pages render without the operations chrome or auth gate.
   if (pathname === "/" || pathname.startsWith("/lookup") || pathname.startsWith("/citizen") || pathname.startsWith("/portal")) return <>{children}</>;
@@ -101,88 +138,225 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Check RBAC clearance for the current path
   const isAuthorized = hasRoleAccess(role, pathname);
 
-  // Filter navigation items accessible to the active role
-  const visibleNav = ALL_NAV.filter((item) => hasRoleAccess(role, item.to));
+  // Filter navigation groups accessible to the active role
+  const accessibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => hasRoleAccess(role, item.to)),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <div className="flex min-h-dvh bg-background text-foreground">
-      {/* Sidebar */}
-      <aside className="sticky top-0 flex h-dvh w-20 shrink-0 flex-col items-center gap-8 border-r border-border bg-panel py-6">
-        <Link
-          to="/dashboard"
-          className="grid size-10 place-items-center overflow-hidden rounded-xl shadow-lg shadow-primary/30"
-          aria-label="Barangay Culiat, Quezon City Traffic Ops"
-        >
-          <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
-        </Link>
+      {/* Enhanced Collapsible / Expandable Sidebar */}
+      <aside
+        className={cn(
+          "sticky top-0 flex h-dvh shrink-0 flex-col border-r border-border bg-panel transition-all duration-300 z-30",
+          isCollapsed ? "w-20 items-center py-6" : "w-64 p-4 justify-between"
+        )}
+      >
+        {/* Sidebar Header */}
+        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-4" : "justify-between px-2 pb-3 border-b border-border/60")}>
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-3 group"
+            aria-label="Barangay Culiat, Quezon City Traffic Ops"
+          >
+            <div className="grid size-10 place-items-center overflow-hidden rounded-xl bg-panel-elevated border border-border shadow-lg shadow-primary/25 transition-transform group-hover:scale-105">
+              <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0">
+                <p className="text-xs font-bold tracking-tight text-white leading-tight">
+                  Culiat Traffic Ops
+                </p>
+                <p className="font-mono-tab text-[9px] uppercase tracking-widest text-primary font-semibold">
+                  QC Flow Guardian
+                </p>
+              </div>
+            )}
+          </Link>
 
-        <nav 
-          className="flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden pb-4 [&::-webkit-scrollbar]:hidden"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="rounded-lg p-1.5 text-subtle hover:bg-panel-elevated hover:text-foreground transition-colors"
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+          </button>
+        </div>
+
+        {/* Quick Search Shortcut inside Sidebar when Expanded */}
+        {!isCollapsed && (
+          <button
+            type="button"
+            onClick={() => palette.setOpen(true)}
+            className="my-3 flex items-center justify-between rounded-xl border border-border bg-panel-elevated px-3 py-2 text-xs text-subtle hover:border-primary/40 hover:text-foreground transition-all shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="size-3.5" />
+              <span>Quick Search...</span>
+            </div>
+            <span className="flex items-center gap-0.5 rounded bg-background px-1.5 py-0.5 font-mono-tab text-[9px] text-muted-foreground border border-border">
+              <Command className="size-2.5" /> K
+            </span>
+          </button>
+        )}
+
+        {/* Navigation Categories */}
+        <nav
+          className={cn(
+            "flex w-full flex-1 flex-col overflow-y-auto overflow-x-hidden py-2 custom-scrollbar",
+            isCollapsed ? "items-center gap-2 [&::-webkit-scrollbar]:hidden" : "gap-5"
+          )}
+          style={{ scrollbarWidth: isCollapsed ? "none" : "thin" }}
         >
-          {visibleNav.map((item) => {
-            const active = pathname.startsWith(item.to);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                aria-label={item.label}
-                className={cn(
-                  "group relative grid size-10 place-items-center rounded-xl transition-colors",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-subtle hover:bg-panel-elevated hover:text-foreground",
-                )}
-              >
-                <Icon className="size-5" strokeWidth={1.75} />
-                {active && (
-                  <span className="absolute -left-3 h-6 w-0.5 rounded-full bg-primary shadow-glow" />
-                )}
-                <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-md border border-border bg-panel-elevated px-2 py-1 text-xs font-medium opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  {item.label}
+          {accessibleGroups.map((group) => (
+            <div key={group.title} className="w-full flex flex-col gap-1">
+              {!isCollapsed && (
+                <span className="px-3 font-mono-tab text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-1">
+                  {group.title}
                 </span>
-              </Link>
-            );
-          })}
+              )}
+              {group.items.map((item) => {
+                const active = pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
+                const Icon = item.icon;
+
+                if (isCollapsed) {
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      aria-label={item.label}
+                      className={cn(
+                        "group relative grid size-10 place-items-center rounded-xl transition-all",
+                        active
+                          ? "bg-primary/15 text-primary font-bold shadow-sm"
+                          : "text-subtle hover:bg-panel-elevated hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="size-5" strokeWidth={active ? 2 : 1.75} />
+                      {active && (
+                        <span className="absolute -left-3 h-6 w-1 rounded-full bg-primary shadow-glow" />
+                      )}
+                      <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-md border border-border bg-panel-elevated px-2.5 py-1 text-xs font-semibold opacity-0 shadow-2xl transition-opacity group-hover:opacity-100 z-50">
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all",
+                      active
+                        ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
+                        : "text-subtle hover:bg-panel-elevated hover:text-foreground",
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={cn("size-4 shrink-0 transition-transform group-hover:scale-110", active ? "text-primary" : "text-subtle")} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {active && (
+                      <span className="size-1.5 rounded-full bg-primary shadow-glow shrink-0" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        <div className="mt-auto flex flex-col items-center gap-3">
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              window.location.href = "/";
-            }}
-            className="grid size-10 place-items-center rounded-xl text-subtle transition-colors hover:bg-panel-elevated hover:text-danger"
-            aria-label="Sign out"
-          >
-            <LogOut className="size-5" strokeWidth={1.75} />
-          </button>
-          <div
-            className={cn(
-              "grid size-10 place-items-center rounded-full bg-panel-elevated font-mono-tab text-[11px] font-bold text-foreground ring-2 relative",
-              role === "super_admin" ? "ring-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.3)]" :
-              role === "admin" ? "ring-primary/60 shadow-[0_0_10px_var(--color-primary)]/20" :
-              role === "dispatcher" ? "ring-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]" :
-              role === "officer" ? "ring-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.3)]" :
-              role === "finance" ? "ring-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]" :
-              "ring-border"
-            )}
-            title={`${email ?? "Signed in"} (${roleDef.label})`}
-          >
-            {(email?.[0] ?? "Q").toUpperCase()}
-            <span
-              className={cn(
-                "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-panel",
-                role === "super_admin" ? "bg-purple-500" :
-                role === "admin" ? "bg-primary" :
-                role === "dispatcher" ? "bg-emerald-500" :
-                role === "officer" ? "bg-amber-500" :
-                role === "finance" ? "bg-cyan-500" :
-                role === "adjudicator" ? "bg-indigo-500" : "bg-subtle"
-              )}
-            />
-          </div>
+        {/* User Profile & Sign Out Footer */}
+        <div className={cn("mt-auto pt-3 border-t border-border/60", isCollapsed ? "flex flex-col items-center gap-3" : "flex flex-col gap-2")}>
+          {!isCollapsed ? (
+            <div className="flex items-center justify-between rounded-xl bg-panel-elevated p-2.5 border border-border">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={cn(
+                    "grid size-8 shrink-0 place-items-center rounded-lg bg-panel font-mono-tab text-xs font-bold text-foreground ring-2 relative",
+                    role === "super_admin" ? "ring-purple-500/60" :
+                    role === "admin" ? "ring-primary/60" :
+                    role === "dispatcher" ? "ring-emerald-500/60" :
+                    role === "officer" ? "ring-amber-500/60" :
+                    role === "finance" ? "ring-cyan-500/60" : "ring-border"
+                  )}
+                >
+                  {(email?.[0] ?? "Q").toUpperCase()}
+                  <span
+                    className={cn(
+                      "absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-panel",
+                      role === "super_admin" ? "bg-purple-500" :
+                      role === "admin" ? "bg-primary" :
+                      role === "dispatcher" ? "bg-emerald-500" :
+                      role === "officer" ? "bg-amber-500" :
+                      role === "finance" ? "bg-cyan-500" : "bg-subtle"
+                    )}
+                  />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-foreground truncate leading-tight">
+                    {email?.split("@")[0] || "Operator"}
+                  </span>
+                  <span className="font-mono-tab text-[9px] uppercase tracking-wider text-muted-foreground truncate">
+                    {roleDef.label}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  window.location.href = "/";
+                }}
+                className="rounded-lg p-1.5 text-subtle hover:bg-panel hover:text-danger transition-colors shrink-0"
+                title="Sign out"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  window.location.href = "/";
+                }}
+                className="grid size-10 place-items-center rounded-xl text-subtle transition-colors hover:bg-panel-elevated hover:text-danger"
+                title="Sign out"
+              >
+                <LogOut className="size-5" strokeWidth={1.75} />
+              </button>
+              <div
+                className={cn(
+                  "grid size-10 place-items-center rounded-full bg-panel-elevated font-mono-tab text-[11px] font-bold text-foreground ring-2 relative",
+                  role === "super_admin" ? "ring-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.3)]" :
+                  role === "admin" ? "ring-primary/60 shadow-[0_0_10px_var(--color-primary)]/20" :
+                  role === "dispatcher" ? "ring-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]" :
+                  role === "officer" ? "ring-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.3)]" :
+                  role === "finance" ? "ring-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]" :
+                  "ring-border"
+                )}
+                title={`${email ?? "Signed in"} (${roleDef.label})`}
+              >
+                {(email?.[0] ?? "Q").toUpperCase()}
+                <span
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-panel",
+                    role === "super_admin" ? "bg-purple-500" :
+                    role === "admin" ? "bg-primary" :
+                    role === "dispatcher" ? "bg-emerald-500" :
+                    role === "officer" ? "bg-amber-500" :
+                    role === "finance" ? "bg-cyan-500" :
+                    role === "adjudicator" ? "bg-indigo-500" : "bg-subtle"
+                  )}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
