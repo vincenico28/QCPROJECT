@@ -98,7 +98,7 @@ function CamerasPage() {
             </span>
             <span className="text-xs text-subtle">· 6 Corridor Nodes Active</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
             IoT Enforcement Camera Grid
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -125,7 +125,7 @@ function CamerasPage() {
           {(role === "admin" || role === "dispatcher" || true) && (
             <DeployCameraDialog
               trigger={
-                <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
+                <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
                   <Plus className="size-3.5" />
                   Deploy New Node
                 </button>
@@ -152,11 +152,11 @@ function CamerasPage() {
               onClick={() => setFilter(f)}
               className={cn(
                 "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-xs font-bold uppercase tracking-wider transition-colors",
-                filter === f ? "bg-primary text-white shadow-sm" : "text-subtle hover:text-foreground",
+                filter === f ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground",
               )}
             >
               {f}
-              <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-white/80">
+              <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-primary-foreground/90">
                 {counts[f]}
               </span>
             </button>
@@ -275,7 +275,7 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
         {/* Card Body */}
         <div className="p-5 flex flex-col gap-3">
           <div>
-            <h3 className="font-bold text-white text-sm leading-snug flex items-center justify-between">
+            <h3 className="font-bold text-foreground text-sm leading-snug flex items-center justify-between">
               <span className="truncate">{camera.location}</span>
             </h3>
             <p className="font-mono-tab text-[10px] text-muted-foreground mt-0.5">
@@ -283,10 +283,10 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-background/50 p-3 text-xs">
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-panel-elevated/50 p-3 text-xs">
             <div>
               <span className="text-subtle font-mono-tab text-[9px] uppercase">Detections Today</span>
-              <p className="font-mono-tab font-bold text-white text-sm mt-0.5">{detections} events</p>
+              <p className="font-mono-tab font-bold text-foreground text-sm mt-0.5">{detections} events</p>
             </div>
             <div>
               <span className="text-subtle font-mono-tab text-[9px] uppercase">Telemetry Latency</span>
@@ -303,7 +303,7 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
         <div className="flex items-center gap-1.5">
           <button
             onClick={handlePing}
-            className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-semibold text-white/80 hover:bg-panel-elevated hover:text-white transition-colors"
+            className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-panel-elevated hover:text-foreground transition-colors"
             title="Ping node telemetry"
           >
             Ping
@@ -367,7 +367,7 @@ function Kpi({
           <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
             {label}
           </span>
-          <p className="mt-2 font-mono-tab text-2xl font-black text-white">{value}</p>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-foreground">{value}</p>
           {sub && <span className="text-[10px] text-muted-foreground mt-0.5 block">{sub}</span>}
         </div>
         <div className={cn("grid size-10 place-items-center rounded-xl border", toneCls)}>

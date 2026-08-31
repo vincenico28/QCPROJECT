@@ -298,7 +298,7 @@ function VehiclesPage() {
             </span>
             <span className="text-xs text-subtle">· Motor Vehicle Database</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
             Vehicle Registry & Watchlist
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -318,7 +318,7 @@ function VehiclesPage() {
           {/* Register Vehicle Modal */}
           <Dialog.Root open={registerModalOpen} onOpenChange={setRegisterModalOpen}>
             <Dialog.Trigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
                 <Plus className="size-3.5" />
                 Register Vehicle
               </button>
@@ -327,7 +327,7 @@ function VehiclesPage() {
               <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
               <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95">
                 <div className="flex items-start justify-between border-b border-border pb-3">
-                  <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
+                  <Dialog.Title className="text-base font-bold text-foreground flex items-center gap-2">
                     <Car className="size-4 text-primary" />
                     Register Motor Vehicle (LTO Verified)
                   </Dialog.Title>
@@ -350,7 +350,7 @@ function VehiclesPage() {
                         placeholder="e.g. NDB-8921"
                         value={plateInput}
                         onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono-tab uppercase text-white focus:border-primary focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono-tab uppercase text-foreground focus:border-primary focus:outline-none"
                       />
                     </label>
                     <div className="flex items-end">
@@ -375,7 +375,7 @@ function VehiclesPage() {
                         placeholder="Toyota Vios 1.3E"
                         value={makeModel}
                         onChange={(e) => setMakeModel(e.target.value)}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                       />
                     </label>
                     <label className="flex flex-col gap-1">
@@ -385,7 +385,7 @@ function VehiclesPage() {
                       <select
                         value={vehType}
                         onChange={(e) => setVehType(e.target.value)}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                       >
                         <option value="Private Sedan">Private Sedan</option>
                         <option value="SUV / AUV">SUV / AUV</option>
@@ -406,7 +406,7 @@ function VehiclesPage() {
                       placeholder="Juan Dela Cruz"
                       value={ownerName}
                       onChange={(e) => setOwnerName(e.target.value)}
-                      className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                     />
                   </label>
 
@@ -419,7 +419,7 @@ function VehiclesPage() {
                         type="text"
                         value={color}
                         onChange={(e) => setColor(e.target.value)}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                       />
                     </label>
                     <label className="flex flex-col gap-1">
@@ -431,7 +431,7 @@ function VehiclesPage() {
                         placeholder="NCP150-XXXXXXX"
                         value={chassis}
                         onChange={(e) => setChassis(e.target.value)}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono-tab text-white focus:border-primary focus:outline-none"
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono-tab text-foreground focus:border-primary focus:outline-none"
                       />
                     </label>
                   </div>
@@ -445,7 +445,7 @@ function VehiclesPage() {
                     <button
                       type="submit"
                       disabled={!plateInput}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     >
                       <CheckCircle2 className="size-3.5" />
                       Save to Registry
@@ -501,11 +501,11 @@ function VehiclesPage() {
                 onClick={() => setRisk(s)}
                 className={cn(
                   "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-xs font-bold uppercase tracking-wider transition-colors",
-                  active ? "bg-primary text-white shadow-sm" : "text-subtle hover:text-foreground"
+                  active ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground"
                 )}
               >
                 {s}
-                <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-white/80">
+                <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-primary-foreground/90">
                   {counts[s]}
                 </span>
               </button>
@@ -565,14 +565,14 @@ function VehiclesPage() {
                       <Link
                         to="/vehicles/$plate"
                         params={{ plate: v.plate }}
-                        className="font-mono-tab font-black text-white hover:text-primary transition-colors text-xs"
+                        className="font-mono-tab font-black text-foreground hover:text-primary transition-colors text-xs"
                       >
                         {v.plate}
                       </Link>
                     </td>
                     <td className="px-5 py-4 text-xs text-muted-foreground">{v.model ?? "—"}</td>
-                    <td className="px-5 py-4 font-mono-tab text-xs font-bold text-white">{v.violations}</td>
-                    <td className="px-5 py-4 font-mono-tab text-xs text-white">
+                    <td className="px-5 py-4 font-mono-tab text-xs font-bold text-foreground">{v.violations}</td>
+                    <td className="px-5 py-4 font-mono-tab text-xs text-foreground">
                       {v.citations}
                       {v.unpaid > 0 && (
                         <span className="ml-1 font-mono-tab text-[10px] text-amber-400 font-bold">
@@ -587,9 +587,9 @@ function VehiclesPage() {
                         <span className="text-emerald-400 font-medium">₱0 (Clean)</span>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-xs text-white/90">{v.lastOffense}</td>
+                    <td className="px-5 py-4 text-xs text-foreground/90">{v.lastOffense}</td>
                     <td className="px-5 py-4">
-                      <div className="text-white text-xs">{timeAgo(v.lastSeen)}</div>
+                      <div className="text-foreground text-xs font-medium">{timeAgo(v.lastSeen)}</div>
                       <div className="font-mono-tab text-[10px] text-subtle">
                         {new Date(v.lastSeen).toLocaleDateString("en-PH")}
                       </div>
@@ -662,7 +662,7 @@ function MiniStat({
           <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
             {label}
           </span>
-          <p className="mt-2 font-mono-tab text-2xl font-black text-white">{value}</p>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-foreground">{value}</p>
           {sub && <span className="text-[10px] text-muted-foreground mt-0.5 block">{sub}</span>}
         </div>
         <div className={cn("grid size-10 place-items-center rounded-xl border", toneCls)}>
