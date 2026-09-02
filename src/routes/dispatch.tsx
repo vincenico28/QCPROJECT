@@ -120,7 +120,7 @@ function DispatchBoard() {
             </span>
             <span className="text-xs text-subtle">· 24/7 Patrol Grid</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
             Officer Dispatch & Incident Response
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -139,7 +139,7 @@ function DispatchBoard() {
 
           <DispatchDialog
             trigger={
-              <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
                 <Radio className="size-3.5" />
                 New Incident Dispatch
               </button>
@@ -165,7 +165,7 @@ function DispatchBoard() {
               onClick={() => setFilter(f.key)}
               className={cn(
                 "rounded-lg px-3 py-1.5 font-mono-tab text-xs font-bold uppercase tracking-wider transition-colors",
-                filter === f.key ? "bg-primary text-white shadow-sm" : "text-subtle hover:text-foreground"
+                filter === f.key ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground"
               )}
             >
               {f.label}
@@ -198,13 +198,13 @@ function DispatchBoard() {
                 <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono-tab text-sm font-bold text-white">
+                      <span className="font-mono-tab text-sm font-bold text-foreground">
                         {d.reference}
                       </span>
                       <PriorityPill priority={d.priority} />
                       <StatusPill status={d.status} />
                     </div>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-white font-medium">
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground font-medium">
                       <MapPin className="size-3.5 shrink-0 text-primary" />
                       <span className="truncate">{d.location}</span>
                     </p>
@@ -220,7 +220,7 @@ function DispatchBoard() {
                     <User className="size-3.5 text-subtle" />
                     <span>
                       {d.officer_name ? (
-                        <strong className="text-white">{d.badge_number} · {d.officer_name}</strong>
+                        <strong className="text-foreground">{d.badge_number} · {d.officer_name}</strong>
                       ) : (
                         <span className="text-amber-400 font-semibold">Unassigned · Broadcast to nearest unit</span>
                       )}
@@ -234,7 +234,7 @@ function DispatchBoard() {
                 </div>
 
                 {d.instructions && (
-                  <div className="mt-3 rounded-xl border border-border bg-background/50 p-3 text-xs text-white/90 leading-relaxed">
+                  <div className="mt-3 rounded-xl border border-border bg-panel-elevated/50 p-3 text-xs text-foreground/90 leading-relaxed">
                     <span className="text-[10px] font-mono-tab text-subtle uppercase block mb-0.5">Tactical Directives:</span>
                     {d.instructions}
                   </div>
@@ -257,8 +257,8 @@ function DispatchBoard() {
                           s === "resolved"
                             ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-600 hover:text-white"
                             : s === "cancelled"
-                            ? "border-border bg-background text-muted-foreground hover:text-red-400"
-                            : "border-primary/40 bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                            ? "border-border bg-panel text-muted-foreground hover:text-red-400"
+                            : "border-primary/40 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
                         )}
                       >
                         {DISPATCH_STATUS_LABEL[s]}
@@ -306,7 +306,7 @@ function Kpi({
           <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
             {label}
           </span>
-          <p className="mt-2 font-mono-tab text-3xl font-black text-white">{value}</p>
+          <p className="mt-2 font-mono-tab text-3xl font-black text-foreground">{value}</p>
           {sub && <span className="text-[10px] text-muted-foreground mt-0.5 block">{sub}</span>}
         </div>
         <div className={cn("grid size-10 place-items-center rounded-xl border", toneClass)}>
