@@ -33,6 +33,7 @@ function ScannerPage() {
 
   useEffect(() => {
     if (scanResult) return;
+    if (typeof window === "undefined" || !document.getElementById("reader")) return;
 
     let scanner: Html5QrcodeScanner | null = null;
     try {

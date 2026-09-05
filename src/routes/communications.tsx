@@ -102,8 +102,8 @@ function CommunicationsPage() {
         body,
       },
       {
-        onSuccess: (newMsg) => {
-          toast.success(`Email notification sent to ${newMsg.recipient}`);
+        onSuccess: () => {
+          toast.success(`Email notification sent to ${recipient}`);
           setComposeModalOpen(false);
           setRecipient("");
           setSubject("");

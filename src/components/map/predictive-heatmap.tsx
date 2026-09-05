@@ -24,31 +24,54 @@ export default function PredictiveHeatmap({ points, center }: Props) {
       (window as any).L = L;
     }
 
-    const map = L.map(nodeRef.current, {
-      center,
-      zoom: 14,
-      zoomControl: true,
-      preferCanvas: true,
-    });
+    // Defensive cleanup of any stale Leaflet ID on the DOM node
+    if ((nodeRef.current as any)._leaflet_id) {
+      delete (nodeRef.current as any)._leaflet_id;
+    }
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20,
-    }).addTo(map);
+    let map: L.Map | null = null;
+    try {
+      map = L.map(nodeRef.current, {
+        center,
+        zoom: 14,
+        zoomControl: true,
+        preferCanvas: true,
+      });
 
-    layerRef.current = L.layerGroup().addTo(map);
-    mapRef.current = map;
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
+      }).addTo(map);
 
-    setTimeout(() => map.invalidateSize(), 100);
+      layerRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 100);
+    } catch (err) {
+      console.warn("Predictive heatmap init warning:", err);
+    }
 
     return () => {
-      map.remove();
+      try {
+        if (map) {
+          map.remove();
+        }
+      } catch (err) {
+        console.warn("Leaflet cleanup error:", err);
+      }
+      if (nodeRef.current && (nodeRef.current as any)._leaflet_id) {
+        delete (nodeRef.current as any)._leaflet_id;
+      }
       mapRef.current = null;
       layerRef.current = null;
     };
-  }, [center]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const layer = layerRef.current;

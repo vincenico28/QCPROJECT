@@ -35,6 +35,7 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
+  Megaphone,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/cameras", label: "Camera Grid", icon: Video },
       { to: "/map", label: "GIS Operations Map", icon: MapIcon },
       { to: "/vehicles", label: "Vehicle Registry", icon: Car },
+      { to: "/advisories", label: "Public Advisories", icon: Megaphone },
     ],
   },
   {
@@ -123,7 +125,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Public pages render without the operations chrome or auth gate.
-  if (pathname === "/" || pathname.startsWith("/lookup") || pathname.startsWith("/citizen") || pathname.startsWith("/portal")) return <>{children}</>;
+  if (
+    pathname === "/" ||
+    pathname === "/tv-display" ||
+    pathname.startsWith("/lookup") ||
+    pathname.startsWith("/citizen") ||
+    pathname.startsWith("/portal")
+  ) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (

@@ -128,7 +128,7 @@ function OfficersPage() {
 
   const handleToggleDuty = (officer: Officer) => {
     toggleDuty.mutate(
-      { id: officer.id },
+      { id: officer.id, currentDuty: !!officer.on_duty },
       {
         onSuccess: () => {
           toast.success(

@@ -71,13 +71,64 @@ function TvDisplayPage() {
                </span>
             </div>
             
-            <div className="flex-1 bg-[url('https://api.maptiler.com/maps/dataviz-dark/static/121.050,14.655,14/1200x800.png?key=get_your_own_OpIi9ZULNHzrESv6T2vL')] bg-cover bg-center opacity-70">
-               {/* Simulated Radar Ping */}
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-32 rounded-full border border-emerald-500/50 animate-ping"></div>
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-2 rounded-full bg-emerald-500 shadow-[0_0_15px_5px_rgba(16,185,129,0.5)]"></div>
-               
-               <div className="absolute top-1/3 left-2/3 -translate-x-1/2 -translate-y-1/2 size-2 rounded-full bg-emerald-500 shadow-[0_0_15px_5px_rgba(16,185,129,0.5)]"></div>
-               <div className="absolute top-2/3 left-1/3 -translate-x-1/2 -translate-y-1/2 size-2 rounded-full bg-red-500 shadow-[0_0_15px_5px_rgba(239,68,68,0.5)]"></div>
+            <div className="relative flex-1 overflow-hidden bg-[#07090e]">
+               {/* High-Tech Tactical GIS Radar Grid */}
+               <svg className="absolute inset-0 size-full opacity-30" xmlns="http://www.w3.org/2000/svg">
+                 <defs>
+                   <pattern id="radarGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+                     <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(16, 185, 129, 0.2)" strokeWidth="0.75" />
+                   </pattern>
+                 </defs>
+                 <rect width="100%" height="100%" fill="url(#radarGrid)" />
+                 {/* Concentric radar range rings */}
+                 <circle cx="50%" cy="50%" r="90" fill="none" stroke="rgba(16, 185, 129, 0.35)" strokeWidth="1" strokeDasharray="4 4" />
+                 <circle cx="50%" cy="50%" r="180" fill="none" stroke="rgba(16, 185, 129, 0.25)" strokeWidth="1" />
+                 <circle cx="50%" cy="50%" r="280" fill="none" stroke="rgba(16, 185, 129, 0.18)" strokeWidth="1" strokeDasharray="6 6" />
+                 {/* Crosshair reticles */}
+                 <line x1="0%" y1="50%" x2="100%" y2="50%" stroke="rgba(16, 185, 129, 0.3)" strokeWidth="1" />
+                 <line x1="50%" y1="0%" x2="50%" y2="100%" stroke="rgba(16, 185, 129, 0.3)" strokeWidth="1" />
+                 {/* Major Corridor Road Polylines */}
+                 <polyline points="120,400 350,280 600,220 900,160" fill="none" stroke="rgba(56, 189, 248, 0.45)" strokeWidth="4" strokeLinecap="round" />
+                 <polyline points="280,100 350,280 420,480 480,600" fill="none" stroke="rgba(168, 85, 247, 0.45)" strokeWidth="3" strokeLinecap="round" />
+                 <polyline points="500,100 600,220 750,380" fill="none" stroke="rgba(245, 158, 11, 0.45)" strokeWidth="3" strokeLinecap="round" />
+               </svg>
+
+               {/* Sweeping Radar Scanner Line */}
+               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                 <div className="size-[560px] rounded-full border border-emerald-500/20 relative animate-spin [animation-duration:10s]">
+                   <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,transparent_0deg,transparent_270deg,rgba(16,185,129,0.22)_360deg)]" />
+                 </div>
+               </div>
+
+               {/* Center GPS Station Beacon */}
+               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                 <div className="size-3 rounded-full bg-emerald-400 shadow-[0_0_20px_8px_rgba(16,185,129,0.7)]" />
+                 <div className="absolute -left-6 -top-7 whitespace-nowrap font-mono-tab text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                   HQ · Culiat
+                 </div>
+               </div>
+
+               {/* Live Corridors HUD Tags */}
+               <div className="absolute left-12 top-16 rounded border border-sky-500/30 bg-sky-950/40 px-2 py-1 text-[10px] font-bold text-sky-400 backdrop-blur">
+                 CORRIDOR: Commonwealth Ave (ANPR Active)
+               </div>
+               <div className="absolute left-1/3 bottom-16 rounded border border-purple-500/30 bg-purple-950/40 px-2 py-1 text-[10px] font-bold text-purple-300 backdrop-blur">
+                 CORRIDOR: Tandang Sora Underpass
+               </div>
+               <div className="absolute right-16 top-24 rounded border border-amber-500/30 bg-amber-950/40 px-2 py-1 text-[10px] font-bold text-amber-400 backdrop-blur">
+                 CORRIDOR: Visayas Ave Bypass
+               </div>
+
+               {/* Camera telemetry blips */}
+               <div className="absolute left-1/4 top-1/3 size-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_4px_rgba(16,185,129,0.8)] animate-pulse" />
+               <div className="absolute right-1/4 top-1/2 size-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_4px_rgba(16,185,129,0.8)] animate-pulse" />
+               <div className="absolute left-1/3 bottom-1/3 size-2.5 rounded-full bg-red-500 shadow-[0_0_14px_6px_rgba(239,68,68,0.8)] animate-ping" />
+               <div className="absolute right-1/3 bottom-1/4 size-2.5 rounded-full bg-amber-400 shadow-[0_0_12px_4px_rgba(245,158,11,0.8)]" />
+
+               {/* Coordinates Watermark */}
+               <div className="absolute bottom-3 right-4 font-mono-tab text-[10px] text-white/30">
+                 14°39'50.4"N 121°03'00.0"E · EPSG:3857 · QC FLOW GUARDIAN TELEMETRY
+               </div>
             </div>
          </div>
 

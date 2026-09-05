@@ -42,25 +42,45 @@ export default function LeafletMap({
     if (typeof window !== "undefined") {
       (window as any).L = L;
     }
-    const map = L.map(nodeRef.current, {
-      center,
-      zoom: 13,
-      zoomControl: true,
-      preferCanvas: true,
-    });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20,
-    }).addTo(map);
-    markerLayerRef.current = L.layerGroup().addTo(map);
-    cameraLayerRef.current = L.layerGroup().addTo(map);
-    mapRef.current = map;
-    // ensure correct sizing after mount inside flex container
-    setTimeout(() => map.invalidateSize(), 100);
+
+    if ((nodeRef.current as any)._leaflet_id) {
+      delete (nodeRef.current as any)._leaflet_id;
+    }
+
+    let map: L.Map | null = null;
+    try {
+      map = L.map(nodeRef.current, {
+        center,
+        zoom: 13,
+        zoomControl: true,
+        preferCanvas: true,
+      });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
+      }).addTo(map);
+      markerLayerRef.current = L.layerGroup().addTo(map);
+      cameraLayerRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+      // ensure correct sizing after mount inside flex container
+      setTimeout(() => map?.invalidateSize(), 100);
+    } catch (err) {
+      console.warn("Leaflet map initialization warning:", err);
+    }
+
     return () => {
-      map.remove();
+      try {
+        if (map) {
+          map.remove();
+        }
+      } catch (err) {
+        console.warn("Leaflet cleanup error:", err);
+      }
+      if (nodeRef.current && (nodeRef.current as any)._leaflet_id) {
+        delete (nodeRef.current as any)._leaflet_id;
+      }
       mapRef.current = null;
       heatRef.current = null;
       markerLayerRef.current = null;

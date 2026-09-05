@@ -118,6 +118,7 @@ export const ROUTE_PERMISSIONS: Record<string, SystemRole[]> = {
   "/communications": ["super_admin", "admin", "dispatcher", "adjudicator"],
   "/iot": ["super_admin", "admin", "dispatcher"],
   "/infrastructure": ["super_admin", "admin", "dispatcher"],
+  "/automation": ["super_admin", "admin", "dispatcher"],
   "/advisories": ["super_admin", "admin", "dispatcher"],
 
   // Public / Citizen Portal
