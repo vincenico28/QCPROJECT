@@ -360,6 +360,110 @@ function AnalyticsPage() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* Corridor Risk & Hourly Traffic Spectrum */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Corridor Risk & Congestion Index */}
+        <section className="panel rounded-3xl p-6 flex flex-col justify-between">
+          <div>
+            <ChartHeading
+              title="Corridor Risk & Congestion Index"
+              sub="Multi-lane arterial radar breakdown"
+            />
+            <div className="flex flex-col gap-3">
+              {[
+                { name: "Commonwealth Ave", share: "42.8%", risk: "Critical (Level 4)", avgSpeed: "58 km/h", compliance: "78%", trendTone: "text-red-400" },
+                { name: "Tandang Sora Underpass", share: "24.1%", risk: "Elevated (Level 3)", avgSpeed: "32 km/h", compliance: "84%", trendTone: "text-amber-400" },
+                { name: "Visayas Ave Bypass", share: "16.5%", risk: "Moderate (Level 2)", avgSpeed: "41 km/h", compliance: "89%", trendTone: "text-sky-400" },
+                { name: "Katipunan Ext (Culiat)", share: "11.4%", risk: "Normal (Level 1)", avgSpeed: "44 km/h", compliance: "93%", trendTone: "text-emerald-400" },
+                { name: "Quirino Highway Ingress", share: "5.2%", risk: "Moderate (Level 2)", avgSpeed: "36 km/h", compliance: "87%", trendTone: "text-amber-400" },
+              ].map((corridor) => (
+                <div
+                  key={corridor.name}
+                  className="flex items-center justify-between rounded-2xl border border-border bg-panel-elevated/60 p-3.5 transition-all hover:border-primary/40"
+                >
+                  <div>
+                    <p className="text-xs font-bold text-foreground">{corridor.name}</p>
+                    <p className="font-mono-tab text-[10px] text-muted-foreground mt-0.5">
+                      Avg Velocity: {corridor.avgSpeed} · Driver Compliance: {corridor.compliance}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className={cn("font-mono-tab text-xs font-black", corridor.trendTone)}>
+                      {corridor.share}
+                    </span>
+                    <span className="block font-mono-tab text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {corridor.risk}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between font-mono-tab text-[10px] text-muted-foreground border-t border-border/60 pt-3">
+            <span>Dynamic Speed Regulation Active</span>
+            <span>Sensor Network: 100% Online</span>
+          </div>
+        </section>
+
+        {/* Peak Violation Hours Spectrum */}
+        <section className="panel rounded-3xl p-6 flex flex-col justify-between">
+          <div>
+            <ChartHeading
+              title="24-Hour Peak Violation Spectrum"
+              sub="Hourly incident density (06:00 - 21:00 windows)"
+            />
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { hour: "06h", volume: 45 },
+                    { hour: "07h", volume: 112 },
+                    { hour: "08h", volume: 168 },
+                    { hour: "09h", volume: 135 },
+                    { hour: "10h", volume: 88 },
+                    { hour: "11h", volume: 74 },
+                    { hour: "12h", volume: 68 },
+                    { hour: "13h", volume: 72 },
+                    { hour: "14h", volume: 85 },
+                    { hour: "15h", volume: 96 },
+                    { hour: "16h", volume: 124 },
+                    { hour: "17h", volume: 184 },
+                    { hour: "18h", volume: 210 },
+                    { hour: "19h", volume: 178 },
+                    { hour: "20h", volume: 122 },
+                    { hour: "21h", volume: 76 },
+                  ]}
+                  margin={{ top: 10, right: 8, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--panel-elevated)" }} />
+                  <Bar
+                    dataKey="volume"
+                    fill="var(--primary)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between font-mono-tab text-[10px] text-muted-foreground border-t border-border/60 pt-3">
+            <span className="text-amber-400 font-semibold">Peak: 18:00 (Evening Rush)</span>
+            <span>Algorithm: Poisson Surge Model</span>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

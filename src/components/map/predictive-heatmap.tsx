@@ -10,9 +10,10 @@ if (typeof window !== "undefined") {
 type Props = {
   points: HeatmapPoint[];
   center: [number, number];
+  zoom?: number;
 };
 
-export default function PredictiveHeatmap({ points, center }: Props) {
+export default function PredictiveHeatmap({ points, center, zoom = 14 }: Props) {
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
@@ -33,7 +34,7 @@ export default function PredictiveHeatmap({ points, center }: Props) {
     try {
       map = L.map(nodeRef.current, {
         center,
-        zoom: 14,
+        zoom,
         zoomControl: true,
         preferCanvas: true,
       });
@@ -72,6 +73,12 @@ export default function PredictiveHeatmap({ points, center }: Props) {
       layerRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setView(center, zoom, { animate: true });
+    }
+  }, [center[0], center[1], zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const layer = layerRef.current;

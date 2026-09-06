@@ -16,13 +16,23 @@ import { cn } from "@/lib/utils";
 
 const PRIORITIES: DispatchPriority[] = ["low", "medium", "high", "critical"];
 
-export function DispatchDialog({ trigger }: { trigger: React.ReactNode }) {
+export function DispatchDialog({
+  trigger,
+  defaultLocation = "",
+  defaultPriority = "medium",
+  defaultInstructions = "",
+}: {
+  trigger: React.ReactNode;
+  defaultLocation?: string;
+  defaultPriority?: DispatchPriority;
+  defaultInstructions?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [officerId, setOfficerId] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(defaultLocation);
   const [violationId, setViolationId] = useState("");
-  const [priority, setPriority] = useState<DispatchPriority>("medium");
-  const [instructions, setInstructions] = useState("");
+  const [priority, setPriority] = useState<DispatchPriority>(defaultPriority);
+  const [instructions, setInstructions] = useState(defaultInstructions);
 
   const { data: officers = [] } = useOfficers();
   const { data: violations = [] } = useViolations(15);
@@ -32,10 +42,10 @@ export function DispatchDialog({ trigger }: { trigger: React.ReactNode }) {
 
   function reset() {
     setOfficerId("");
-    setLocation("");
+    setLocation(defaultLocation);
     setViolationId("");
-    setPriority("medium");
-    setInstructions("");
+    setPriority(defaultPriority);
+    setInstructions(defaultInstructions);
   }
 
   async function submit(e: React.FormEvent) {
@@ -74,7 +84,13 @@ export function DispatchDialog({ trigger }: { trigger: React.ReactNode }) {
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) reset();
+        if (o) {
+          if (defaultLocation) setLocation(defaultLocation);
+          if (defaultPriority) setPriority(defaultPriority);
+          if (defaultInstructions) setInstructions(defaultInstructions);
+        } else {
+          reset();
+        }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>

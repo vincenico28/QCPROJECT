@@ -38,40 +38,55 @@ export default function OfficerShiftsMap({
       (window as any).L = L;
     }
 
-    const map = L.map(nodeRef.current, {
-      center,
-      zoom,
-      zoomControl: false,
-      preferCanvas: true,
-    });
+    // Defensive cleanup of any stale Leaflet ID on the DOM node
+    if ((nodeRef.current as any)._leaflet_id) {
+      delete (nodeRef.current as any)._leaflet_id;
+    }
 
-    // Dark sleek map tiles
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20,
-    }).addTo(map);
+    let map: L.Map | null = null;
+    try {
+      map = L.map(nodeRef.current, {
+        center,
+        zoom,
+        zoomControl: false,
+        preferCanvas: true,
+      });
 
-    // Zoom control on top-right
-    L.control.zoom({ position: "topright" }).addTo(map);
+      // Dark sleek map tiles
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
+      }).addTo(map);
 
-    const markers = L.layerGroup().addTo(map);
-    markerLayerRef.current = markers;
-    mapRef.current = map;
+      // Zoom control on top-right
+      L.control.zoom({ position: "topright" }).addTo(map);
 
-    // Sizing invalidation after mount
-    setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 150);
+      const markers = L.layerGroup().addTo(map);
+      markerLayerRef.current = markers;
+      mapRef.current = map;
+
+      // Sizing invalidation after mount
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 150);
+    } catch (err) {
+      console.warn("Officer shifts map init warning:", err);
+    }
 
     return () => {
       try {
-        map.remove();
+        if (map) {
+          map.remove();
+        }
       } catch (err) {
         console.warn("Leaflet cleanup error:", err);
+      }
+      if (nodeRef.current && (nodeRef.current as any)._leaflet_id) {
+        delete (nodeRef.current as any)._leaflet_id;
       }
       mapRef.current = null;
       markerLayerRef.current = null;

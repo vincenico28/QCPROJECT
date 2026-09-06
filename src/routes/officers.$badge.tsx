@@ -1,10 +1,54 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useMemo } from "react";
-import { ArrowLeft, Phone, ShieldCheck, Radio, CreditCard, MapPin, Activity } from "lucide-react";
-import { useOfficers, useCitations, formatPeso, timeAgo, type Officer } from "@/lib/data/traffic";
+import { createFileRoute, Link, useParams, ClientOnly } from "@tanstack/react-router";
+import { useMemo, useState, lazy, Suspense } from "react";
+import {
+  ArrowLeft,
+  Phone,
+  ShieldCheck,
+  Radio,
+  CreditCard,
+  MapPin,
+  Activity,
+  Award,
+  QrCode,
+  BatteryCharging,
+  CheckCircle2,
+  AlertTriangle,
+  Search,
+  Filter,
+  Calendar,
+  TrendingUp,
+  Copy,
+  ExternalLink,
+  Shield,
+  Zap,
+  Power,
+  Clock,
+  Car,
+  FileText,
+  BadgeCheck,
+} from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+import {
+  useOfficers,
+  useCitations,
+  useToggleOfficerDuty,
+  formatPeso,
+  timeAgo,
+  type Officer,
+} from "@/lib/data/traffic";
 import { useDispatches, DISPATCH_STATUS_LABEL } from "@/lib/data/dispatch";
+import { useOfficerShifts } from "@/lib/data/officer-shifts";
 import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import * as Dialog from "@radix-ui/react-dialog";
 
 export const Route = createFileRoute("/officers/$badge")({
   head: ({ params }) => ({
@@ -12,7 +56,7 @@ export const Route = createFileRoute("/officers/$badge")({
       { title: `Officer #${params.badge} · Culiat Traffic Ops` },
       {
         name: "description",
-        content: `Service record for Barangay Culiat, Quezon City traffic enforcer badge #${params.badge}: duty status, citations issued, revenue collected and dispatch history.`,
+        content: `Service record and live telemetry for Barangay Culiat, Quezon City traffic enforcer badge #${params.badge}: duty status, citations issued, revenue collected and dispatch history.`,
       },
       {
         property: "og:title",
@@ -21,7 +65,7 @@ export const Route = createFileRoute("/officers/$badge")({
       {
         property: "og:description",
         content:
-          "Officer service record: duty status, citation output, collections and dispatch assignments.",
+          "Officer service record: duty status, citation output, collections, and live GPS dispatch assignments.",
       },
       { property: "og:type", content: "profile" },
       { name: "twitter:card", content: "summary" },
@@ -30,11 +74,20 @@ export const Route = createFileRoute("/officers/$badge")({
   component: OfficerDetailPage,
 });
 
-function OfficerDetailPage() {
+const OfficerSectorMap = lazy(() => import("@/components/officers/officer-sector-map"));
+
+export function OfficerDetailPage() {
   const { badge } = useParams({ from: "/officers/$badge" });
   const { data: officers = [], isLoading } = useOfficers();
-  const { data: citations = [] } = useCitations(200);
-  const { data: dispatches = [] } = useDispatches(200);
+  const { data: citations = [] } = useCitations(300);
+  const { data: dispatches = [] } = useDispatches(300);
+  const { data: shifts = [] } = useOfficerShifts();
+  const toggleDuty = useToggleOfficerDuty();
+
+  const [citationSearch, setCitationSearch] = useState("");
+  const [citationStatusFilter, setCitationStatusFilter] = useState<string>("all");
+  const [credentialModalOpen, setCredentialModalOpen] = useState(false);
+  const [telemetryView, setTelemetryView] = useState<"details" | "map">("details");
 
   const officer = officers.find(
     (o) =>
@@ -43,6 +96,13 @@ function OfficerDetailPage() {
       o.full_name?.toLowerCase() === decodeURIComponent(badge)?.toLowerCase(),
   );
 
+  const shiftData = useMemo(() => {
+    if (!officer) return null;
+    return shifts.find(
+      (s) => s.badgeNumber.toLowerCase() === officer.badge_number.toLowerCase()
+    );
+  }, [shifts, officer]);
+
   const own = useMemo(
     () =>
       officer
@@ -50,7 +110,8 @@ function OfficerDetailPage() {
             (c) =>
               c.officer_name === officer.full_name ||
               (officer.badge_number && c.officer_name?.includes(officer.badge_number)) ||
-              (officer.full_name && c.officer_name?.toLowerCase().includes(officer.full_name.toLowerCase())),
+              (officer.full_name &&
+                c.officer_name?.toLowerCase().includes(officer.full_name.toLowerCase())),
           )
         : [],
     [citations, officer],
@@ -72,11 +133,81 @@ function OfficerDetailPage() {
   const outstanding = own
     .filter((c) => c.status !== "paid" && c.status !== "dismissed")
     .reduce((s, c) => s + Number(c.amount), 0);
+  const collectionRate =
+    collected + outstanding > 0
+      ? Math.round((collected / (collected + outstanding)) * 100)
+      : 100;
+
+  // Filtered citations
+  const filteredCitations = useMemo(() => {
+    return own.filter((c) => {
+      if (citationStatusFilter !== "all" && c.status !== citationStatusFilter) {
+        return false;
+      }
+      if (!citationSearch.trim()) return true;
+      const q = citationSearch.toLowerCase();
+      return (
+        c.citation_number.toLowerCase().includes(q) ||
+        c.plate_number.toLowerCase().includes(q) ||
+        c.offense.toLowerCase().includes(q)
+      );
+    });
+  }, [own, citationStatusFilter, citationSearch]);
+
+  // Generate 14-day output chart data
+  const chartData = useMemo(() => {
+    const days: { date: string; citations: number; settled: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86_400_000);
+      const dateKey = d.toISOString().slice(5, 10);
+      const dayMatches = own.filter(
+        (c) => new Date(c.issued_at).toISOString().slice(5, 10) === dateKey
+      );
+      days.push({
+        date: dateKey,
+        citations: dayMatches.length,
+        settled: dayMatches.filter((c) => c.status === "paid").length,
+      });
+    }
+    return days;
+  }, [own]);
+
+  const handleToggleDuty = () => {
+    if (!officer) return;
+    toggleDuty.mutate(
+      { id: officer.id, currentDuty: !!officer.on_duty },
+      {
+        onSuccess: () => {
+          toast.success(
+            `${officer.rank} ${officer.full_name} status updated to ${
+              officer.on_duty ? "OFF DUTY" : "ON DUTY (Active Patrol)"
+            }`,
+          );
+        },
+        onError: () => {
+          toast.error("Failed to update officer duty status");
+        },
+      }
+    );
+  };
+
+  const copyBadgeInfo = () => {
+    if (!officer) return;
+    navigator.clipboard.writeText(
+      `QC Traffic Enforcer: ${officer.full_name} | Badge #${officer.badge_number} | District: ${officer.district}`
+    );
+    toast.success("Officer badge information copied to clipboard");
+  };
 
   if (isLoading) {
     return (
-      <div className="grid h-64 place-items-center text-sm text-subtle">
-        Loading officer record…
+      <div className="grid min-h-[60vh] place-items-center text-sm text-subtle">
+        <div className="flex flex-col items-center gap-3">
+          <Activity className="size-8 animate-spin text-primary" />
+          <p className="font-mono-tab text-xs uppercase tracking-widest text-muted-foreground">
+            Loading officer dossier & GPS telemetry…
+          </p>
+        </div>
       </div>
     );
   }
@@ -84,12 +215,16 @@ function OfficerDetailPage() {
   if (!officer) {
     return (
       <div className="flex flex-col items-center gap-4 p-16 text-center">
-        <p className="text-sm text-subtle">No officer found for badge #{badge}.</p>
+        <Shield className="size-12 text-subtle" />
+        <h2 className="text-xl font-bold text-foreground">Officer Dossier Not Found</h2>
+        <p className="text-sm text-subtle">
+          No personnel record registered in the roster for badge #{badge}.
+        </p>
         <Link
           to="/officers"
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
         >
-          Back to roster
+          Return to Personnel Roster
         </Link>
       </div>
     );
@@ -97,80 +232,380 @@ function OfficerDetailPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <Link
-        to="/officers"
-        className="flex w-fit items-center gap-2 font-mono-tab text-[11px] uppercase tracking-widest text-subtle transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> Roster
-      </Link>
+      {/* Navigation Breadcrumb */}
+      <div className="flex items-center justify-between">
+        <Link
+          to="/officers"
+          className="flex w-fit items-center gap-2 font-mono-tab text-[11px] uppercase tracking-widest text-subtle transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" /> Personnel Roster
+        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCredentialModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"
+          >
+            <QrCode className="size-3.5 text-primary" />
+            Digital Service ID
+          </button>
+          <button
+            onClick={copyBadgeInfo}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-panel-elevated transition-colors"
+            title="Copy officer credentials"
+          >
+            <Copy className="size-3.5" />
+          </button>
+        </div>
+      </div>
 
-      <ProfileHeader officer={officer} />
+      {/* Main Profile Header Banner */}
+      <ProfileHeader
+        officer={officer}
+        shiftData={shiftData}
+        onToggleDuty={handleToggleDuty}
+        isToggling={toggleDuty.isPending}
+      />
 
+      {/* KPI Ribbons */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
-          label="Citations issued"
-          value={officer.citations_issued}
+          label="Citations Issued"
+          value={officer.citations_issued || own.length}
+          subtext="Lifetime Total Tickets"
           icon={ShieldCheck}
           tone="text-primary"
         />
         <Kpi
-          label="Collected"
+          label="Fines Collected"
           value={formatPeso(collected)}
+          subtext="Treasury Settled"
           icon={CreditCard}
-          tone="text-success"
+          tone="text-emerald-400"
         />
         <Kpi
-          label="Outstanding"
+          label="Outstanding Penalties"
           value={formatPeso(outstanding)}
-          icon={CreditCard}
-          tone="text-warning"
+          subtext="Pending Settlement"
+          icon={AlertTriangle}
+          tone="text-amber-400"
         />
         <Kpi
-          label="Dispatch orders"
+          label="Tactical Dispatches"
           value={ownDispatches.length}
+          subtext="Emergency Incident Runs"
           icon={Radio}
           tone="text-foreground"
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <section className="panel overflow-hidden rounded-2xl">
-          <header className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h2 className="text-sm font-semibold text-foreground">Citations issued</h2>
-            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-              {own.length} records
-            </span>
-          </header>
-          {own.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-subtle">
-              No citations recorded for this officer yet.
+      {/* Telemetry & Output Trends Row */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        {/* Live Field Telemetry Card */}
+        <div className="panel rounded-3xl border border-border bg-panel p-6 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex flex-col gap-2 border-b border-border/60 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  <Activity className="size-4 text-primary" />
+                  Live Field Telemetry
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase tracking-wider",
+                    officer.on_duty
+                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                      : "bg-neutral-500/15 text-neutral-400 border border-neutral-500/30",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      officer.on_duty ? "bg-emerald-400 animate-pulse" : "bg-neutral-400",
+                    )}
+                  />
+                  {officer.on_duty ? "Patrol Active" : "Shift Inactive"}
+                </span>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="mt-1 flex items-center justify-between">
+                <span className="font-mono-tab text-[10px] text-muted-foreground uppercase">Display Mode:</span>
+                <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-0.5 font-mono-tab text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setTelemetryView("details")}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 font-bold uppercase transition-colors",
+                      telemetryView === "details"
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Diagnostics
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTelemetryView("map")}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 font-bold uppercase transition-colors flex items-center gap-1",
+                      telemetryView === "map"
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <MapPin className="size-3" /> Sector GIS
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {telemetryView === "map" ? (
+              <div className="mt-4 h-[250px] w-full overflow-hidden rounded-2xl border border-border bg-background relative shadow-inner">
+                <ClientOnly
+                  fallback={
+                    <div className="grid h-full place-items-center bg-background">
+                      <Activity className="size-6 animate-spin text-primary" />
+                    </div>
+                  }
+                >
+                  <Suspense
+                    fallback={
+                      <div className="grid h-full place-items-center bg-background">
+                        <Activity className="size-6 animate-spin text-primary" />
+                      </div>
+                    }
+                  >
+                    <OfficerSectorMap
+                      officer={officer}
+                      shift={shiftData}
+                      location={shiftData?.location || [14.664, 121.05]}
+                    />
+                  </Suspense>
+                </ClientOnly>
+                <div className="absolute bottom-2 left-2 z-[400] rounded-lg bg-black/80 backdrop-blur px-2 py-1 font-mono-tab text-[9px] text-white/70 border border-white/10">
+                  GPS Sector: {officer.district || "District 1"}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-col gap-3.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <MapPin className="size-3.5 text-subtle" /> Patrol Sector:
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {officer.district || "District 1 - Culiat Central"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-subtle" /> Current Shift:
+                  </span>
+                  <span className="font-mono-tab text-foreground">
+                    06:00 - 14:00 (Watch Alpha)
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Radio className="size-3.5 text-subtle" /> Radio Call Sign:
+                  </span>
+                  <span className="font-mono-tab font-bold text-primary">
+                    QC-ALPHA-{(officer.badge_number || "101").replace(/\D/g, "")}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <BatteryCharging className="size-3.5 text-subtle" /> Mobile Terminal:
+                  </span>
+                  <span className="font-mono-tab text-emerald-400 font-semibold">
+                    {shiftData?.batteryLevel ?? 88}% Battery · 5G Online
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Award className="size-3.5 text-subtle" /> Collection Rate:
+                  </span>
+                  <span className="font-mono-tab font-bold text-emerald-400">
+                    {collectionRate}% Efficiency
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border/60 bg-panel-elevated/60 p-3.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground font-mono-tab">
+              Assigned Field Equipment
             </p>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-medium text-foreground font-mono-tab">
+              <span className="rounded-lg bg-background border border-border px-2 py-1">
+                Motorola APX 8000
+              </span>
+              <span className="rounded-lg bg-background border border-border px-2 py-1">
+                Axon Body 3
+              </span>
+              <span className="rounded-lg bg-background border border-border px-2 py-1">
+                QC-T2026 POS Scanner
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 14-Day Output Sparkline Chart */}
+        <div className="panel xl:col-span-2 rounded-3xl border border-border bg-panel p-6 shadow-xl flex flex-col">
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+              <TrendingUp className="size-4 text-emerald-400" />
+              14-Day Enforcement Output & Settlements
+            </div>
+            <div className="flex items-center gap-3 font-mono-tab text-[10px]">
+              <span className="flex items-center gap-1 text-primary font-semibold">
+                <span className="size-2 rounded-full bg-primary" /> Issued
+              </span>
+              <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                <span className="size-2 rounded-full bg-emerald-400" /> Settled
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex-1 h-[210px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorIssued" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorSettled" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="date"
+                  stroke="#666"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "#888", fontSize: 10, fontFamily: "monospace" }}
+                />
+                <YAxis
+                  stroke="#666"
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  tick={{ fill: "#888", fontSize: 10, fontFamily: "monospace" }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#0d0f14",
+                    borderColor: "rgba(255,255,255,0.1)",
+                    borderRadius: "12px",
+                    color: "#fff",
+                    fontSize: "12px",
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="citations"
+                  name="Issued"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorIssued)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="settled"
+                  name="Settled"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorSettled)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Citations & Dispatch Logs Dual Grid */}
+      <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+        {/* Citations Issued Table */}
+        <section className="panel overflow-hidden rounded-3xl border border-border bg-panel shadow-xl flex flex-col">
+          <header className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Citations & Notices Issued
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Official violations recorded by this enforcer
+              </p>
+            </div>
+
+            {/* Filter toolbar */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search citation or plate..."
+                  value={citationSearch}
+                  onChange={(e) => setCitationSearch(e.target.value)}
+                  className="rounded-xl border border-border bg-panel-elevated pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none w-44 sm:w-56"
+                />
+              </div>
+
+              <select
+                value={citationStatusFilter}
+                onChange={(e) => setCitationStatusFilter(e.target.value)}
+                className="rounded-xl border border-border bg-panel-elevated px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="contested">Contested</option>
+              </select>
+            </div>
+          </header>
+
+          {filteredCitations.length === 0 ? (
+            <div className="p-12 text-center text-sm text-muted-foreground">
+              <FileText className="size-8 text-subtle mx-auto mb-2 opacity-50" />
+              No citations matched your filter criteria.
+            </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto flex-1">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                    <th className="px-5 py-3 font-medium">Reference</th>
+                    <th className="px-5 py-3 font-medium">Notice Reference</th>
                     <th className="px-5 py-3 font-medium">Plate</th>
                     <th className="px-5 py-3 font-medium">Offense</th>
-                    <th className="px-5 py-3 text-right font-medium">Amount</th>
+                    <th className="px-5 py-3 text-right font-medium">Fine</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {own.slice(0, 25).map((c) => (
+                  {filteredCitations.slice(0, 30).map((c) => (
                     <tr
                       key={c.id}
-                      className="border-b border-border/60 last:border-0 hover:bg-panel-elevated/60"
+                      className="border-b border-border/50 last:border-0 hover:bg-panel-elevated/60 transition-colors"
                     >
-                      <td className="px-5 py-3 font-mono-tab text-xs text-primary">
+                      <td className="px-5 py-3 font-mono-tab text-xs font-semibold text-primary">
                         {c.citation_number}
                       </td>
-                      <td className="px-5 py-3 font-mono-tab text-xs font-semibold text-foreground">
-                        {c.plate_number}
+                      <td className="px-5 py-3 font-mono-tab text-xs font-bold text-foreground">
+                        <span className="rounded border border-border bg-panel-elevated px-1.5 py-0.5">
+                          {c.plate_number}
+                        </span>
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">{c.offense}</td>
-                      <td className="px-5 py-3 text-right font-mono-tab text-foreground">
+                      <td className="px-5 py-3 text-xs text-muted-foreground">
+                        {c.offense}
+                      </td>
+                      <td className="px-5 py-3 text-right font-mono-tab text-xs font-semibold text-foreground">
                         {formatPeso(Number(c.amount))}
                       </td>
                       <td className="px-5 py-3">
@@ -178,9 +613,9 @@ function OfficerDetailPage() {
                           className={cn(
                             "rounded-md border px-2 py-0.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest",
                             c.status === "paid"
-                              ? "border-success/30 bg-success/10 text-success"
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                               : c.status === "contested"
-                                ? "border-warning/30 bg-warning/10 text-warning"
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
                                 : "border-border bg-panel-elevated text-muted-foreground",
                           )}
                         >
@@ -193,102 +628,258 @@ function OfficerDetailPage() {
               </table>
             </div>
           )}
+          <footer className="border-t border-border px-5 py-3 font-mono-tab text-[10px] text-muted-foreground flex justify-between">
+            <span>Showing up to 30 records</span>
+            <span>Total: {own.length} citations</span>
+          </footer>
         </section>
 
-        <section className="panel flex flex-col rounded-2xl">
+        {/* Dispatch Orders History */}
+        <section className="panel flex flex-col rounded-3xl border border-border bg-panel shadow-xl">
           <header className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h2 className="text-sm font-semibold text-foreground">Dispatch history</h2>
-            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-              {ownDispatches.length}
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Tactical Dispatches</h2>
+              <p className="text-xs text-muted-foreground">Emergency call assignments</p>
+            </div>
+            <span className="rounded-md border border-border bg-panel-elevated px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
+              {ownDispatches.length} Total
             </span>
           </header>
-          <div className="flex flex-col gap-3 p-5">
+
+          <div className="flex flex-col gap-3 p-5 flex-1 overflow-y-auto max-h-[500px]">
             {ownDispatches.length === 0 ? (
-              <p className="py-8 text-center text-sm text-subtle">No dispatch orders assigned.</p>
+              <div className="py-12 text-center text-sm text-subtle">
+                <Radio className="size-8 mx-auto mb-2 opacity-40 text-subtle" />
+                No dispatch orders assigned to this officer.
+              </div>
             ) : (
-              ownDispatches.slice(0, 12).map((d) => (
+              ownDispatches.map((d) => (
                 <div
                   key={d.id}
-                  className="rounded-xl border border-border bg-panel-elevated/50 p-3"
+                  className="rounded-2xl border border-border bg-panel-elevated/60 p-4 transition-all hover:border-primary/40"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-primary">
+                    <span className="font-mono-tab text-xs font-bold text-primary">
                       {d.reference}
                     </span>
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 font-mono-tab text-[10px] font-bold uppercase",
+                        d.status === "resolved"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : d.status === "en_route"
+                            ? "bg-sky-500/15 text-sky-400"
+                            : "bg-amber-500/15 text-amber-400",
+                      )}
+                    >
                       {DISPATCH_STATUS_LABEL[d.status]}
                     </span>
                   </div>
-                  <p className="mt-1.5 flex items-center gap-1.5 text-sm text-foreground">
-                    <MapPin className="size-3.5 text-subtle" />
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground font-medium">
+                    <MapPin className="size-3.5 text-primary shrink-0" />
                     {d.location}
                   </p>
-                  <p className="mt-1 font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                    {d.priority} · {timeAgo(d.created_at)}
-                  </p>
+                  <div className="mt-2 flex items-center justify-between font-mono-tab text-[10px] text-muted-foreground border-t border-border/40 pt-2">
+                    <span
+                      className={cn(
+                        "font-bold uppercase",
+                        d.priority === "critical"
+                          ? "text-red-400"
+                          : d.priority === "high"
+                            ? "text-orange-400"
+                            : "text-muted-foreground",
+                      )}
+                    >
+                      Priority: {d.priority}
+                    </span>
+                    <span>{timeAgo(d.created_at)}</span>
+                  </div>
                 </div>
               ))
             )}
           </div>
         </section>
       </div>
+
+      {/* Digital Service ID Credential Modal */}
+      <Dialog.Root open={credentialModalOpen} onOpenChange={setCredentialModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md animate-in fade-in" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex flex-col items-center text-center">
+              <div className="size-16 rounded-2xl bg-panel-elevated border border-border p-2 shadow-inner">
+                <img src="/favico2.png" alt="QC Logo" className="size-full object-contain" />
+              </div>
+              <h3 className="mt-3 text-lg font-black tracking-tight text-white uppercase">
+                Quezon City Government
+              </h3>
+              <p className="font-mono-tab text-[10px] tracking-widest text-primary uppercase font-bold">
+                Department of Public Order and Safety
+              </p>
+
+              {/* ID Card Box */}
+              <div className="mt-5 w-full rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/10 to-transparent p-5 text-left">
+                <div className="flex items-center justify-between border-b border-primary/20 pb-3">
+                  <div>
+                    <p className="text-sm font-bold text-white">{officer.full_name}</p>
+                    <p className="font-mono-tab text-[11px] text-primary">{officer.rank}</p>
+                  </div>
+                  <span className="rounded bg-primary/20 px-2 py-0.5 font-mono-tab text-xs font-black text-primary border border-primary/30">
+                    #{officer.badge_number}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-1.5 font-mono-tab text-[10px]">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>District:</span>
+                    <span className="text-white">{officer.district}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Unit:</span>
+                    <span className="text-white">{officer.unit}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Clearance:</span>
+                    <span className="text-emerald-400 font-bold">LEVEL II FIELD ENFORCER</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Status:</span>
+                    <span className="text-white">{officer.status.toUpperCase()}</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center justify-center border-t border-primary/20 pt-4">
+                  <div className="rounded-xl bg-white p-2 shadow-lg">
+                    <QrCode className="size-28 text-black" />
+                  </div>
+                </div>
+                <p className="mt-2 text-center font-mono-tab text-[9px] text-muted-foreground">
+                  SCAN TO VERIFY OFFICIAL LGU CREDENTIAL
+                </p>
+              </div>
+
+              <button
+                onClick={() => setCredentialModalOpen(false)}
+                className="mt-5 w-full rounded-xl bg-panel-elevated border border-border py-2 text-xs font-semibold text-foreground hover:bg-panel transition-colors"
+              >
+                Close Credential
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
 
-function ProfileHeader({ officer }: { officer: Officer }) {
+function ProfileHeader({
+  officer,
+  shiftData,
+  onToggleDuty,
+  isToggling,
+}: {
+  officer: Officer;
+  shiftData: any;
+  onToggleDuty: () => void;
+  isToggling: boolean;
+}) {
   return (
-    <div className="panel flex flex-col gap-5 rounded-2xl p-6 sm:flex-row sm:items-center">
-      <div className="relative grid size-16 shrink-0 place-items-center rounded-2xl bg-panel-elevated font-mono-tab text-lg font-bold text-foreground ring-1 ring-border">
-        {officer.full_name
-          .split(" ")
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p) => p[0]?.toUpperCase())
-          .join("")}
-        {officer.on_duty && (
-          <span className="absolute -bottom-1 -right-1 size-4 rounded-full border-2 border-panel bg-success" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
-          {officer.full_name}
-        </h1>
-        <p className="font-mono-tab text-[11px] uppercase tracking-widest text-subtle">
-          Badge #{officer.badge_number} · {officer.rank} · {officer.unit} · {officer.district}
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "rounded-md border px-2 py-0.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest",
-              officer.status === "active"
-                ? "border-success/30 bg-success/10 text-success"
-                : officer.status === "on_leave"
-                  ? "border-warning/30 bg-warning/10 text-warning"
-                  : "border-danger/30 bg-danger/10 text-danger",
-            )}
-          >
-            {officer.status.replace("_", " ")}
-          </span>
-          <span className="flex items-center gap-1.5 font-mono-tab text-[11px] text-muted-foreground">
-            <Activity className="size-3.5 text-subtle" />
-            {officer.on_duty ? "On duty" : "Off duty"}
-          </span>
-          {officer.contact_number && (
-            <span className="flex items-center gap-1.5 font-mono-tab text-[11px] text-muted-foreground">
-              <Phone className="size-3.5 text-subtle" />
-              {officer.contact_number}
+    <div className="panel flex flex-col gap-6 rounded-3xl border border-border bg-panel p-6 shadow-xl lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+        {/* Officer Avatar with Duty Pulse */}
+        <div className="relative grid size-20 shrink-0 place-items-center rounded-2xl bg-panel-elevated font-mono-tab text-2xl font-black text-foreground ring-2 ring-border shadow-inner">
+          {officer.full_name
+            .split(" ")
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((p) => p[0]?.toUpperCase())
+            .join("")}
+          {officer.on_duty && (
+            <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative size-4 rounded-full border-2 border-panel bg-emerald-500" />
             </span>
           )}
         </div>
+
+        {/* Officer Details */}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">
+              {officer.full_name}
+            </h1>
+            <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono-tab text-xs font-black text-primary">
+              BADGE #{officer.badge_number}
+            </span>
+          </div>
+
+          <p className="font-mono-tab text-xs uppercase tracking-wider text-muted-foreground mt-1">
+            {officer.rank} · {officer.unit} · {officer.district}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2.5">
+            <span
+              className={cn(
+                "rounded-md border px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase tracking-wider",
+                officer.status === "active"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  : officer.status === "on_leave"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    : "border-red-500/30 bg-red-500/10 text-red-400",
+              )}
+            >
+              {officer.status.replace("_", " ")}
+            </span>
+
+            <span
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 font-mono-tab text-[10px] font-bold uppercase tracking-wider",
+                officer.on_duty
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  : "border-neutral-500/30 bg-neutral-500/10 text-neutral-400",
+              )}
+            >
+              <Activity className="size-3" />
+              {officer.on_duty ? "On Duty (Patrolling)" : "Off Duty (Rest)"}
+            </span>
+
+            {officer.contact_number && (
+              <a
+                href={`tel:${officer.contact_number}`}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-panel-elevated px-2.5 py-0.5 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <Phone className="size-3 text-primary" />
+                {officer.contact_number}
+              </a>
+            )}
+          </div>
+        </div>
       </div>
-      <DispatchDialog
-        trigger={
-          <button className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90">
-            <Radio className="size-4" /> Dispatch this officer
-          </button>
-        }
-      />
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onToggleDuty}
+          disabled={isToggling}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold font-mono-tab uppercase tracking-wider transition-all",
+            officer.on_duty
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20",
+          )}
+        >
+          <Power className="size-3.5" />
+          {officer.on_duty ? "Set Off Duty" : "Clock On Duty"}
+        </button>
+
+        <DispatchDialog
+          trigger={
+            <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.02]">
+              <Radio className="size-3.5" /> Dispatch Officer
+            </button>
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -296,23 +887,36 @@ function ProfileHeader({ officer }: { officer: Officer }) {
 function Kpi({
   label,
   value,
+  subtext,
   icon: Icon,
   tone = "text-foreground",
 }: {
   label: string;
   value: string | number;
+  subtext?: string;
   icon: typeof Radio;
   tone?: string;
 }) {
   return (
-    <div className="panel rounded-2xl p-5">
+    <div className="panel rounded-3xl border border-border bg-panel p-5 shadow-lg flex flex-col justify-between">
       <div className="flex items-center justify-between">
-        <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+        <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-semibold">
           {label}
         </span>
-        <Icon className={cn("size-4", tone)} strokeWidth={2} />
+        <div className={cn("grid size-8 place-items-center rounded-xl bg-panel-elevated", tone)}>
+          <Icon className="size-4" strokeWidth={2.25} />
+        </div>
       </div>
-      <p className={cn("mt-3 font-mono-tab text-2xl font-bold", tone)}>{value}</p>
+      <div className="mt-3">
+        <p className={cn("font-mono-tab text-2xl font-black tracking-tight", tone)}>
+          {value}
+        </p>
+        {subtext && (
+          <p className="font-mono-tab text-[10px] text-muted-foreground mt-0.5">
+            {subtext}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
