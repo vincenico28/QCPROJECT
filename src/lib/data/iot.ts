@@ -35,10 +35,10 @@ export function useIotNodes() {
       try {
         const { data: cameras } = await supabase.from("cameras").select("*");
         if (cameras && cameras.length > 0) {
-          return cameras.map((c: any, i: number) => ({
+          return cameras.map((c: any, i: number): EdgeNode => ({
             id: c.code || `NODE-${c.id.slice(0, 8)}`,
             name: c.location || `Camera Node ${i + 1}`,
-            status: c.status === "online" ? "Online" : c.status === "maintenance" ? "Degraded" : "Offline",
+            status: (c.status === "online" ? "Online" : c.status === "maintenance" ? "Degraded" : "Offline") as EdgeNode["status"],
             aiVersion: "v11.4-TRF",
             cpuTemp: c.status === "online" ? 44.5 + (i * 2.3) : 0,
             latency: c.status === "online" ? 14 + (i * 3) : 0,

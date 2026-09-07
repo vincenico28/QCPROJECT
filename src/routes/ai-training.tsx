@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAiDatasets, useAiMetrics, useCreateAiDataset } from "@/lib/data/ai-training";
 import {
   Loader2,
@@ -15,6 +15,17 @@ import {
   Sparkles,
   X,
   FileCode,
+  Sliders,
+  Camera,
+  RefreshCw,
+  Eye,
+  ShieldAlert,
+  Zap,
+  Download,
+  Copy,
+  Check,
+  Maximize2,
+  Activity,
 } from "lucide-react";
 import {
   LineChart,
@@ -32,7 +43,14 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/ai-training")({
   head: () => ({
-    meta: [{ title: "AI Model Training Hub — Culiat Traffic Ops" }],
+    meta: [
+      { title: "AI Model Training Hub & Detection Matrix — Culiat Traffic Ops" },
+      {
+        name: "description",
+        content:
+          "YOLOv11 edge computer vision fine-tuning, optical dataset curation, real-time inference playground, and model convergence analytics.",
+      },
+    ],
   }),
   component: AiTrainingPage,
 });
@@ -46,11 +64,136 @@ const CLASS_PERFORMANCE = [
   { className: "Yellow Box Gridlock", precision: "96.0%", recall: "94.3%", mAP50: "95.5%", samples: 11200 },
 ];
 
-function AiTrainingPage() {
+type BBoxDetection = {
+  id: string;
+  className: string;
+  confidence: number;
+  box: { x: number; y: number; w: number; h: number }; // percentages 0-100
+  color: string;
+  speedKph?: number;
+  plateNumber?: string;
+  flagged?: boolean;
+};
+
+const TEST_SCENARIOS = [
+  {
+    id: "scen-cw-tandang",
+    name: "Commonwealth Ave cor. Tandang Sora",
+    cameraCode: "QC-CAM-CW-04",
+    imageUrl: "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=1200&auto=format&fit=crop&q=80",
+    description: "High-density multi-lane corridor during evening peak rush.",
+    detections: [
+      {
+        id: "det-1",
+        className: "Sedan (Private)",
+        confidence: 0.984,
+        box: { x: 18, y: 44, w: 26, h: 32 },
+        color: "#38bdf8",
+        speedKph: 36,
+        plateNumber: "NDB-8921",
+      },
+      {
+        id: "det-2",
+        className: "Red Light Infraction",
+        confidence: 0.965,
+        box: { x: 52, y: 38, w: 24, h: 34 },
+        color: "#ef4444",
+        speedKph: 42,
+        plateNumber: "ABC-1234",
+        flagged: true,
+      },
+      {
+        id: "det-3",
+        className: "Motorcycle (Helmet Verified)",
+        confidence: 0.942,
+        box: { x: 42, y: 55, w: 12, h: 22 },
+        color: "#10b981",
+        speedKph: 31,
+      },
+      {
+        id: "det-4",
+        className: "Pedestrian Crosswalk",
+        confidence: 0.918,
+        box: { x: 80, y: 60, w: 10, h: 26 },
+        color: "#a855f7",
+        speedKph: 4,
+      },
+    ] as BBoxDetection[],
+  },
+  {
+    id: "scen-visayas-central",
+    name: "Visayas Ave cor. Central Ave",
+    cameraCode: "QC-CAM-VIS-02",
+    imageUrl: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=1200&auto=format&fit=crop&q=80",
+    description: "Intersection yellow-box gridlock & lane obstruction monitoring.",
+    detections: [
+      {
+        id: "det-201",
+        className: "Yellow Box Gridlock",
+        confidence: 0.978,
+        box: { x: 30, y: 35, w: 38, h: 42 },
+        color: "#f59e0b",
+        speedKph: 2,
+        flagged: true,
+      },
+      {
+        id: "det-202",
+        className: "No Helmet (Motorcycle)",
+        confidence: 0.935,
+        box: { x: 74, y: 48, w: 14, h: 25 },
+        color: "#ef4444",
+        speedKph: 28,
+        plateNumber: "MC-7890",
+        flagged: true,
+      },
+      {
+        id: "det-203",
+        className: "Utility Jeepney",
+        confidence: 0.989,
+        box: { x: 12, y: 46, w: 22, h: 36 },
+        color: "#38bdf8",
+        speedKph: 15,
+      },
+    ] as BBoxDetection[],
+  },
+  {
+    id: "scen-katipunan-busway",
+    name: "Commonwealth Median Busway Express",
+    cameraCode: "QC-CAM-BUS-01",
+    imageUrl: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=1200&auto=format&fit=crop&q=80",
+    description: "Dedicated rapid bus transit lane with automated intrusion detection.",
+    detections: [
+      {
+        id: "det-301",
+        className: "Authorized Public Bus",
+        confidence: 0.992,
+        box: { x: 32, y: 25, w: 36, h: 56 },
+        color: "#10b981",
+        speedKph: 48,
+        plateNumber: "BUS-4410",
+      },
+      {
+        id: "det-302",
+        className: "Busway Intrusion (Private Sedan)",
+        confidence: 0.971,
+        box: { x: 10, y: 40, w: 22, h: 32 },
+        color: "#ef4444",
+        speedKph: 52,
+        plateNumber: "WHI-9981",
+        flagged: true,
+      },
+    ] as BBoxDetection[],
+  },
+];
+
+export function AiTrainingPage() {
   const { data: datasets, isLoading: loadingDatasets } = useAiDatasets();
   const { data: metrics, isLoading: loadingMetrics } = useAiMetrics();
   const createDataset = useCreateAiDataset();
 
+  const [activeTab, setActiveTab] = useState<"convergence" | "playground">("playground");
+
+  // Training state
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [currentEpoch, setCurrentEpoch] = useState(0);
@@ -60,6 +203,14 @@ function AiTrainingPage() {
   const [datasetName, setDatasetName] = useState("");
   const [imageCount, setImageCount] = useState("2500");
   const [selectedClasses, setSelectedClasses] = useState("Red Light, Helmet, Yellow Box");
+
+  // Inference Playground State
+  const [selectedScenario, setSelectedScenario] = useState(TEST_SCENARIOS[0]);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(70); // percentage
+  const [isSimulatingInference, setIsSimulatingInference] = useState(false);
+  const [lastInferenceTime, setLastInferenceTime] = useState<number>(13.8);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [selectedDetection, setSelectedDetection] = useState<BBoxDetection | null>(null);
 
   const isLoading = loadingDatasets || loadingMetrics;
 
@@ -94,7 +245,8 @@ function AiTrainingPage() {
               actor_role: "admin",
               action: "AI_MODEL_TRAINING_EXECUTED",
               target_resource: "YOLOv11 Edge Detector",
-              details: "Trained 10 epochs on QC CCTV annotated datasets. Checkpoint weights exported: yolov11-culiat-v2.8.pt (mAP@50: 97.4%).",
+              details:
+                "Trained 10 epochs on QC CCTV annotated datasets. Checkpoint weights exported: yolov11-culiat-v2.8.pt (mAP@50: 97.4%).",
             });
           } catch (err) {
             console.warn(err);
@@ -102,6 +254,37 @@ function AiTrainingPage() {
         })();
       }
     }, 1000);
+  };
+
+  const handleRunInference = () => {
+    setIsSimulatingInference(true);
+    const simulatedLatency = parseFloat((11 + Math.random() * 5).toFixed(1));
+    setTimeout(() => {
+      setLastInferenceTime(simulatedLatency);
+      setIsSimulatingInference(false);
+      toast.success(`Edge Inference Complete (${simulatedLatency} ms)`, {
+        description: `Evaluated ${selectedScenario.detections.length} bounding boxes via TensorRT FP16 pipeline.`,
+      });
+    }, 450);
+  };
+
+  const visibleDetections = useMemo(() => {
+    return selectedScenario.detections.filter((d) => d.confidence * 100 >= confidenceThreshold);
+  }, [selectedScenario, confidenceThreshold]);
+
+  const handleCopyDetectionJson = () => {
+    const payload = {
+      model: "yolov11-culiat-v2.8.pt",
+      runtime: "NVIDIA TensorRT 10.2 FP16",
+      camera: selectedScenario.cameraCode,
+      inferenceMs: lastInferenceTime,
+      timestamp: new Date().toISOString(),
+      detections: visibleDetections,
+    };
+    navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    setCopiedJson(true);
+    toast.success("Inference telemetry JSON copied to clipboard!");
+    setTimeout(() => setCopiedJson(false), 2000);
   };
 
   const handleUploadDataset = (e: React.FormEvent) => {
@@ -141,11 +324,11 @@ function AiTrainingPage() {
             AI Model Training Hub & Detection Matrix
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Manage CCTV annotation datasets, trigger transfer learning fine-tuning runs, and inspect model convergence metrics.
+            Manage CCTV annotation datasets, trigger transfer learning fine-tuning runs, and test live edge optical detections.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Upload Modal */}
           <Dialog.Root open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
             <Dialog.Trigger asChild>
@@ -246,8 +429,35 @@ function AiTrainingPage() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all disabled:opacity-50"
           >
             {isTraining ? <Loader2 className="size-3.5 animate-spin" /> : <PlayCircle className="size-3.5" />}
-            {isTraining ? `Training Epoch ${currentEpoch}/10 (${trainingProgress}%)` : "Start Training Run"}
+            {isTraining ? `Training Epoch ${currentEpoch}/10 (${trainingProgress}%)` : "Fine-Tune YOLOv11"}
           </button>
+        </div>
+      </div>
+
+      {/* Edge AI Health KPI Ribbon */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="panel rounded-2xl border border-border p-4">
+          <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Active Weights Checkpoint</span>
+          <p className="mt-2 font-mono-tab text-base font-black text-white">yolov11-culiat-v2.8.pt</p>
+          <span className="text-[10px] text-emerald-400 block mt-0.5">● Production Deployed</span>
+        </div>
+
+        <div className="panel rounded-2xl border border-border p-4">
+          <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Validation mAP@0.50</span>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-emerald-400">97.4%</p>
+          <span className="text-[10px] text-white/50 block mt-0.5">+1.2% over v2.7</span>
+        </div>
+
+        <div className="panel rounded-2xl border border-border p-4">
+          <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Inference Latency</span>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-sky-400">{lastInferenceTime} ms</p>
+          <span className="text-[10px] text-white/50 block mt-0.5">NVIDIA Jetson AGX Orin FP16</span>
+        </div>
+
+        <div className="panel rounded-2xl border border-border p-4">
+          <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">Indexed QC Frames</span>
+          <p className="mt-2 font-mono-tab text-2xl font-black text-amber-300">64,900</p>
+          <span className="text-[10px] text-amber-400/80 block mt-0.5">Annotated CCTV Bounding Boxes</span>
         </div>
       </div>
 
@@ -270,11 +480,260 @@ function AiTrainingPage() {
         </div>
       )}
 
-      {isLoading || !datasets || !metrics ? (
-        <div className="grid h-64 place-items-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab("playground")}
+          className={cn(
+            "rounded-xl px-4 py-2 font-mono-tab text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+            activeTab === "playground"
+              ? "bg-primary text-white shadow-md shadow-primary/20"
+              : "text-muted-foreground hover:bg-panel hover:text-white"
+          )}
+        >
+          <Eye className="size-3.5" /> Edge Optical Playground & BBoxes
+        </button>
+        <button
+          onClick={() => setActiveTab("convergence")}
+          className={cn(
+            "rounded-xl px-4 py-2 font-mono-tab text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+            activeTab === "convergence"
+              ? "bg-primary text-white shadow-md shadow-primary/20"
+              : "text-muted-foreground hover:bg-panel hover:text-white"
+          )}
+        >
+          <BarChart className="size-3.5" /> Model Convergence & Datasets
+        </button>
+      </div>
+
+      {/* Tab 1: Interactive Inference Playground */}
+      {activeTab === "playground" && (
+        <div className="grid gap-6 xl:grid-cols-3">
+          {/* Main Visual Detection Canvas */}
+          <div className="panel xl:col-span-2 flex flex-col gap-4 rounded-2xl border border-border p-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Camera className="size-4 text-primary" />
+                  <h2 className="font-bold text-white text-base">{selectedScenario.name}</h2>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Camera: <span className="font-mono text-white font-bold">{selectedScenario.cameraCode}</span> · {selectedScenario.description}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRunInference}
+                  disabled={isSimulatingInference}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50"
+                >
+                  <Zap className={cn("size-3.5", isSimulatingInference && "animate-spin")} />
+                  {isSimulatingInference ? "Inferencing..." : "Re-Run Detection"}
+                </button>
+
+                <button
+                  onClick={handleCopyDetectionJson}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-panel-elevated transition-colors"
+                  title="Copy Bounding Box JSON"
+                >
+                  {copiedJson ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                  {copiedJson ? "Copied" : "JSON"}
+                </button>
+              </div>
+            </div>
+
+            {/* Bounding Box Render Viewport */}
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black group select-none">
+              <img
+                src={selectedScenario.imageUrl}
+                alt={selectedScenario.name}
+                className="size-full object-cover"
+              />
+
+              {/* SVG Bounding Boxes Overlay */}
+              <div className="absolute inset-0 pointer-events-auto">
+                {visibleDetections.map((det) => {
+                  const isHovered = selectedDetection?.id === det.id;
+                  return (
+                    <div
+                      key={det.id}
+                      onClick={() => setSelectedDetection(det)}
+                      onMouseEnter={() => setSelectedDetection(det)}
+                      style={{
+                        left: `${det.box.x}%`,
+                        top: `${det.box.y}%`,
+                        width: `${det.box.w}%`,
+                        height: `${det.box.h}%`,
+                        borderColor: det.color,
+                      }}
+                      className={cn(
+                        "absolute cursor-pointer border-2 transition-all rounded-md flex flex-col justify-start items-start",
+                        isHovered
+                          ? "ring-4 ring-white/60 shadow-[0_0_24px_rgba(255,255,255,0.4)] z-20"
+                          : "shadow-[0_0_12px_rgba(0,0,0,0.8)] z-10 hover:border-white"
+                      )}
+                    >
+                      {/* Bounding Box Label Tag */}
+                      <span
+                        style={{ backgroundColor: det.color }}
+                        className="font-mono-tab text-[9px] font-black uppercase text-black px-1.5 py-0.5 rounded-br -mt-0.5 -ml-0.5 flex items-center gap-1 shadow-md"
+                      >
+                        {det.className} {(det.confidence * 100).toFixed(0)}%
+                        {det.speedKph && ` · ${det.speedKph}kph`}
+                      </span>
+
+                      {/* Optical Reticle Corners */}
+                      <div className="absolute -top-1 -right-1 size-2 border-t-2 border-r-2 border-white" />
+                      <div className="absolute -bottom-1 -left-1 size-2 border-b-2 border-l-2 border-white" />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom HUD Bar */}
+              <div className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/75 backdrop-blur-md px-4 py-2 border border-white/10 flex items-center justify-between text-xs font-mono-tab">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
+                    Active Detections: {visibleDetections.length}
+                  </span>
+                  <span>·</span>
+                  <span className="text-muted-foreground">Pipeline: TensorRT FP16</span>
+                </div>
+                <div className="text-right text-emerald-400 font-bold">
+                  Latency: {lastInferenceTime}ms ({(1000 / lastInferenceTime).toFixed(0)} FPS)
+                </div>
+              </div>
+            </div>
+
+            {/* Scenario Selector Pills */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <span className="text-xs text-muted-foreground self-center mr-1">Test Corridor:</span>
+              {TEST_SCENARIOS.map((scen) => (
+                <button
+                  key={scen.id}
+                  onClick={() => {
+                    setSelectedScenario(scen);
+                    setSelectedDetection(null);
+                  }}
+                  className={cn(
+                    "rounded-xl px-3 py-1.5 text-xs font-semibold transition-all",
+                    selectedScenario.id === scen.id
+                      ? "bg-primary text-white shadow-md shadow-primary/20 font-bold"
+                      : "border border-border bg-background text-muted-foreground hover:text-white"
+                  )}
+                >
+                  {scen.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Sidebar: Optical Diagnostics & Confidence Controls */}
+          <div className="panel xl:col-span-1 flex flex-col gap-5 rounded-2xl border border-border p-6 shadow-xl h-fit">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <Sliders className="size-4 text-primary" /> Detection Parameters
+              </h3>
+              <span className="font-mono-tab text-xs text-primary font-bold">{confidenceThreshold}% Threshold</span>
+            </div>
+
+            {/* Confidence Slider */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-muted-foreground">Confidence Filter</span>
+                <span className="font-mono-tab text-white font-bold">{confidenceThreshold}%</span>
+              </div>
+              <input
+                type="range"
+                min="50"
+                max="95"
+                step="5"
+                value={confidenceThreshold}
+                onChange={(e) => setConfidenceThreshold(parseInt(e.target.value, 10))}
+                className="w-full accent-primary cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-subtle font-mono-tab mt-1">
+                <span>50% (High Recall)</span>
+                <span>95% (Strict Precision)</span>
+              </div>
+            </div>
+
+            {/* Selected Detection Inspector */}
+            <div className="rounded-xl border border-border bg-background/60 p-4">
+              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle block mb-2">
+                Selected Detection Telemetry
+              </span>
+              {selectedDetection ? (
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Class:</span>
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: selectedDetection.color }} />
+                      {selectedDetection.className}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Confidence:</span>
+                    <span className="font-mono-tab font-bold text-emerald-400">
+                      {(selectedDetection.confidence * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  {selectedDetection.plateNumber && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">ANPR Plate:</span>
+                      <span className="font-mono-tab font-bold text-white bg-black/40 px-2 py-0.5 rounded border border-white/10">
+                        {selectedDetection.plateNumber}
+                      </span>
+                    </div>
+                  )}
+                  {selectedDetection.speedKph && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Speed Radar:</span>
+                      <span className="font-mono-tab font-bold text-sky-400">{selectedDetection.speedKph} kph</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Bounding Box:</span>
+                    <span className="font-mono-tab text-[11px] text-muted-foreground">
+                      [{selectedDetection.box.x}%, {selectedDetection.box.y}%, {selectedDetection.box.w}%, {selectedDetection.box.h}%]
+                    </span>
+                  </div>
+                  {selectedDetection.flagged && (
+                    <div className="mt-2 rounded-lg border border-red-500/40 bg-red-950/20 p-2 text-red-400 font-bold text-[11px] flex items-center gap-1.5">
+                      <ShieldAlert className="size-3.5" />
+                      Statutory Violation Flagged by Edge Model
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground py-2 text-center">
+                  Click on any bounding box on the camera canvas to inspect normalized coordinates & sensor metrics.
+                </p>
+              )}
+            </div>
+
+            {/* Target Classes Distribution */}
+            <div>
+              <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle block mb-2">
+                Active Optical Class Weights
+              </span>
+              <div className="flex flex-col gap-2">
+                {CLASS_PERFORMANCE.slice(0, 4).map((cp) => (
+                  <div key={cp.className} className="flex items-center justify-between text-xs">
+                    <span className="text-white/80">{cp.className}</span>
+                    <span className="font-mono-tab text-emerald-400 font-bold">{cp.mAP50}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {/* Tab 2: Datasets & Convergence Analytics */}
+      {activeTab === "convergence" && (
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Datasets Panel */}
           <div className="panel col-span-1 flex flex-col gap-4 rounded-2xl border border-border p-6 shadow-xl h-fit">
@@ -289,7 +748,7 @@ function AiTrainingPage() {
             </div>
 
             <div className="flex flex-col gap-3 mt-2">
-              {datasets.map((ds) => (
+              {datasets?.map((ds) => (
                 <div key={ds.id} className="flex flex-col gap-2 rounded-xl border border-border bg-background/50 p-3.5">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-white text-xs">{ds.name}</p>
@@ -338,90 +797,94 @@ function AiTrainingPage() {
                 </div>
               </div>
 
-              <div className="flex gap-4">
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-end">
-                    <Target className="size-3 text-emerald-400" /> mAP@50
-                  </p>
-                  <p className="font-mono-tab text-xl font-black text-emerald-400">
-                    {(metrics[metrics.length - 1].map50 * 100).toFixed(1)}%
-                  </p>
+              {metrics && metrics.length > 0 && (
+                <div className="flex gap-4">
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-end">
+                      <Target className="size-3 text-emerald-400" /> mAP@50
+                    </p>
+                    <p className="font-mono-tab text-xl font-black text-emerald-400">
+                      {(metrics[metrics.length - 1].map50 * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-end">
+                      <BrainCircuit className="size-3 text-blue-400" /> Loss
+                    </p>
+                    <p className="font-mono-tab text-xl font-black text-blue-400">
+                      {metrics[metrics.length - 1].loss.toFixed(3)}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-end">
-                    <BrainCircuit className="size-3 text-blue-400" /> Loss
-                  </p>
-                  <p className="font-mono-tab text-xl font-black text-blue-400">
-                    {metrics[metrics.length - 1].loss.toFixed(3)}
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
 
-            <div className="h-[280px] w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
-                  <XAxis
-                    dataKey="epoch"
-                    stroke="#888"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(val) => `Epoch ${val}`}
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    stroke="#888"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    stroke="#888"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "12px", fontSize: "12px" }}
-                    itemStyle={{ color: "#fff" }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="map50"
-                    name="mAP@0.50"
-                    stroke="#10b981"
-                    strokeWidth={2.5}
-                    dot={false}
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="map95"
-                    name="mAP@0.50-0.95"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="loss"
-                    name="Training Loss"
-                    stroke="#ef4444"
-                    strokeWidth={2}
-                    dot={false}
-                    strokeDasharray="5 5"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {metrics && (
+              <div className="h-[280px] w-full mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={metrics}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
+                    <XAxis
+                      dataKey="epoch"
+                      stroke="#888"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => `Epoch ${val}`}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      stroke="#888"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="#888"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "12px", fontSize: "12px" }}
+                      itemStyle={{ color: "#fff" }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="map50"
+                      name="mAP@0.50"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      dot={false}
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="map95"
+                      name="mAP@0.50-0.95"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="loss"
+                      name="Training Loss"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={false}
+                      strokeDasharray="5 5"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             {/* Class Performance Table */}
             <div className="mt-4 border-t border-border pt-4">
