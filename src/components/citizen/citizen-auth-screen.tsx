@@ -104,6 +104,67 @@ export function CitizenAuthScreen() {
           </p>
         </div>
 
+        {/* Quick Demo Credentials Bar */}
+        <div className="mb-6 rounded-2xl border border-primary/30 bg-primary/5 p-4 backdrop-blur-sm">
+          <div className="flex items-center justify-between text-xs font-mono-tab mb-2.5">
+            <span className="font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="size-3.5" /> Instant Demo Citizen Access:
+            </span>
+            <span className="text-[10px] text-muted-foreground">1-Click Sign In</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setSignInEmail("maria.santos@gmail.com");
+                setSignInPassword("••••••••");
+                setBusy(true);
+                try {
+                  const citizen = await login("maria.santos@gmail.com");
+                  toast.success(`Welcome back, ${citizen.fullName}!`);
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to sign in");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2 text-xs text-foreground hover:border-primary/50 hover:bg-panel-elevated transition-colors text-left"
+            >
+              <div>
+                <p className="font-semibold text-white">Maria Santos</p>
+                <p className="font-mono-tab text-[10px] text-orange-400">1 Pending Notice (NDB-8921)</p>
+              </div>
+              <ArrowRight className="size-3.5 text-primary shrink-0" />
+            </button>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setSignInEmail("juan.delacruz@fleet.qc.gov.ph");
+                setSignInPassword("••••••••");
+                setBusy(true);
+                try {
+                  const citizen = await login("juan.delacruz@fleet.qc.gov.ph");
+                  toast.success(`Welcome back, ${citizen.fullName}!`);
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to sign in");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2 text-xs text-foreground hover:border-primary/50 hover:bg-panel-elevated transition-colors text-left"
+            >
+              <div>
+                <p className="font-semibold text-white">Juan Dela Cruz</p>
+                <p className="font-mono-tab text-[10px] text-emerald-400">Cleared LTO Motorist</p>
+              </div>
+              <ArrowRight className="size-3.5 text-primary shrink-0" />
+            </button>
+          </div>
+        </div>
+
         {/* Mode Toggle Tabs */}
         <div className="mb-6 flex rounded-xl border border-border bg-panel-elevated p-1">
           <button
