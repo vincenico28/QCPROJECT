@@ -83,6 +83,50 @@ function AdvisoriesPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+                {/* 1-Click Broadcast Presets */}
+                <div>
+                  <span className="text-[10px] font-mono-tab font-bold uppercase tracking-widest text-primary block mb-1.5">
+                    Quick Broadcast Templates
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      {
+                        title: "Flash Flood Gutter Warning",
+                        corridor: "Tandang Sora Underpass",
+                        severity: "Critical" as const,
+                        message: "Localized gutter-deep flooding detected. Light vehicles are advised to take the elevated bypass road.",
+                      },
+                      {
+                        title: "Vehicular Collision & Lane Blockage",
+                        corridor: "Commonwealth Ave (Batasan to Litex)",
+                        severity: "Warning" as const,
+                        message: "Two-vehicle collision occupying lanes 2 and 3 inbound. Traffic marshals and tow trucks are on scene.",
+                      },
+                      {
+                        title: "Rush Hour Counterflow Lane Open",
+                        corridor: "Commonwealth Ave Median",
+                        severity: "Info" as const,
+                        message: "Zippy counterflow lane activated for light vehicles until 20:00 PST. Observe 50 kph speed limit.",
+                      },
+                    ].map((preset) => (
+                      <button
+                        key={preset.title}
+                        type="button"
+                        onClick={() => {
+                          setTitle(preset.title);
+                          setCorridor(preset.corridor);
+                          setSeverity(preset.severity);
+                          setMessage(preset.message);
+                          toast.info(`Preset Loaded: ${preset.title}`);
+                        }}
+                        className="rounded-lg border border-border/80 bg-background/60 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-panel-elevated hover:text-white transition-colors"
+                      >
+                        {preset.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Advisory Title</label>
                   <input
@@ -104,6 +148,18 @@ function AdvisoriesPage() {
                       placeholder="e.g. Commonwealth Ave"
                       className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
                     />
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {["Commonwealth Ave", "Visayas Ave", "Katipunan Ave", "Tandang Sora"].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setCorridor(c)}
+                          className="text-[9px] font-mono-tab rounded bg-black/40 px-1.5 py-0.5 text-muted-foreground hover:text-white"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Severity Level</label>
