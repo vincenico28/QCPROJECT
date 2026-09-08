@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCitizenProfile,
   useCitizenAuth,
@@ -52,6 +53,7 @@ import {
   FileCheck2,
   ExternalLink,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
@@ -139,6 +141,22 @@ function CitizenPortal() {
   const [settleMethod, setSettleMethod] = useState<"gcash" | "maya" | "card">("gcash");
   const [settling, setSettling] = useState(false);
 
+  const queryClient = useQueryClient();
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncCommandCenter = async () => {
+    setIsSyncing(true);
+    await queryClient.invalidateQueries({ queryKey: ["citizen-profile"] });
+    await queryClient.invalidateQueries({ queryKey: ["citations"] });
+    await queryClient.invalidateQueries({ queryKey: ["violations"] });
+    setTimeout(() => {
+      setIsSyncing(false);
+      toast.success("Command Center Database Synchronized", {
+        description: "Latest notices of violation and LTO hold statuses updated.",
+      });
+    }, 450);
+  };
+
   // Show Citizen Auth Screen (Sign In & Sign Up) if not authenticated
   if (!isAuthenticated || !currentCitizen) {
     return <CitizenAuthScreen />;
@@ -155,7 +173,9 @@ function CitizenPortal() {
       { plateNumber: newPlate, makeModel: newModel, type: newType },
       {
         onSuccess: () => {
-          toast.success(`Vehicle ${newPlate.toUpperCase()} registered to your profile.`);
+          toast.success(`Vehicle ${newPlate.toUpperCase()} registered to your profile!`, {
+            description: "Synchronized with QC Command Center & MMDA NCAP database.",
+          });
           setAddVehicleOpen(false);
           setNewPlate("");
           setNewModel("");
@@ -427,6 +447,14 @@ function CitizenPortal() {
                       {currentCitizen.vehicles && currentCitizen.vehicles[0] ? currentCitizen.vehicles[0].plateNumber : "NO PLATE"}
                     </span>
                   </div>
+                  <button
+                    onClick={handleSyncCommandCenter}
+                    disabled={isSyncing}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/10 px-3.5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
+                    {isSyncing ? "Syncing..." : "Sync Command Center"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -606,10 +634,18 @@ function CitizenPortal() {
                                 setSelectedCitationId(c.id);
                                 setSettleModalOpen(true);
                               }}
-                              className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 transition-all"
+                              className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 transition-all flex items-center gap-1.5"
                             >
-                              Settle Online
+                              <CreditCard className="size-3.5" /> Quick Settle
                             </button>
+
+                            <Link
+                              to="/portal/pay/$citationId"
+                              params={{ citationId: c.novNumber || c.id }}
+                              className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                            >
+                              <ExternalLink className="size-3.5" /> Official Checkout
+                            </Link>
                           </div>
                         )}
                       </div>
@@ -682,12 +718,24 @@ function CitizenPortal() {
                 <p className="mt-1 text-sm text-white/60">Manage your verified fleet and monitor LTO registration alarm statuses.</p>
               </div>
 
-              <button
-                onClick={() => setAddVehicleOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all"
-              >
-                <Plus className="size-4" /> Add Vehicle
-              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={handleSyncCommandCenter}
+                  disabled={isSyncing}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 transition-all disabled:opacity-50"
+                  title="Synchronize violations from Command Center"
+                >
+                  <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
+                  {isSyncing ? "Syncing..." : "Sync Command Center"}
+                </button>
+
+                <button
+                  onClick={() => setAddVehicleOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all"
+                >
+                  <Plus className="size-4" /> Add Vehicle
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -730,6 +778,26 @@ function CitizenPortal() {
                           </span>
                         </div>
                       </div>
+
+                      {(() => {
+                        const vehicleUnpaid = unpaidCitations.filter(
+                          (c) => c.plateNumber.toUpperCase().replace(/[\s-]/g, "") === v.plateNumber.toUpperCase().replace(/[\s-]/g, "")
+                        ).length;
+                        return (
+                          <div className="mt-3 flex items-center justify-between rounded-lg bg-black/40 px-3 py-1.5 text-[11px]">
+                            <span className="text-white/50">Command Center Status:</span>
+                            {vehicleUnpaid > 0 ? (
+                              <span className="font-bold text-red-400 flex items-center gap-1">
+                                <AlertTriangle className="size-3" /> {vehicleUnpaid} Active {vehicleUnpaid === 1 ? "Notice" : "Notices"}
+                              </span>
+                            ) : (
+                              <span className="font-bold text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 className="size-3" /> Clean Record
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="mt-6 flex items-center justify-between border-t border-border pt-3">
@@ -754,9 +822,20 @@ function CitizenPortal() {
                   </div>
                 ))
               ) : (
-                <div className="col-span-3 rounded-2xl border border-dashed border-white/20 p-8 text-center">
-                  <Car className="mx-auto size-8 text-white/40" />
-                  <p className="mt-2 text-sm text-white/70">No vehicles registered yet.</p>
+                <div className="col-span-3 rounded-2xl border border-dashed border-white/20 p-12 text-center flex flex-col items-center">
+                  <div className="grid size-14 place-items-center rounded-2xl bg-white/5 text-white/40 mb-3">
+                    <Car className="size-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-white">No Vehicles Registered</h3>
+                  <p className="mt-1 text-xs text-white/60 max-w-sm">
+                    Link your vehicle plate to automatically query Quezon City NCAP cameras, monitor LTO LTMS holds, and access your digital motorist pass.
+                  </p>
+                  <button
+                    onClick={() => setAddVehicleOpen(true)}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all"
+                  >
+                    <Plus className="size-4" /> Add Your First Vehicle
+                  </button>
                 </div>
               )}
             </div>
@@ -1559,6 +1638,108 @@ function CitizenPortal() {
                   >
                     {settling && <Loader2 className="size-4 animate-spin" />}
                     Confirm & Settle
+                  </button>
+                </div>
+              </form>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+
+        {/* ========================================================================= */}
+        {/* MODAL 5: ADD VEHICLE */}
+        {/* ========================================================================= */}
+        <Dialog.Root open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl animate-in zoom-in-95">
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <Dialog.Title className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Car className="size-5 text-primary" />
+                  Register Motor Vehicle
+                </Dialog.Title>
+                <Dialog.Close asChild>
+                  <button className="rounded p-1 text-subtle hover:text-foreground">
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              <form onSubmit={handleAddVehicleSubmit} className="mt-4 flex flex-col gap-4">
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Enter your vehicle registration details to link with Quezon City NCAP cameras and LTO registration monitoring.
+                </p>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    Plate Number / Conduction Sticker
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. NBD 1234 or 1301-098765"
+                    value={newPlate}
+                    onChange={(e) => setNewPlate(e.target.value.toUpperCase())}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm uppercase text-white placeholder:text-white/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="text-[10px] text-white/40">
+                    Standard format: 3 letters + 4 digits (cars) or 3 letters + 3 digits / conduction sticker.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    Make, Model & Year
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Toyota Vios 2023 Gray"
+                    value={newModel}
+                    onChange={(e) => setNewModel(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    Vehicle Classification
+                  </label>
+                  <select
+                    value={newType}
+                    onChange={(e) => setNewType(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-[#161922] px-4 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="Sedan">Sedan / Hatchback</option>
+                    <option value="SUV">SUV / Crossover</option>
+                    <option value="MPV">MPV / AUV</option>
+                    <option value="Pickup">Pickup Truck</option>
+                    <option value="Van">Van / Commuter</option>
+                    <option value="Motorcycle">Motorcycle / Scooter</option>
+                    <option value="Commercial">Commercial Truck / Bus</option>
+                    <option value="Electric Vehicle">Electric Vehicle (EV / Hybrid)</option>
+                  </select>
+                </div>
+
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-[11px] text-blue-300 leading-relaxed">
+                  <strong>Notice:</strong> Adding this vehicle will query the QC Command Center database for any pending NCAP violations or officer-issued citations under this plate.
+                </div>
+
+                <div className="mt-2 flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <Dialog.Close asChild>
+                    <button
+                      type="button"
+                      className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </Dialog.Close>
+                  <button
+                    type="submit"
+                    disabled={addVehicle.isPending}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {addVehicle.isPending && <Loader2 className="size-4 animate-spin" />}
+                    Register Vehicle
                   </button>
                 </div>
               </form>

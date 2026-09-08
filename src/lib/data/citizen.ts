@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { serverSaveCitizenReport, serverFetchCitizenReports } from "@/lib/server.functions";
+import { serverSaveCitizenReport, serverFetchCitizenReports, serverUpdateCitationStatus } from "@/lib/server.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export type EvidenceFrame = {
   url: string;
@@ -147,7 +148,83 @@ export function useCitizenProfile() {
       if (!currentId) return null;
       const all = loadCitizensFromStorage();
       const citizen = all.find((c) => c.id === currentId);
-      return citizen || null;
+      if (!citizen) return null;
+
+      // Realtime command center sync for all registered plates:
+      if (citizen.vehicles && citizen.vehicles.length > 0) {
+        try {
+          const plates = citizen.vehicles.map((v) => v.plateNumber.toUpperCase().trim());
+          const { data: cmdCitations } = await supabase
+            .from("citations")
+            .select("*")
+            .in("plate_number", plates);
+
+          if (cmdCitations && cmdCitations.length > 0) {
+            if (!citizen.citations) citizen.citations = [];
+            let updated = false;
+
+            for (const cmd of cmdCitations) {
+              const cleanPlate = cmd.plate_number.toUpperCase().trim();
+              const isPaid = cmd.status === "paid" || cmd.status === "settled";
+              const existing = citizen.citations.find(
+                (c) => c.novNumber === cmd.citation_number || c.id === cmd.id
+              );
+
+              if (!existing) {
+                updated = true;
+                citizen.citations.unshift({
+                  id: cmd.id,
+                  novNumber: cmd.citation_number,
+                  plateNumber: cleanPlate,
+                  violation: cmd.offense,
+                  ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
+                  location: "Quezon City Active Corridor (Captured by Optical Sentinel)",
+                  date: cmd.issued_at,
+                  dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
+                  amount: Number(cmd.amount) || 2000,
+                  surcharge: 0,
+                  status: isPaid ? "settled" : "unpaid",
+                  ltoAlarmStatus: isPaid ? "CLEARED" : "WARNING_DUE_SOON",
+                  evidenceFrames: [
+                    {
+                      url: "/assets/violation-1.jpg",
+                      label: `Optical Sentinel Capture: ${cmd.offense}`,
+                      timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
+                    },
+                    {
+                      url: "/assets/violation-2.jpg",
+                      label: `ANPR Plate Confirmation: ${cleanPlate}`,
+                      timestamp: "Confidence 99.4%",
+                    },
+                  ],
+                });
+              } else {
+                if (isPaid && existing.status !== "settled") {
+                  existing.status = "settled";
+                  existing.ltoAlarmStatus = "CLEARED";
+                  updated = true;
+                }
+              }
+            }
+
+            // Sync vehicles LTO alarm statuses
+            citizen.vehicles.forEach((v) => {
+              const hasUnpaid = citizen.citations.some(
+                (c) => c.plateNumber === v.plateNumber && c.status === "unpaid"
+              );
+              v.ltoAlarmStatus = hasUnpaid ? "WARNING_DUE_SOON" : "CLEARED";
+            });
+
+            if (updated) {
+              saveCitizensToStorage(all);
+            }
+          }
+        } catch (err) {
+          console.warn("Background command center citations sync:", err);
+        }
+      }
+
+      return citizen;
     },
   });
 }
@@ -366,10 +443,11 @@ export function useAddCitizenVehicle() {
       const citizen = all.find((c) => c.id === currentId);
       if (!citizen) throw new Error("Not authenticated");
 
+      const cleanPlate = input.plateNumber.toUpperCase().trim();
       const newVehicle: CitizenVehicle = {
         id: `v-${Date.now()}`,
-        plateNumber: input.plateNumber.toUpperCase().trim(),
-        makeModel: input.makeModel,
+        plateNumber: cleanPlate,
+        makeModel: input.makeModel.trim(),
         type: input.type,
         status: "verified",
         ltoExpiry: "2027-11-30",
@@ -378,7 +456,70 @@ export function useAddCitizenVehicle() {
         clearanceValid: true,
       };
 
-      citizen.vehicles.push(newVehicle);
+      if (!citizen.vehicles) citizen.vehicles = [];
+      const existingIdx = citizen.vehicles.findIndex((v) => v.plateNumber === cleanPlate);
+      if (existingIdx >= 0) {
+        citizen.vehicles[existingIdx] = newVehicle;
+      } else {
+        citizen.vehicles.push(newVehicle);
+      }
+
+      // Sync with command center: inspect citations for this plate
+      try {
+        const { data: cmdCitations } = await supabase
+          .from("citations")
+          .select("*")
+          .eq("plate_number", cleanPlate);
+
+        if (cmdCitations && cmdCitations.length > 0) {
+          if (!citizen.citations) citizen.citations = [];
+          let hasUnpaid = false;
+
+          for (const cmd of cmdCitations) {
+            const isPaid = cmd.status === "paid" || cmd.status === "settled";
+            if (!isPaid) hasUnpaid = true;
+            const existing = citizen.citations.find(
+              (c) => c.novNumber === cmd.citation_number || c.id === cmd.id
+            );
+
+            if (!existing) {
+              citizen.citations.unshift({
+                id: cmd.id,
+                novNumber: cmd.citation_number,
+                plateNumber: cleanPlate,
+                violation: cmd.offense,
+                ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
+                location: "Quezon City Active Corridor (Captured by Optical Sentinel)",
+                date: cmd.issued_at,
+                dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
+                amount: Number(cmd.amount) || 2000,
+                surcharge: 0,
+                status: isPaid ? "settled" : "unpaid",
+                ltoAlarmStatus: isPaid ? "CLEARED" : "WARNING_DUE_SOON",
+                evidenceFrames: [
+                  {
+                    url: "/assets/violation-1.jpg",
+                    label: `Optical Sentinel Capture: ${cmd.offense}`,
+                    timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
+                  },
+                  {
+                    url: "/assets/violation-2.jpg",
+                    label: `ANPR Plate Confirmation: ${cleanPlate}`,
+                    timestamp: "Confidence 99.4%",
+                  },
+                ],
+              });
+            }
+          }
+
+          if (hasUnpaid) {
+            newVehicle.ltoAlarmStatus = "WARNING_DUE_SOON";
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query command center citations for plate:", err);
+      }
+
       saveCitizensToStorage(all);
       return newVehicle;
     },
@@ -418,26 +559,58 @@ export function useSettleCitizenCitation() {
       const citizen = all.find((c) => c.id === currentId);
       if (!citizen) throw new Error("Not authenticated");
 
-      const citation = citizen.citations.find((c) => c.id === citationId);
+      const citation = citizen.citations.find((c) => c.id === citationId || c.novNumber === citationId);
+      const clearanceCert = `MMDA-QC-CLR-${Math.floor(10000 + Math.random() * 89999)}`;
+
       if (citation) {
         citation.status = "settled";
         citation.ltoAlarmStatus = "CLEARED";
-        citation.clearanceCertNumber = `MMDA-QC-CLR-${Math.floor(10000 + Math.random() * 89999)}`;
+        citation.clearanceCertNumber = clearanceCert;
       }
 
       // Update vehicle alarm status
       if (citation && citizen.vehicles) {
         const vehicle = citizen.vehicles.find((v) => v.plateNumber === citation.plateNumber);
         if (vehicle) {
-          vehicle.ltoAlarmStatus = "CLEARED";
+          const remainingUnpaidForPlate = citizen.citations.some(
+            (c) => c.plateNumber === citation.plateNumber && c.status === "unpaid" && c.id !== citationId && c.novNumber !== citationId
+          );
+          if (!remainingUnpaidForPlate) {
+            vehicle.ltoAlarmStatus = "CLEARED";
+          }
         }
       }
 
       saveCitizensToStorage(all);
+
+      // FULL SYNC WITH COMMAND CENTER DATABASE:
+      try {
+        const refNumber = citation?.novNumber || citationId;
+        await serverUpdateCitationStatus({
+          data: {
+            citationNumber: refNumber,
+            status: "paid",
+          },
+        });
+
+        // Create official audit log
+        await supabase.from("audit_logs").insert({
+          actor_name: citizen.fullName,
+          actor_role: "citizen",
+          action: "CITIZEN_CITATION_SETTLED_ONLINE",
+          target_resource: `Notice: ${refNumber} (${citation?.plateNumber})`,
+          details: `Amount: PHP ${citation?.amount || 2000}, Status: CLEARED, Cert: ${clearanceCert}`,
+        });
+      } catch (err) {
+        console.warn("Command center payment sync error:", err);
+      }
+
       return citationId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["violations"] });
     },
   });
 }

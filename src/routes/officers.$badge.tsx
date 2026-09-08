@@ -26,7 +26,14 @@ import {
   Car,
   FileText,
   BadgeCheck,
+  Video,
+  Eye,
+  Bell,
+  Send,
+  Target,
+  Sparkles,
 } from "lucide-react";
+import { soundEffects } from "@/lib/sound-effects";
 import {
   AreaChart,
   Area,
@@ -87,7 +94,9 @@ export function OfficerDetailPage() {
   const [citationSearch, setCitationSearch] = useState("");
   const [citationStatusFilter, setCitationStatusFilter] = useState<string>("all");
   const [credentialModalOpen, setCredentialModalOpen] = useState(false);
-  const [telemetryView, setTelemetryView] = useState<"details" | "map">("details");
+  const [radioModalOpen, setRadioModalOpen] = useState(false);
+  const [nightVision, setNightVision] = useState(false);
+  const [telemetryView, setTelemetryView] = useState<"details" | "map" | "bodycam">("details");
 
   const officer = officers.find(
     (o) =>
@@ -264,6 +273,10 @@ export function OfficerDetailPage() {
         shiftData={shiftData}
         onToggleDuty={handleToggleDuty}
         isToggling={toggleDuty.isPending}
+        onOpenRadioPing={() => {
+          soundEffects.playRadioChirp();
+          setRadioModalOpen(true);
+        }}
       />
 
       {/* KPI Ribbons */}
@@ -355,11 +368,95 @@ export function OfficerDetailPage() {
                   >
                     <MapPin className="size-3" /> Sector GIS
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setTelemetryView("bodycam")}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 font-bold uppercase transition-colors flex items-center gap-1",
+                      telemetryView === "bodycam"
+                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Video className="size-3" /> Axon HUD
+                  </button>
                 </div>
               </div>
             </div>
 
-            {telemetryView === "map" ? (
+            {telemetryView === "bodycam" ? (
+              <div
+                className={cn(
+                  "mt-4 h-[250px] w-full overflow-hidden rounded-2xl border relative font-mono text-xs flex flex-col justify-between p-3 select-none transition-all shadow-inner",
+                  nightVision
+                    ? "border-emerald-500/50 bg-[#041409] text-emerald-400"
+                    : "border-border bg-[#080b12] text-white"
+                )}
+              >
+                {/* Scanline pattern overlay */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.4)_51%)] bg-[length:100%_4px] pointer-events-none opacity-40" />
+                {nightVision && (
+                  <div className="absolute inset-0 bg-[radial-gradient(circle,transparent_40%,rgba(0,0,0,0.7)_100%)] pointer-events-none" />
+                )}
+
+                {/* Top HUD */}
+                <div className="relative z-10 flex items-center justify-between font-mono-tab text-[10px]">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex size-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
+                      <span className="relative inline-flex size-2 rounded-full bg-danger" />
+                    </span>
+                    <span className="font-bold text-danger uppercase tracking-widest">
+                      REC 1080P 60FPS
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setNightVision(!nightVision)}
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors border flex items-center gap-1",
+                        nightVision
+                          ? "bg-emerald-500 text-black border-emerald-400 shadow-sm"
+                          : "bg-white/10 text-white/80 border-white/20 hover:bg-white/20"
+                      )}
+                    >
+                      <Eye className="size-2.5" />
+                      {nightVision ? "IR NV ON" : "Night Vision"}
+                    </button>
+                    <span className="text-white/60">AXON-3</span>
+                  </div>
+                </div>
+
+                {/* Center Tactical Reticle */}
+                <div className="relative z-10 flex flex-col items-center justify-center opacity-30 pointer-events-none">
+                  <div className="size-12 border border-current rounded-full flex items-center justify-center">
+                    <div className="size-1.5 bg-current rounded-full" />
+                  </div>
+                  <span className="text-[8px] uppercase tracking-widest mt-1 font-mono-tab">
+                    EIS STABILIZED · OPTICAL LOCK
+                  </span>
+                </div>
+
+                {/* Bottom HUD */}
+                <div className="relative z-10 flex items-end justify-between font-mono-tab text-[9px] border-t border-white/10 pt-1.5">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-white/80">
+                      GPS: {shiftData?.location ? `${shiftData.location[0].toFixed(4)}°N, ${shiftData.location[1].toFixed(4)}°E` : "14.6563° N, 121.0697° E"}
+                    </span>
+                    <span className="text-white/60">
+                      OFFICER: #{officer.badge_number} · PATROL ACTIVE
+                    </span>
+                  </div>
+                  <div className="text-right flex flex-col items-end gap-0.5">
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <Activity className="size-2.5" /> MIC: -12dB [LIVE]
+                    </span>
+                    <span className="text-white/50">{new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+            ) : telemetryView === "map" ? (
               <div className="mt-4 h-[250px] w-full overflow-hidden rounded-2xl border border-border bg-background relative shadow-inner">
                 <ClientOnly
                   fallback={
@@ -528,6 +625,114 @@ export function OfficerDetailPage() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* Enforcement Performance Quota & Service Honours */}
+      <div className="panel rounded-3xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+          <div>
+            <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+              <Target className="size-4 text-primary" />
+              Field Enforcement Quota & Citizen Service Honours
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              DPOS performance benchmarks and municipal commendation ledger for Q3 2026
+            </p>
+          </div>
+          <span className="font-mono-tab text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full w-fit">
+            94.2% Rating · Grade A Officer
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-border bg-panel-elevated/40 p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Monthly Citation Target</span>
+                <span className="font-mono-tab font-bold text-foreground">{Math.min(100, Math.round((own.length / 40) * 100))}%</span>
+              </div>
+              <div className="mt-2 w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-primary h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.round((own.length / 40) * 100))}%` }}
+                />
+              </div>
+            </div>
+            <p className="font-mono-tab text-[10px] text-muted-foreground mt-3">
+              {own.length} issued / 40 target tickets
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-panel-elevated/40 p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Emergency Response SLA</span>
+                <span className="font-mono-tab font-bold text-emerald-400">96.4%</span>
+              </div>
+              <div className="mt-2 w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full"
+                  style={{ width: "96.4%" }}
+                />
+              </div>
+            </div>
+            <p className="font-mono-tab text-[10px] text-muted-foreground mt-3">
+              Average arrival &lt; 3.8 mins across 14 dispatches
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-panel-elevated/40 p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Field Hours Logged</span>
+                <span className="font-mono-tab font-bold text-foreground">148 / 160h</span>
+              </div>
+              <div className="mt-2 w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-sky-500 h-full rounded-full"
+                  style={{ width: "92.5%" }}
+                />
+              </div>
+            </div>
+            <p className="font-mono-tab text-[10px] text-muted-foreground mt-3">
+              12 hours remaining this monthly cycle
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-panel-elevated/40 p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Citizen Satisfaction</span>
+                <span className="font-mono-tab font-bold text-amber-400">4.9 / 5.0 ★</span>
+              </div>
+              <div className="mt-2 w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-amber-400 h-full rounded-full"
+                  style={{ width: "98%" }}
+                />
+              </div>
+            </div>
+            <p className="font-mono-tab text-[10px] text-muted-foreground mt-3">
+              Zero citizen misconduct grievances filed
+            </p>
+          </div>
+        </div>
+
+        {/* Commendation Badges */}
+        <div className="border-t border-border/60 pt-3 flex flex-wrap items-center gap-2">
+          <span className="font-mono-tab text-[10px] uppercase tracking-wider text-muted-foreground font-bold mr-1">
+            Service Commendations:
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono-tab text-[10px] font-bold text-primary">
+            <Sparkles className="size-3" /> QC De-escalation Medal
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono-tab text-[10px] font-bold text-emerald-400">
+            <ShieldCheck className="size-3" /> Culiat Flood Rescue Ribbon
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 font-mono-tab text-[10px] font-bold text-amber-400">
+            <Award className="size-3" /> Zero Fatalities Corridor Award
+          </span>
         </div>
       </div>
 
@@ -768,6 +973,77 @@ export function OfficerDetailPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Radio Transmission Dialog */}
+      <Dialog.Root open={radioModalOpen} onOpenChange={setRadioModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md animate-in fade-in" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="grid size-9 place-items-center rounded-xl bg-primary/20 text-primary border border-primary/30">
+                  <Radio className="size-4" />
+                </div>
+                <div>
+                  <Dialog.Title className="text-base font-bold text-foreground">
+                    APX-8000 Radio Dispatch Ping
+                  </Dialog.Title>
+                  <p className="font-mono-tab text-[10px] text-muted-foreground">
+                    Direct RF link to {officer.rank} {officer.full_name} (#{officer.badge_number})
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-4">
+              Select an urgent operational 10-Code to chirp this officer's handheld Motorola APX-8000 transceiver:
+            </p>
+
+            <div className="grid gap-2 mt-3">
+              {[
+                { code: "10-4", desc: "Acknowledge / Standby for Priority Message" },
+                { code: "10-76", desc: "En Route to Incident Location Immediately" },
+                { code: "10-97", desc: "Confirm On Scene Arrival & Status" },
+                { code: "10-33", desc: "Emergency Traffic Only — Standby" },
+                { code: "10-21", desc: "Contact Command Dispatch Desk by Landline" },
+              ].map((item) => (
+                <button
+                  key={item.code}
+                  type="button"
+                  onClick={() => {
+                    soundEffects.playRadioChirp();
+                    toast.success(`Transmitted ${item.code} to Badge #${officer.badge_number}!`, {
+                      description: `Handheld APX-8000 radio alert chirp sent to ${officer.full_name}.`,
+                    });
+                    setRadioModalOpen(false);
+                  }}
+                  className="flex items-center justify-between rounded-xl border border-border bg-panel-elevated/70 p-3 text-left hover:bg-panel-elevated hover:border-primary/40 transition-all group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono-tab text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                      {item.code}
+                    </span>
+                    <span className="text-xs text-foreground font-medium group-hover:text-primary transition-colors">
+                      {item.desc}
+                    </span>
+                  </div>
+                  <Send className="size-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setRadioModalOpen(false)}
+                className="rounded-xl border border-border bg-panel-elevated px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
@@ -777,11 +1053,13 @@ function ProfileHeader({
   shiftData,
   onToggleDuty,
   isToggling,
+  onOpenRadioPing,
 }: {
   officer: Officer;
   shiftData: any;
   onToggleDuty: () => void;
   isToggling: boolean;
+  onOpenRadioPing: () => void;
 }) {
   return (
     <div className="panel flex flex-col gap-6 rounded-3xl border border-border bg-panel p-6 shadow-xl lg:flex-row lg:items-center lg:justify-between">
@@ -858,6 +1136,14 @@ function ProfileHeader({
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onOpenRadioPing}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2.5 text-xs font-bold text-primary hover:bg-primary/20 transition-all font-mono-tab uppercase tracking-wider"
+        >
+          <Bell className="size-3.5 text-primary animate-bounce" />
+          Radio Alert
+        </button>
+
         <button
           onClick={onToggleDuty}
           disabled={isToggling}

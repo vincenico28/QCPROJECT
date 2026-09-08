@@ -223,7 +223,7 @@ export function useCitation(citationNumber: string) {
     queryFn: async () => {
       try {
         const rows = await serverFetchCitations({ data: 100 });
-        const found = rows?.find((c: any) => c.citation_number === citationNumber);
+        const found = rows?.find((c: any) => c.citation_number === citationNumber || c.id === citationNumber);
         if (found) return found as Citation;
       } catch {
         // fallback
