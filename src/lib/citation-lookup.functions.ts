@@ -113,7 +113,7 @@ export const lookupCitation = createServerFn({ method: "POST" })
     try {
       const { data: rows, error } = await supabaseAdmin
         .from("citations")
-        .select("id, citation_number, plate_number, offense, amount, status, issued_at, vehicle_model, officer_name")
+        .select("id, citation_number, plate_number, offense, amount, status, issued_at, vehicle_model, officer_name, violation_id, violations(evidence_url, location, camera_code)")
         .or(`citation_number.ilike.%${cleanRef}%,plate_number.ilike.%${data.plate.trim()}%`)
         .limit(5);
 
@@ -126,11 +126,14 @@ export const lookupCitation = createServerFn({ method: "POST" })
               r.plate_number.replace(/[\s-]+/g, "").toUpperCase() === cleanPlate.toUpperCase()
           ) || rows[0];
 
+        const evidence = (match as any).violations?.evidence_url || (match as any).evidence_url || "/assets/violation-1.jpg";
+        const loc = (match as any).violations?.location || "Quezon City Monitored Road Corridor";
+
         return {
           ...match,
-          location: "Quezon City Monitored Road Corridor",
+          location: loc,
           dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
-          evidence_url: "/assets/violation-1.jpg",
+          evidence_url: evidence,
         } as PublicCitation;
       }
     } catch {

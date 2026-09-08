@@ -156,6 +156,7 @@ export function useAddManualViolation() {
       location: string;
       camera_code?: string;
       evidence_url?: string;
+      confidence?: number;
     }) => {
       // Save to real database
       const row = await serverSaveViolation({
@@ -163,7 +164,7 @@ export function useAddManualViolation() {
           plate_number: input.plate_number.toUpperCase().trim(),
           violation_type: input.violation_type,
           location: input.location,
-          confidence: 1.0,
+          confidence: input.confidence ?? 99,
           ai_detected: false,
           camera_code: input.camera_code || "FIELD-OFFICER",
           evidence_url: input.evidence_url || "/assets/violation-1.jpg",

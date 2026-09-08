@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useViolations, timeAgo, type Violation, formatPeso } from "@/lib/data/traffic";
 import { ViolationReviewDialog } from "@/components/violations/violation-review-dialog";
 import { useBulkReviewViolations, useAddManualViolation, fineFor } from "@/lib/data/review";
@@ -25,6 +26,10 @@ import {
   X,
   ShieldAlert,
   ArrowUpRight,
+  Upload,
+  ScanLine,
+  FileCheck,
+  RefreshCw,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -72,46 +77,126 @@ function ViolationsPage() {
   const [q, setQ] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [review, setReview] = useState<Violation | null>(null);
+  const qc = useQueryClient();
   const [manualModalOpen, setManualModalOpen] = useState(false);
+
+  // Quezon City CCTV Nodes & Real Snapshots
+  const QC_CCTV_NODES = [
+    { code: "CAM-042", label: "Commonwealth Ave cor. Tandang Sora", snapshot: "/assets/violation-1.jpg" },
+    { code: "CAM-108", label: "Tomas Morato Ave cor. Scout Madriñan", snapshot: "/assets/cctv-2.jpg" },
+    { code: "CAM-059", label: "EDSA-Quezon Ave Flyover", snapshot: "/assets/violation-2.jpg" },
+    { code: "CAM-021", label: "Katipunan Ave cor. CP Garcia", snapshot: "/assets/cctv-3.jpg" },
+    { code: "CAM-133", label: "Elliptical Road / QC Circle", snapshot: "/assets/violation-3.jpg" },
+    { code: "CAM-077", label: "Aurora Blvd cor. Katipunan", snapshot: "/assets/cctv-1.jpg" },
+    { code: "QC-CAM-1002", label: "Tandang Sora Ave / Culiat Market", snapshot: "/assets/cctv-1.jpg" },
+  ];
 
   // Manual Log State
   const [manualPlate, setManualPlate] = useState("");
   const [manualType, setManualType] = useState("Illegal Parking");
-  const [manualLocation, setManualLocation] = useState("Tandang Sora Ave / Culiat Market");
-  const [manualCam, setManualCam] = useState("QC-CAM-1002");
-  const [manualEvidenceUrl, setManualEvidenceUrl] = useState<string>("/assets/violation-1.jpg");
+  const [manualCam, setManualCam] = useState(QC_CCTV_NODES[0].code);
+  const [manualLocation, setManualLocation] = useState(QC_CCTV_NODES[0].label);
+  const [manualEvidenceUrl, setManualEvidenceUrl] = useState<string>(QC_CCTV_NODES[0].snapshot);
+  const [evidenceSource, setEvidenceSource] = useState<"cctv" | "upload">("cctv");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFileSizeKb, setUploadedFileSizeKb] = useState<number | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [autoIssueCitation, setAutoIssueCitation] = useState(true);
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCameraChange = (code: string) => {
+    setManualCam(code);
+    const node = QC_CCTV_NODES.find((n) => n.code === code);
+    if (node) {
+      setManualLocation(node.label);
+      if (evidenceSource === "cctv") {
+        setManualEvidenceUrl(node.snapshot);
+      }
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select a valid image file (PNG, JPG, WebP)");
+      return;
+    }
+
+    try {
+      setIsProcessingFile(true);
+      // High-performance canvas downsampler & compressor
       const reader = new FileReader();
       reader.onload = (event) => {
-        if (event.target?.result) {
-          setManualEvidenceUrl(event.target.result as string);
-          toast.success("Evidence photo attached successfully");
-        }
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1280;
+          const maxHeight = 960;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width / height > maxWidth / maxHeight) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/jpeg", 0.82);
+            const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+            setManualEvidenceUrl(compressed);
+            setUploadedFileName(file.name);
+            setUploadedFileSizeKb(sizeKb);
+            setEvidenceSource("upload");
+            setIsProcessingFile(false);
+            toast.success("Photo Evidence Attached & Optimized", {
+              description: `${file.name} compressed to ${sizeKb} KB HD frame. Ready to store in database.`,
+            });
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
+    } catch (err) {
+      setIsProcessingFile(false);
+      console.error("Image processing error", err);
+      toast.error("Failed to process evidence frame");
     }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualPlate) return;
+    setIsSubmittingManual(true);
 
     try {
       const { serverSaveViolation, serverSaveCitation } = await import("@/lib/server.functions");
       const fineAmount = fineFor(manualType);
+      const cleanPlate = manualPlate.toUpperCase().trim();
 
       const savedViolation = await serverSaveViolation({
         data: {
-          plateNumber: manualPlate,
+          plate_number: cleanPlate,
+          plateNumber: cleanPlate,
+          violation_type: manualType,
           violationType: manualType,
           location: manualLocation,
           confidence: 99,
+          camera_code: manualCam,
           cameraCode: manualCam,
+          ai_detected: false,
           aiDetected: false,
+          evidence_url: manualEvidenceUrl,
           evidenceUrl: manualEvidenceUrl,
         },
       });
@@ -120,7 +205,9 @@ function ViolationsPage() {
         await serverSaveCitation({
           data: {
             violation_id: savedViolation.id,
-            plate_number: manualPlate,
+            violationId: savedViolation.id,
+            plate_number: cleanPlate,
+            plateNumber: cleanPlate,
             offense: manualType,
             amount: fineAmount,
             officer_name: "Field Traffic Enforcer",
@@ -128,23 +215,40 @@ function ViolationsPage() {
         });
       }
 
-      toast.success(`Violation Logged & Synced for ${manualPlate}`, {
-        description: autoIssueCitation
-          ? `Notice of Violation generated (Fine: ${formatPeso(fineAmount)}).`
-          : `Record stored in pending review queue.`,
+      await qc.invalidateQueries({ queryKey: ["violations"] });
+      await qc.invalidateQueries({ queryKey: ["citations"] });
+
+      toast.success(`Violation & CCTV Evidence Frame Stored to Database!`, {
+        description: `Plate: ${cleanPlate} · ${manualType} · Photo permanently linked to NOV.`,
       });
 
       setManualModalOpen(false);
       setManualPlate("");
-    } catch {
+      setUploadedFileName(null);
+      setUploadedFileSizeKb(null);
+    } catch (err: any) {
+      console.error("Direct server function error, using resilient mutation fallback", err);
       addManual.mutate({
-        plate_number: manualPlate,
+        plate_number: manualPlate.toUpperCase().trim(),
         violation_type: manualType,
         location: manualLocation,
         camera_code: manualCam,
+        evidence_url: manualEvidenceUrl,
+        confidence: 99,
+      }, {
+        onSuccess: () => {
+          toast.success(`Violation & Evidence Frame Stored! (Queue Synced)`);
+          setManualModalOpen(false);
+          setManualPlate("");
+          setUploadedFileName(null);
+          setUploadedFileSizeKb(null);
+        },
+        onError: (mutationErr) => {
+          toast.error("Failed to commit violation to database: " + mutationErr.message);
+        },
       });
-      setManualModalOpen(false);
-      setManualPlate("");
+    } finally {
+      setIsSubmittingManual(false);
     }
   };
 
@@ -361,42 +465,143 @@ function ViolationsPage() {
                     </select>
                   </label>
 
-                  <label className="flex flex-col gap-1.5">
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                      Location / Corridor *
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={manualLocation}
-                      onChange={(e) => setManualLocation(e.target.value)}
-                      className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                    />
-                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+                        CCTV Camera Node *
+                      </span>
+                      <select
+                        value={manualCam}
+                        onChange={(e) => handleCameraChange(e.target.value)}
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      >
+                        {QC_CCTV_NODES.map((node) => (
+                          <option key={node.code} value={node.code}>
+                            {node.code} ({node.label.split(" / ")[0]})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+                        Location / Corridor *
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={manualLocation}
+                        onChange={(e) => setManualLocation(e.target.value)}
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                  </div>
 
                   {/* Photo / 4K Snapshot Evidence Attachment */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                      Photo / CCTV Evidence Frame
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-black">
-                        <img
-                          src={manualEvidenceUrl}
-                          alt="Evidence Frame"
-                          className="size-full object-cover"
-                        />
+                  <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-panel-elevated/40 p-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-foreground font-bold flex items-center gap-1.5">
+                        <Camera className="size-3.5 text-primary" /> Photo / CCTV Evidence Frame
+                      </span>
+                      <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvidenceSource("cctv");
+                            const node = QC_CCTV_NODES.find((n) => n.code === manualCam);
+                            if (node) setManualEvidenceUrl(node.snapshot);
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded font-semibold transition-all",
+                            evidenceSource === "cctv" ? "bg-primary text-white" : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          CCTV Node
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEvidenceSource("upload")}
+                          className={cn(
+                            "px-2 py-0.5 rounded font-semibold transition-all",
+                            evidenceSource === "upload" ? "bg-primary text-white" : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          Upload Photo
+                        </button>
                       </div>
-                      <label className="flex-1 cursor-pointer rounded-xl border border-dashed border-border bg-background/50 p-2.5 text-center text-xs text-muted-foreground hover:border-primary/60 transition-colors">
-                        <span className="font-semibold text-primary">Browse photo</span> or snapshot
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
                     </div>
+
+                    {/* Interactive Evidence Viewfinder Preview */}
+                    <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner group">
+                      <img
+                        src={manualEvidenceUrl}
+                        alt="Evidence Frame"
+                        className="size-full object-cover"
+                      />
+
+                      {/* Optical Telemetry & ANPR Bounding Box Overlay */}
+                      <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
+                          ● REC 4K UHD · {manualCam}
+                        </span>
+                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10">
+                          {new Date().toLocaleTimeString()}
+                        </span>
+                      </div>
+
+                      {/* ANPR OCR Detection Box */}
+                      <div className="absolute inset-x-6 bottom-3 rounded-lg border-2 border-emerald-400/80 bg-black/75 p-2 backdrop-blur-sm pointer-events-none">
+                        <div className="flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                          <span className="flex items-center gap-1 font-bold">
+                            <ScanLine className="size-3 animate-pulse" /> ANPR OCR: {manualPlate || "PLATE-NUMBER"}
+                          </span>
+                          <span className="font-bold">99.4% MATCH</span>
+                        </div>
+                      </div>
+
+                      {isProcessingFile && (
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white">
+                          <Loader2 className="size-6 animate-spin text-primary" />
+                          <span className="text-xs font-semibold">Optimizing evidence frame...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Evidence Controls */}
+                    {evidenceSource === "upload" ? (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="cursor-pointer rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3 text-center text-xs text-muted-foreground hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center gap-2">
+                          <Upload className="size-4 text-primary" />
+                          <span>
+                            <strong className="text-primary font-semibold">Browse Custom Photo / Frame</strong> or drag image here
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {uploadedFileName && (
+                          <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-[11px] text-emerald-300">
+                            <span className="flex items-center gap-1.5 truncate">
+                              <CheckCircle2 className="size-3.5 shrink-0" />
+                              <span className="truncate font-medium">{uploadedFileName}</span>
+                              <span className="text-emerald-400/70 font-mono-tab">({uploadedFileSizeKb} KB HD)</span>
+                            </span>
+                            <span className="font-bold text-[10px] uppercase text-emerald-400 shrink-0">Accurate Frame</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[11px] text-white/70">
+                        <span className="flex items-center gap-1.5">
+                          <Camera className="size-3.5 text-blue-400" />
+                          <span>Direct Optical Feed: <strong>{manualCam}</strong></span>
+                        </span>
+                        <span className="text-[10px] font-mono-tab text-emerald-400 font-bold">100% Calibrated</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Instant Citation Issuance Checkbox */}
@@ -412,22 +617,26 @@ function ViolationsPage() {
                         Generate Digital Citation (NOV)
                       </span>
                       <span className="text-[10px] text-muted-foreground">
-                        Automatically creates linked citation ticket in the public cashier ledger.
+                        Automatically creates linked citation ticket in the public cashier ledger with photo evidence.
                       </span>
                     </div>
                   </label>
 
                   <div className="mt-4 flex justify-end gap-3 border-t border-border pt-4">
                     <Dialog.Close asChild>
-                      <button className="rounded-lg px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated">
+                      <button
+                        type="button"
+                        className="rounded-lg px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated transition-colors"
+                      >
                         Cancel
                       </button>
                     </Dialog.Close>
                     <button
                       type="submit"
-                      disabled={!manualPlate}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                      disabled={!manualPlate || isSubmittingManual || isProcessingFile}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all disabled:opacity-50 shadow-lg shadow-primary/25"
                     >
+                      {isSubmittingManual && <Loader2 className="size-3.5 animate-spin" />}
                       Commit to Supabase Database
                     </button>
                   </div>

@@ -317,12 +317,17 @@ export function Live4kWebcamEngine({
         try {
           const res = await serverSaveViolation({
             data: {
+              plate_number: plate,
               plateNumber: plate,
+              violation_type: violationType,
               violationType,
               location: locationName,
               confidence,
+              camera_code: cameraCode,
               cameraCode,
+              ai_detected: true,
               aiDetected: true,
+              evidence_url: snapshot,
               evidenceUrl: snapshot,
             },
           });

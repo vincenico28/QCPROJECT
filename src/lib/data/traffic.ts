@@ -241,15 +241,38 @@ export type NewCitation = {
   amount: number;
   officer_name?: string | null;
   vehicle_model?: string | null;
+  evidence_url?: string | null;
+  location?: string | null;
 };
 
 export function useCreateCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewCitation) => {
+      let violationId = input.violation_id || null;
+      if (!violationId && input.evidence_url) {
+        try {
+          const vio = await serverSaveViolation({
+            data: {
+              plate_number: input.plate_number,
+              violation_type: input.offense,
+              location: input.location || "Field Officer Apprehension Point",
+              confidence: 100,
+              camera_code: "FIELD-BODYCAM",
+              ai_detected: false,
+              evidence_url: input.evidence_url,
+              status: "confirmed",
+            },
+          });
+          violationId = vio.id;
+        } catch (err) {
+          console.warn("[Citation] Could not create linked violation record for evidence", err);
+        }
+      }
+
       const res = await serverSaveCitation({
         data: {
-          violation_id: input.violation_id || null,
+          violation_id: violationId,
           plate_number: input.plate_number,
           vehicle_model: input.vehicle_model || null,
           offense: input.offense,
@@ -275,6 +298,7 @@ export function useCreateCitation() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["violations"] });
     },
   });
 }

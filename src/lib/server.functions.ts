@@ -35,15 +35,44 @@ export const serverFetchViolations = createServerFn({ method: "GET" })
     return null;
   });
 
+
+export const serverFetchCitations = createServerFn({ method: "GET" })
+  .validator((limit: unknown) => (typeof limit === "number" ? limit : 50))
+  .handler(async ({ data: limit }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("citations")
+        .select("*, violations(evidence_url, location, camera_code)")
+        .order("issued_at", { ascending: false })
+        .limit(limit);
+      if (!error && data) {
+        return data.map((c: any) => ({
+          ...c,
+          evidence_url: c.violations?.evidence_url || c.evidence_url || "/assets/violation-1.jpg",
+          location: c.violations?.location || c.location || "Quezon City Road Corridor",
+        }));
+      }
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Citations]", err);
+    }
+    return null;
+  });
+
 const violationInsertSchema = z.object({
-  plate_number: z.string().trim().min(3),
-  violation_type: z.string().trim().min(2),
+  plate_number: z.string().trim().optional(),
+  plateNumber: z.string().trim().optional(),
+  violation_type: z.string().trim().optional(),
+  violationType: z.string().trim().optional(),
   location: z.string().trim().min(2),
-  confidence: z.number().min(0).max(100).default(95),
+  confidence: z.number().min(0).max(100).default(95).optional(),
   evidence_url: z.string().nullable().optional(),
-  ai_detected: z.boolean().default(true),
+  evidenceUrl: z.string().nullable().optional(),
+  ai_detected: z.boolean().optional(),
+  aiDetected: z.boolean().optional(),
   camera_code: z.string().nullable().optional(),
-  status: z.string().default("pending"),
+  cameraCode: z.string().nullable().optional(),
+  status: z.string().default("pending").optional(),
 });
 
 export const serverSaveViolation = createServerFn({ method: "POST" })
@@ -53,18 +82,30 @@ export const serverSaveViolation = createServerFn({ method: "POST" })
     const id = generateUUID();
     const now = new Date().toISOString();
 
+    const plate = (data.plate_number || data.plateNumber || "").toUpperCase().trim();
+    if (!plate) {
+      throw new Error("Missing license plate number");
+    }
+    const violationType = data.violation_type || data.violationType || "Traffic Infraction";
+    const cameraCode = data.camera_code || data.cameraCode || "QC-CAM-1001";
+    const evidenceUrl = data.evidence_url || data.evidenceUrl || "/assets/violation-1.jpg";
+    const aiDetected = data.ai_detected ?? data.aiDetected ?? false;
+    const rawConf = data.confidence ?? 95;
+    const confidence = rawConf > 1 ? rawConf : rawConf * 100;
+    const status = data.status || "pending";
+
     const { data: row, error } = await supabaseAdmin
       .from("violations")
       .insert({
         id,
-        plate_number: data.plate_number.toUpperCase().trim(),
-        violation_type: data.violation_type,
+        plate_number: plate,
+        violation_type: violationType,
         location: data.location,
-        confidence: data.confidence > 1 ? data.confidence : data.confidence * 100,
-        status: data.status,
-        evidence_url: data.evidence_url || "/assets/violation-1.jpg",
-        ai_detected: data.ai_detected,
-        camera_code: data.camera_code || "QC-CAM-1001",
+        confidence,
+        status,
+        evidence_url: evidenceUrl,
+        ai_detected: aiDetected,
+        camera_code: cameraCode,
         detected_at: now,
         created_at: now,
       })
@@ -75,7 +116,18 @@ export const serverSaveViolation = createServerFn({ method: "POST" })
       console.error("[Supabase Error: Save Violation]", error);
       throw new Error(`Database Error: ${error.message}`);
     }
-    return row || { id, ...data, detected_at: now };
+    return row || {
+      id,
+      plate_number: plate,
+      violation_type: violationType,
+      location: data.location,
+      confidence,
+      status,
+      evidence_url: evidenceUrl,
+      ai_detected: aiDetected,
+      camera_code: cameraCode,
+      detected_at: now,
+    };
   });
 
 const violationUpdateStatusSchema = z.object({
@@ -102,33 +154,18 @@ export const serverUpdateViolationStatus = createServerFn({ method: "POST" })
 // -------------------------------------------------------------
 // 2. CITATIONS
 // -------------------------------------------------------------
-export const serverFetchCitations = createServerFn({ method: "GET" })
-  .validator((limit: unknown) => (typeof limit === "number" ? limit : 50))
-  .handler(async ({ data: limit }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    try {
-      const { data, error } = await supabaseAdmin
-        .from("citations")
-        .select("*")
-        .order("issued_at", { ascending: false })
-        .limit(limit);
-      if (!error && data) {
-        return data;
-      }
-    } catch (err) {
-      console.error("[Supabase Error: Fetch Citations]", err);
-    }
-    return null;
-  });
-
 const citationInsertSchema = z.object({
   violation_id: z.string().nullable().optional(),
-  plate_number: z.string().trim().min(3),
+  violationId: z.string().nullable().optional(),
+  plate_number: z.string().trim().optional(),
+  plateNumber: z.string().trim().optional(),
   vehicle_model: z.string().nullable().optional(),
+  vehicleModel: z.string().nullable().optional(),
   offense: z.string().trim().min(2),
   amount: z.number().positive(),
-  status: z.string().default("unpaid"),
+  status: z.string().default("unpaid").optional(),
   officer_name: z.string().nullable().optional(),
+  officerName: z.string().nullable().optional(),
 });
 
 export const serverSaveCitation = createServerFn({ method: "POST" })
@@ -139,18 +176,27 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     const citation_number = `NOV-2026-QC-${Math.floor(10000 + Math.random() * 90000)}`;
     const issued_at = new Date().toISOString();
 
+    const plate = (data.plate_number || data.plateNumber || "").toUpperCase().trim();
+    if (!plate) {
+      throw new Error("Missing license plate number");
+    }
+    const violationId = data.violation_id || data.violationId || null;
+    const vehicleModel = data.vehicle_model || data.vehicleModel || null;
+    const officerName = data.officer_name || data.officerName || "QC Enforcer";
+    const status = data.status || "unpaid";
+
     const { data: row, error } = await supabaseAdmin
       .from("citations")
       .insert({
         id,
         citation_number,
-        violation_id: data.violation_id || null,
-        plate_number: data.plate_number.toUpperCase().trim(),
-        vehicle_model: data.vehicle_model || null,
+        violation_id: violationId,
+        plate_number: plate,
+        vehicle_model: vehicleModel,
         offense: data.offense,
         amount: data.amount,
-        status: data.status,
-        officer_name: data.officer_name || "QC Enforcer",
+        status,
+        officer_name: officerName,
         issued_at,
       })
       .select()
@@ -160,7 +206,7 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
       console.error("[Supabase Error: Save Citation]", error);
       throw new Error(`Database Error: ${error.message}`);
     }
-    return row || { id, citation_number, ...data, issued_at };
+    return row || { id, citation_number, plate_number: plate, offense: data.offense, amount: data.amount, status, officer_name: officerName, issued_at };
   });
 
 const citationUpdateStatusSchema = z.object({

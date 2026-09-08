@@ -12,6 +12,8 @@ import {
   Car,
   Receipt,
   Sparkles,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
@@ -45,8 +47,62 @@ function IssuePage() {
   const [model, setModel] = useState("");
   const [offense, setOffense] = useState(OFFENSES[0]);
   const [amount, setAmount] = useState(fineFor(OFFENSES[0]));
-  const [evidenceAttached, setEvidenceAttached] = useState(false);
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
+  const [evidenceSizeKb, setEvidenceSizeKb] = useState<number | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
+
+  const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please attach an image file (PNG, JPG, WebP)");
+      return;
+    }
+
+    setIsCompressing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1280;
+        const maxHeight = 960;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.82);
+          const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+          setEvidenceUrl(compressed);
+          setEvidenceFileName(file.name);
+          setEvidenceSizeKb(sizeKb);
+          setIsCompressing(false);
+          toast.success("Officer Camera Frame Attached", {
+            description: `${file.name} compressed to ${sizeKb} KB HD frame.`,
+          });
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +116,8 @@ function IssuePage() {
         offense,
         amount,
         officer_name: user?.email ?? "Enforcement Officer",
+        evidence_url: evidenceUrl,
+        location: "Quezon City Road Apprehension",
       },
       {
         onSuccess: (data) => {
@@ -67,7 +125,9 @@ function IssuePage() {
           setLastIssuedNumber(data.citation_number);
           setPlate("");
           setModel("");
-          setEvidenceAttached(false);
+          setEvidenceUrl(null);
+          setEvidenceFileName(null);
+          setEvidenceSizeKb(null);
         },
         onError: (err) => toast.error(err.message),
       }
@@ -189,25 +249,55 @@ function IssuePage() {
         </div>
 
         {/* Evidence Photo Attachment */}
-        <div className="flex items-center justify-between rounded-xl border border-border bg-panel-elevated/60 p-3">
-          <div className="flex items-center gap-2 text-xs">
-            <Camera className="size-4 text-primary" />
-            <span className="text-muted-foreground">
-              {evidenceAttached ? "Photo evidence attached (1 frame)" : "Attach camera evidence"}
+        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-panel-elevated/60 p-3.5">
+          <div className="flex items-center justify-between">
+            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold flex items-center gap-1.5">
+              <Camera className="size-3.5 text-primary" /> Body-Cam / CCTV Evidence Attachment
             </span>
+            {evidenceUrl && (
+              <span className="text-[10px] font-mono-tab text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                1 Frame Attached ({evidenceSizeKb} KB)
+              </span>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setEvidenceAttached((prev) => !prev);
-              toast.success(
-                !evidenceAttached ? "Body camera evidence frame attached" : "Evidence cleared"
-              );
-            }}
-            className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-panel-elevated transition-colors"
-          >
-            {evidenceAttached ? "Remove" : "Attach"}
-          </button>
+
+          {evidenceUrl ? (
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black">
+              <img src={evidenceUrl} alt="Evidence Frame" className="size-full object-cover" />
+              <div className="absolute inset-x-2 bottom-2 flex items-center justify-between bg-black/70 backdrop-blur-sm p-2 rounded-lg text-[10px] text-white">
+                <span className="truncate max-w-[200px] font-medium text-white/90">{evidenceFileName || "Snapshot Frame"}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvidenceUrl(null);
+                    setEvidenceFileName(null);
+                    setEvidenceSizeKb(null);
+                    toast.info("Evidence frame removed");
+                  }}
+                  className="rounded px-2 py-0.5 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors font-semibold flex items-center gap-1"
+                >
+                  <Trash2 className="size-3" /> Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-panel p-4 text-center hover:border-primary transition-all">
+              <Upload className="size-5 text-primary" />
+              <span className="text-xs font-semibold text-foreground">
+                {isCompressing ? "Processing photo..." : "Attach Photo / Body Camera Snapshot"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                Auto-optimized to HD format & synced to QC central enforcement database.
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleEvidenceUpload}
+                disabled={isCompressing}
+                className="hidden"
+              />
+            </label>
+          )}
         </div>
 
         <button
