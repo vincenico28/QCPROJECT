@@ -1,6 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { serverSaveCitizenReport, serverFetchCitizenReports, serverUpdateCitationStatus } from "@/lib/server.functions";
+import {
+  serverSaveCitizenReport,
+  serverFetchCitizenReports,
+  serverUpdateCitationStatus,
+  serverFetchCitizenProfile,
+  serverSaveCitizenProfile,
+  serverAddCitizenVehicle,
+  serverRemoveCitizenVehicle,
+  serverRedeemCitizenVoucher,
+  serverSubmitDriverNomination,
+} from "@/lib/server.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export type EvidenceFrame = {
@@ -90,6 +100,7 @@ export type SignUpCitizenInput = {
 
 let inMemoryCitizens: CitizenProfile[] = [];
 let inMemoryActiveId: string | null = null;
+const DEFAULT_DEMO_CITIZEN_ID = "a0000000-0000-0000-0000-000000000001";
 
 function loadCitizensFromStorage(): CitizenProfile[] {
   if (typeof window === "undefined") return inMemoryCitizens;
@@ -115,12 +126,13 @@ function saveCitizensToStorage(list: CitizenProfile[]) {
 }
 
 export function getStoredCitizenId(): string | null {
-  if (typeof window === "undefined") return inMemoryActiveId;
+  if (typeof window === "undefined") return inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
   try {
     const saved = localStorage.getItem("qc_active_citizen_id");
-    return saved || inMemoryActiveId;
+    if (saved === "LOGGED_OUT") return null;
+    return saved || inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
   } catch {
-    return inMemoryActiveId;
+    return inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
   }
 }
 
@@ -131,7 +143,7 @@ export function setStoredCitizenId(id: string | null) {
     if (id) {
       localStorage.setItem("qc_active_citizen_id", id);
     } else {
-      localStorage.removeItem("qc_active_citizen_id");
+      localStorage.setItem("qc_active_citizen_id", "LOGGED_OUT");
     }
     // Broadcast event to notify all components
     window.dispatchEvent(new CustomEvent("qc-citizen-auth-change", { detail: id }));
@@ -141,90 +153,61 @@ export function setStoredCitizenId(id: string | null) {
 }
 
 export function useCitizenProfile() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel("realtime-citizen-sync")
+        .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
+          qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+          qc.invalidateQueries({ queryKey: ["citations"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citizen_vehicles" }, () => {
+          qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citizen_profiles" }, () => {
+          qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citizen_vouchers" }, () => {
+          qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "hazard_reports" }, () => {
+          qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+          qc.invalidateQueries({ queryKey: ["citizen-hazard-reports"] });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn("Citizen Realtime Channel Error:", err);
+    }
+  }, [qc]);
+
   return useQuery({
     queryKey: ["citizen-profile"],
     queryFn: async () => {
       const currentId = getStoredCitizenId();
       if (!currentId) return null;
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) return null;
 
-      // Realtime command center sync for all registered plates:
-      if (citizen.vehicles && citizen.vehicles.length > 0) {
-        try {
-          const plates = citizen.vehicles.map((v) => v.plateNumber.toUpperCase().trim());
-          const { data: cmdCitations } = await supabase
-            .from("citations")
-            .select("*")
-            .in("plate_number", plates);
-
-          if (cmdCitations && cmdCitations.length > 0) {
-            if (!citizen.citations) citizen.citations = [];
-            let updated = false;
-
-            for (const cmd of cmdCitations) {
-              const cleanPlate = cmd.plate_number.toUpperCase().trim();
-              const isPaid = cmd.status === "paid" || cmd.status === "settled";
-              const existing = citizen.citations.find(
-                (c) => c.novNumber === cmd.citation_number || c.id === cmd.id
-              );
-
-              if (!existing) {
-                updated = true;
-                citizen.citations.unshift({
-                  id: cmd.id,
-                  novNumber: cmd.citation_number,
-                  plateNumber: cleanPlate,
-                  violation: cmd.offense,
-                  ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
-                  location: "Quezon City Active Corridor (Captured by Optical Sentinel)",
-                  date: cmd.issued_at,
-                  dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
-                  amount: Number(cmd.amount) || 2000,
-                  surcharge: 0,
-                  status: isPaid ? "settled" : "unpaid",
-                  ltoAlarmStatus: isPaid ? "CLEARED" : "WARNING_DUE_SOON",
-                  evidenceFrames: [
-                    {
-                      url: "/assets/violation-1.jpg",
-                      label: `Optical Sentinel Capture: ${cmd.offense}`,
-                      timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
-                    },
-                    {
-                      url: "/assets/violation-2.jpg",
-                      label: `ANPR Plate Confirmation: ${cleanPlate}`,
-                      timestamp: "Confidence 99.4%",
-                    },
-                  ],
-                });
-              } else {
-                if (isPaid && existing.status !== "settled") {
-                  existing.status = "settled";
-                  existing.ltoAlarmStatus = "CLEARED";
-                  updated = true;
-                }
-              }
-            }
-
-            // Sync vehicles LTO alarm statuses
-            citizen.vehicles.forEach((v) => {
-              const hasUnpaid = citizen.citations.some(
-                (c) => c.plateNumber === v.plateNumber && c.status === "unpaid"
-              );
-              v.ltoAlarmStatus = hasUnpaid ? "WARNING_DUE_SOON" : "CLEARED";
-            });
-
-            if (updated) {
-              saveCitizensToStorage(all);
-            }
-          }
-        } catch (err) {
-          console.warn("Background command center citations sync:", err);
+      try {
+        const remote = await serverFetchCitizenProfile({ data: { id: currentId } });
+        if (remote) {
+          const all = loadCitizensFromStorage();
+          const idx = all.findIndex((c) => c.id === remote.id);
+          if (idx >= 0) all[idx] = remote as CitizenProfile;
+          else all.unshift(remote as CitizenProfile);
+          saveCitizensToStorage(all);
+          return remote as CitizenProfile;
         }
+      } catch (err) {
+        console.warn("Failed to fetch remote citizen profile, using local cache:", err);
       }
 
-      return citizen;
+      const all = loadCitizensFromStorage();
+      return all.find((c) => c.id === currentId) || null;
     },
   });
 }
@@ -243,7 +226,6 @@ export function useCitizenAuth() {
     window.addEventListener("qc-citizen-auth-change", syncState);
     window.addEventListener("storage", syncState);
 
-    // Initial sync
     syncState();
 
     return () => {
@@ -254,139 +236,83 @@ export function useCitizenAuth() {
 
   const allCitizens = loadCitizensFromStorage();
   const citizen = allCitizens.find((c) => c.id === currentId) || null;
-  const isAuthenticated = !!citizen;
+  const isAuthenticated = !!currentId && currentId !== "LOGGED_OUT";
 
   const login = async (email: string) => {
-    await new Promise((r) => setTimeout(r, 200));
     const cleanEmail = email.trim().toLowerCase();
-    const all = loadCitizensFromStorage();
-    let found = all.find((c) => c.email.toLowerCase() === cleanEmail);
+    try {
+      const remote = await serverFetchCitizenProfile({ data: { email: cleanEmail } });
+      if (remote) {
+        setStoredCitizenId(remote.id);
+        setCurrentId(remote.id);
+        await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+        return remote as CitizenProfile;
+      }
+    } catch (err) {
+      console.warn("Remote login check error:", err);
+    }
 
-    if (!found) {
-      const namePart = cleanEmail.split("@")[0].replace(".", " ");
-      const formattedName = namePart
+    const namePart = cleanEmail.split("@")[0].replace(".", " ");
+    const formattedName =
+      namePart
         .split(" ")
         .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(" ");
+        .join(" ") || "Registered Citizen";
 
-      const sampleNov = `NOV-2026-QC-${Math.floor(10000 + Math.random() * 89999)}`;
-      const sampleCert = `MMDA-QC-CLR-${Math.floor(10000 + Math.random() * 89999)}`;
-
-      found = {
-        id: `CZT-${Math.floor(1000 + Math.random() * 9000)}`,
-        fullName: formattedName || "Registered Citizen",
+    const saved = await serverSaveCitizenProfile({
+      data: {
+        fullName: formattedName,
         email: cleanEmail,
         address: "Barangay Culiat, Quezon City",
         tokens: 850,
         driverLicenseNumber: `N02-${Math.floor(10 + Math.random() * 89)}-${Math.floor(100000 + Math.random() * 899999)}`,
-        vehicles: [
-          {
-            id: `v-${Date.now()}`,
-            plateNumber: "NDB-8921",
-            makeModel: "Toyota Corolla Cross 2023",
-            type: "SUV",
-            status: "verified",
-            ltoExpiry: "2027-03-15",
-            ltoAlarmStatus: "WARNING_DUE_SOON",
-            emissionValid: true,
-            clearanceValid: true,
-          },
-        ],
-        citations: [
-          {
-            id: "CIT-00135",
-            novNumber: sampleNov,
-            plateNumber: "NDB-8921",
-            violation: "Red Light / Beating the Traffic Signal",
-            ordinanceCode: "MMDA Reg. 16-002 / QC Ord. SP-2938",
-            location: "Commonwealth Ave — Tandang Sora Intersection (Cam #04)",
-            date: new Date(Date.now() - 3 * 86400000).toISOString(),
-            dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-            amount: 2000,
-            surcharge: 0,
-            status: "unpaid",
-            ltoAlarmStatus: "WARNING_DUE_SOON",
-            evidenceFrames: [
-              {
-                url: "/assets/violation-1.jpg",
-                label: "Frame 01: Vehicle approaching intersection on Amber light (38 km/h)",
-                timestamp: "T-2.1s before red signal",
-              },
-              {
-                url: "/assets/violation-2.jpg",
-                label: "Frame 02: Full intersection crossing after 1.8s Red Phase",
-                timestamp: "T+1.8s active red light",
-              },
-              {
-                url: "/assets/violation-3.jpg",
-                label: "Frame 03: Optical Character ANPR Plate Verification (NDB-8921)",
-                timestamp: "Confidence: 99.4%",
-              },
-            ],
-            clearanceCertNumber: sampleCert,
-          },
-        ],
-        vouchers: [],
-        hazards: [],
-      };
-      all.push(found);
-      saveCitizensToStorage(all);
-    }
+      },
+    });
 
-    setStoredCitizenId(found.id);
-    setCurrentId(found.id);
+    const citizenId = saved?.id || `CZT-${Math.floor(1000 + Math.random() * 9000)}`;
+    setStoredCitizenId(citizenId);
+    setCurrentId(citizenId);
     await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
-    return found;
+
+    const fresh = await serverFetchCitizenProfile({ data: { id: citizenId } });
+    return fresh as CitizenProfile;
   };
 
   const signup = async (input: SignUpCitizenInput) => {
-    await new Promise((r) => setTimeout(r, 300));
     const cleanEmail = input.email.trim().toLowerCase();
-    const all = loadCitizensFromStorage();
+    const saved = await serverSaveCitizenProfile({
+      data: {
+        fullName: input.fullName.trim(),
+        email: cleanEmail,
+        phone: input.phone,
+        address: input.address || "Barangay Culiat, Quezon City",
+        tokens: 1000,
+        driverLicenseNumber: input.driverLicenseNumber || `N02-${Math.floor(10 + Math.random() * 89)}-${Math.floor(100000 + Math.random() * 899999)}`,
+      },
+    });
 
-    const existing = all.find((c) => c.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      setStoredCitizenId(existing.id);
-      setCurrentId(existing.id);
-      await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
-      return existing;
+    const citizenId = saved.id;
+    if (input.plateNumber) {
+      try {
+        await serverAddCitizenVehicle({
+          data: {
+            citizen_id: citizenId,
+            plate_number: input.plateNumber,
+            make_model: input.makeModel || "Standard Vehicle",
+            vehicle_type: input.vehicleType || "Sedan",
+          },
+        });
+      } catch (err) {
+        console.warn("Failed registering initial vehicle in database:", err);
+      }
     }
 
-    const newCitizen: CitizenProfile = {
-      id: `CZT-${Math.floor(1000 + Math.random() * 9000)}`,
-      fullName: input.fullName.trim(),
-      email: cleanEmail,
-      phone: input.phone || undefined,
-      address: input.address || "Barangay Culiat, Quezon City",
-      tokens: 1000,
-      driverLicenseNumber: input.driverLicenseNumber || `N02-${Math.floor(10 + Math.random() * 89)}-${Math.floor(100000 + Math.random() * 899999)}`,
-      vehicles: input.plateNumber
-        ? [
-            {
-              id: `v-${Date.now()}`,
-              plateNumber: input.plateNumber.toUpperCase().trim(),
-              makeModel: input.makeModel || "Standard Vehicle",
-              type: input.vehicleType || "Sedan",
-              status: "verified",
-              ltoExpiry: "2027-08-20",
-              ltoAlarmStatus: "CLEARED",
-              emissionValid: true,
-              clearanceValid: true,
-            },
-          ]
-        : [],
-      citations: [],
-      vouchers: [],
-      hazards: [],
-    };
-
-    all.unshift(newCitizen);
-    saveCitizensToStorage(all);
-
-    setStoredCitizenId(newCitizen.id);
-    setCurrentId(newCitizen.id);
+    setStoredCitizenId(citizenId);
+    setCurrentId(citizenId);
     await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
-    return newCitizen;
+
+    const fresh = await serverFetchCitizenProfile({ data: { id: citizenId } });
+    return fresh as CitizenProfile;
   };
 
   const logout = () => {
@@ -406,22 +332,20 @@ export function useCitizenAuth() {
 
 export function useCitizenHazardReports() {
   const { citizen } = useCitizenAuth();
-  
+
   return useQuery({
     queryKey: ["citizen-hazard-reports", citizen?.id],
     queryFn: async () => {
       try {
         const rows = await serverFetchCitizenReports();
-        if (rows) {
-          // Filter by the current citizen's name (since we don't have a real citizen_id in the hazard_reports table yet)
-          // In a real app, hazard_reports would have a citizen_id foreign key.
-          return rows.filter((r: any) => r.reporter_name === citizen?.fullName).map((row: any) => ({
+        if (rows && rows.length > 0) {
+          return rows.map((row: any) => ({
             id: row.id,
             category: row.category,
             location: row.location,
             description: row.description,
             reportedAt: row.created_at,
-            status: row.status,
+            status: row.status === "resolved" ? "Resolved" : row.status === "dispatched" ? "Officer Dispatched" : "Under Review",
           })) as CitizenHazardReport[];
         }
       } catch (err) {
@@ -437,94 +361,38 @@ export function useAddCitizenVehicle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { plateNumber: string; makeModel: string; type: string }) => {
-      await new Promise((r) => setTimeout(r, 200));
       const currentId = getStoredCitizenId();
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
+      if (!currentId) throw new Error("Not authenticated");
 
       const cleanPlate = input.plateNumber.toUpperCase().trim();
-      const newVehicle: CitizenVehicle = {
-        id: `v-${Date.now()}`,
-        plateNumber: cleanPlate,
-        makeModel: input.makeModel.trim(),
-        type: input.type,
-        status: "verified",
-        ltoExpiry: "2027-11-30",
-        ltoAlarmStatus: "CLEARED",
-        emissionValid: true,
-        clearanceValid: true,
-      };
+      const res = await serverAddCitizenVehicle({
+        data: {
+          citizen_id: currentId,
+          plate_number: cleanPlate,
+          make_model: input.makeModel.trim(),
+          vehicle_type: input.type,
+        },
+      });
 
-      if (!citizen.vehicles) citizen.vehicles = [];
-      const existingIdx = citizen.vehicles.findIndex((v) => v.plateNumber === cleanPlate);
-      if (existingIdx >= 0) {
-        citizen.vehicles[existingIdx] = newVehicle;
-      } else {
-        citizen.vehicles.push(newVehicle);
-      }
-
-      // Sync with command center: inspect citations for this plate
       try {
-        const { data: cmdCitations } = await supabase
-          .from("citations")
-          .select("*")
-          .eq("plate_number", cleanPlate);
-
-        if (cmdCitations && cmdCitations.length > 0) {
-          if (!citizen.citations) citizen.citations = [];
-          let hasUnpaid = false;
-
-          for (const cmd of cmdCitations) {
-            const isPaid = cmd.status === "paid" || cmd.status === "settled";
-            if (!isPaid) hasUnpaid = true;
-            const existing = citizen.citations.find(
-              (c) => c.novNumber === cmd.citation_number || c.id === cmd.id
-            );
-
-            if (!existing) {
-              citizen.citations.unshift({
-                id: cmd.id,
-                novNumber: cmd.citation_number,
-                plateNumber: cleanPlate,
-                violation: cmd.offense,
-                ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
-                location: "Quezon City Active Corridor (Captured by Optical Sentinel)",
-                date: cmd.issued_at,
-                dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
-                amount: Number(cmd.amount) || 2000,
-                surcharge: 0,
-                status: isPaid ? "settled" : "unpaid",
-                ltoAlarmStatus: isPaid ? "CLEARED" : "WARNING_DUE_SOON",
-                evidenceFrames: [
-                  {
-                    url: "/assets/violation-1.jpg",
-                    label: `Optical Sentinel Capture: ${cmd.offense}`,
-                    timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
-                  },
-                  {
-                    url: "/assets/violation-2.jpg",
-                    label: `ANPR Plate Confirmation: ${cleanPlate}`,
-                    timestamp: "Confidence 99.4%",
-                  },
-                ],
-              });
-            }
-          }
-
-          if (hasUnpaid) {
-            newVehicle.ltoAlarmStatus = "WARNING_DUE_SOON";
-          }
-        }
+        await supabase.from("audit_logs").insert({
+          actor_name: "Citizen Portal",
+          actor_role: "citizen",
+          action: "CITIZEN_VEHICLE_REGISTERED",
+          target_resource: `Plate: ${cleanPlate}`,
+          details: `Make: ${input.makeModel}, Type: ${input.type}`,
+        });
       } catch (err) {
-        console.warn("Could not query command center citations for plate:", err);
+        console.warn(err);
       }
 
-      saveCitizensToStorage(all);
-      return newVehicle;
+      return res;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
+      qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }
@@ -533,18 +401,16 @@ export function useRemoveCitizenVehicle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (vehicleId: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      const currentId = getStoredCitizenId();
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
-
-      citizen.vehicles = citizen.vehicles.filter((v) => v.id !== vehicleId);
-      saveCitizensToStorage(all);
+      await serverRemoveCitizenVehicle({
+        data: { vehicle_id: vehicleId },
+      });
       return vehicleId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
+      qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }
@@ -553,53 +419,27 @@ export function useSettleCitizenCitation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (citationId: string) => {
-      await new Promise((r) => setTimeout(r, 300));
-      const currentId = getStoredCitizenId();
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
-
-      const citation = citizen.citations.find((c) => c.id === citationId || c.novNumber === citationId);
       const clearanceCert = `MMDA-QC-CLR-${Math.floor(10000 + Math.random() * 89999)}`;
 
-      if (citation) {
-        citation.status = "settled";
-        citation.ltoAlarmStatus = "CLEARED";
-        citation.clearanceCertNumber = clearanceCert;
-      }
+      await serverUpdateCitationStatus({
+        data: {
+          citationNumber: citationId,
+          status: "paid",
+        },
+      });
 
-      // Update vehicle alarm status
-      if (citation && citizen.vehicles) {
-        const vehicle = citizen.vehicles.find((v) => v.plateNumber === citation.plateNumber);
-        if (vehicle) {
-          const remainingUnpaidForPlate = citizen.citations.some(
-            (c) => c.plateNumber === citation.plateNumber && c.status === "unpaid" && c.id !== citationId && c.novNumber !== citationId
-          );
-          if (!remainingUnpaidForPlate) {
-            vehicle.ltoAlarmStatus = "CLEARED";
-          }
-        }
-      }
-
-      saveCitizensToStorage(all);
-
-      // FULL SYNC WITH COMMAND CENTER DATABASE:
       try {
-        const refNumber = citation?.novNumber || citationId;
-        await serverUpdateCitationStatus({
-          data: {
-            citationNumber: refNumber,
-            status: "paid",
-          },
-        });
+        await supabase
+          .from("citations")
+          .update({ status: "paid" })
+          .or(`id.eq.${citationId},citation_number.eq.${citationId}`);
 
-        // Create official audit log
         await supabase.from("audit_logs").insert({
-          actor_name: citizen.fullName,
+          actor_name: "Citizen Online Settlement",
           actor_role: "citizen",
           action: "CITIZEN_CITATION_SETTLED_ONLINE",
-          target_resource: `Notice: ${refNumber} (${citation?.plateNumber})`,
-          details: `Amount: PHP ${citation?.amount || 2000}, Status: CLEARED, Cert: ${clearanceCert}`,
+          target_resource: `Notice: ${citationId}`,
+          details: `Status: CLEARED, Clearance Certificate: ${clearanceCert}`,
         });
       } catch (err) {
         console.warn("Command center payment sync error:", err);
@@ -611,6 +451,9 @@ export function useSettleCitizenCitation() {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
       qc.invalidateQueries({ queryKey: ["citations"] });
       qc.invalidateQueries({ queryKey: ["violations"] });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
+      qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }
@@ -619,27 +462,39 @@ export function useNominateActualDriver() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ citationId, name, licenseNumber }: { citationId: string; name: string; licenseNumber: string }) => {
-      await new Promise((r) => setTimeout(r, 300));
       const currentId = getStoredCitizenId();
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
+      const res = await serverSubmitDriverNomination({
+        data: {
+          citation_id: citationId,
+          citizen_id: currentId || undefined,
+          nominee_name: name,
+          nominee_license: licenseNumber,
+        },
+      });
 
-      const citation = citizen.citations.find((c) => c.id === citationId);
-      if (!citation) throw new Error("Citation not found");
+      try {
+        await supabase
+          .from("citations")
+          .update({ status: "contested" })
+          .eq("id", citationId);
 
-      citation.nominatedDriver = {
-        name,
-        licenseNumber,
-        submittedAt: new Date().toISOString(),
-      };
-      citation.status = "appealed";
+        await supabase.from("audit_logs").insert({
+          actor_name: name,
+          actor_role: "citizen",
+          action: "DRIVER_NOMINATION_SUBMITTED",
+          target_resource: `Citation: ${citationId}`,
+          details: `Nominated Driver: ${name} (License: ${licenseNumber})`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
 
-      saveCitizensToStorage(all);
-      return citation;
+      return res;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }
@@ -648,31 +503,37 @@ export function useRedeemEcoReward() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ title, description, cost }: { title: string; description: string; cost: number }) => {
-      await new Promise((r) => setTimeout(r, 250));
       const currentId = getStoredCitizenId();
-      const all = loadCitizensFromStorage();
-      const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
-      if (citizen.tokens < cost) throw new Error("Insufficient Eco-Reward tokens");
+      if (!currentId) throw new Error("Not authenticated");
 
-      citizen.tokens -= cost;
-      const voucher: CitizenVoucher = {
-        id: `VCH-${Date.now()}`,
-        code: `QC-ECO-${Math.floor(1000 + Math.random() * 9000)}`,
-        title,
-        description,
-        cost,
-        claimedAt: new Date().toISOString(),
-        status: "active",
-      };
+      const voucherCode = `QC-ECO-${Math.floor(1000 + Math.random() * 9000)}`;
+      const res = await serverRedeemCitizenVoucher({
+        data: {
+          citizen_id: currentId,
+          code: voucherCode,
+          title,
+          cost,
+          description,
+        },
+      });
 
-      if (!citizen.vouchers) citizen.vouchers = [];
-      citizen.vouchers.unshift(voucher);
-      saveCitizensToStorage(all);
-      return voucher;
+      try {
+        await supabase.from("audit_logs").insert({
+          actor_name: "Citizen",
+          actor_role: "citizen",
+          action: "ECO_REWARD_VOUCHER_REDEEMED",
+          target_resource: `Voucher: ${voucherCode} (${title})`,
+          details: `Cost: ${cost} tokens`,
+        });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      return res;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }
@@ -684,11 +545,11 @@ export function useSubmitHazardReport() {
       const currentId = getStoredCitizenId();
       const all = loadCitizensFromStorage();
       const citizen = all.find((c) => c.id === currentId);
-      if (!citizen) throw new Error("Not authenticated");
 
+      const reporterName = citizen?.fullName || "Verified Citizen";
       const row = await serverSaveCitizenReport({
         data: {
-          reporter_name: citizen.fullName,
+          reporter_name: reporterName,
           category: input.category,
           location: input.location,
           description: input.description,
@@ -703,15 +564,11 @@ export function useSubmitHazardReport() {
         reportedAt: (row as any)?.created_at || new Date().toISOString(),
         status: (row as any)?.status || "Under Review",
       };
-      
-      // Give 50 eco-reward tokens for reporting traffic hazards
-      citizen.tokens = (citizen.tokens || 0) + 50;
-      saveCitizensToStorage(all);
 
       try {
         const { supabase } = await import("@/integrations/supabase/client");
         await supabase.from("audit_logs").insert({
-          actor_name: citizen.fullName,
+          actor_name: reporterName,
           actor_role: "citizen",
           action: "CITIZEN_HAZARD_REPORT_SUBMITTED",
           target_resource: input.category,
@@ -726,6 +583,7 @@ export function useSubmitHazardReport() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["citizen-hazard-reports"] });
       qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
     },
   });
 }

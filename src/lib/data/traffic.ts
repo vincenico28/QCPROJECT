@@ -14,6 +14,12 @@ import {
   serverFetchCameras,
   serverSaveCamera,
   serverUpdateCamera,
+  serverFetchCommandDashboardMetrics,
+  serverRegisterVehicle,
+  serverFetchRegisteredVehicles,
+  serverLookupVehicleDetails,
+  type RegisteredVehicleRecord,
+  type VehicleLookupResult,
 } from "@/lib/server.functions";
 
 export type Violation = {
@@ -443,3 +449,145 @@ export function timeAgo(iso: string) {
   const d = Math.floor(h / 24);
   return `${d}d ago`;
 }
+
+export type CommandDashboardMetrics = {
+  dailyViolations: number;
+  activeOfficers: number;
+  totalOfficers: number;
+  settlementRevenue: number;
+  pendingCitations: number;
+  activeCameras: number;
+  totalCameras: number;
+  cameras: Camera[];
+  recentViolations: Violation[];
+  recentCitations: Citation[];
+};
+
+export function useCommandDashboardMetrics() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel("realtime-command-metrics")
+        .on("postgres_changes", { event: "*", schema: "public", table: "violations" }, () => {
+          qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
+          qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "officers" }, () => {
+          qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "cameras" }, () => {
+          qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch {
+      // realtime fallback
+    }
+  }, [qc]);
+
+  return useQuery({
+    queryKey: ["command-dashboard-metrics"],
+    queryFn: async () => {
+      try {
+        const data = await serverFetchCommandDashboardMetrics();
+        return data as unknown as CommandDashboardMetrics;
+      } catch (err) {
+        console.error("Failed to fetch command dashboard metrics:", err);
+        return {
+          dailyViolations: 0,
+          activeOfficers: 0,
+          totalOfficers: 0,
+          settlementRevenue: 0,
+          pendingCitations: 0,
+          activeCameras: 0,
+          totalCameras: 0,
+          cameras: [],
+          recentViolations: [],
+          recentCitations: [],
+        };
+      }
+    },
+  });
+}
+
+// -------------------------------------------------------------
+// MOTORIST VEHICLE REGISTRY HOOKS
+// -------------------------------------------------------------
+export function useRegisteredVehicles() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel("realtime-vehicles-registry")
+        .on("postgres_changes", { event: "*", schema: "public", table: "vehicles" }, () => {
+          qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
+          qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "violations" }, () => {
+          qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [qc]);
+
+  return useQuery({
+    queryKey: ["registered-vehicles"],
+    queryFn: async () => {
+      return await serverFetchRegisteredVehicles();
+    },
+  });
+}
+
+export function useRegisterVehicle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      plateNumber: string;
+      makeModel: string;
+      registeredOwner: string;
+      ownerEmail?: string;
+      color?: string;
+      vehicleType?: string;
+      chassisNumber?: string;
+    }) => {
+      return await serverRegisterVehicle({ data: input });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["violations"] });
+    },
+  });
+}
+
+export function useVehicleLookup(plateNumber: string) {
+  const clean = (plateNumber || "").trim();
+  return useQuery({
+    queryKey: ["vehicle-lookup", clean.toUpperCase()],
+    queryFn: async () => {
+      if (!clean || clean.length < 2) return null;
+      return await serverLookupVehicleDetails({ data: { plateNumber: clean } });
+    },
+    enabled: clean.length >= 2,
+    staleTime: 30000,
+  });
+}
+
+export type { RegisteredVehicleRecord, VehicleLookupResult };
+

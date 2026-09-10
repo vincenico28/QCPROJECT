@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fineFor, useIssueCitation, useReviewViolation } from "@/lib/data/review";
-import { formatPeso, timeAgo, useOfficers, type Violation } from "@/lib/data/traffic";
+import { formatPeso, timeAgo, useOfficers, type Violation, useVehicleLookup } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
 export function ViolationReviewDialog({
@@ -35,10 +35,11 @@ export function ViolationReviewDialog({
   const [offense, setOffense] = useState("");
   const [amount, setAmount] = useState(0);
   const [officerId, setOfficerId] = useState("");
-  const [vehicleModel, setVehicleModel] = useState("Toyota Vios (Silver)");
+  const [vehicleModel, setVehicleModel] = useState("Private Vehicle / Sedan");
   const [zoomEvidence, setZoomEvidence] = useState(false);
 
   const { data: officers = [] } = useOfficers();
+  const { data: vehicleInfo, isLoading: lookingUpVehicle } = useVehicleLookup(violation?.plate_number ?? "");
   const issue = useIssueCitation();
   const review = useReviewViolation();
 
@@ -47,14 +48,13 @@ export function ViolationReviewDialog({
     setOffense(violation.violation_type);
     setAmount(fineFor(violation.violation_type));
     setOfficerId("");
-    setVehicleModel(
-      violation.plate_number.startsWith("N")
-        ? "Toyota Vios 1.3E (Silver Metallic)"
-        : violation.plate_number.startsWith("A")
-        ? "Mitsubishi Mirage G4 (Gray)"
-        : "Honda Civic 1.5 RS (White Pearl)"
-    );
   }, [violation]);
+
+  useEffect(() => {
+    if (vehicleInfo?.makeModel) {
+      setVehicleModel(vehicleInfo.makeModel);
+    }
+  }, [vehicleInfo]);
 
   if (!violation) return null;
   const v = violation;
@@ -62,13 +62,14 @@ export function ViolationReviewDialog({
 
   async function confirmAndIssue() {
     const officer = officers.find((o) => o.id === officerId) ?? null;
+    const finalModel = vehicleModel.trim() || vehicleInfo?.makeModel || null;
     try {
       const row = await issue.mutateAsync({
         violation: v,
         offense: offense.trim() || v.violation_type,
         amount,
         officerName: officer ? `${officer.rank} ${officer.full_name}` : "AI Auto-Validator",
-        vehicleModel: vehicleModel.trim() || null,
+        vehicleModel: finalModel,
       });
       toast.success(`Citation ${row.citation_number} issued & dispatched`, {
         description: `Plate: ${v.plate_number} · ${formatPeso(row.amount)} · NOV dispatched to LTO database`,
@@ -160,12 +161,38 @@ export function ViolationReviewDialog({
             </div>
 
             {/* LTO Database Lookup Card */}
-            <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-3 text-xs">
-              <span className="font-mono-tab text-[9px] font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1">
-                <Car className="size-3" /> LTO LTMS Vehicle Match
-              </span>
-              <p className="text-white font-semibold text-xs mt-1">{vehicleModel}</p>
-              <p className="text-[10px] text-white/60">Registered LGU: Quezon City (District 6)</p>
+            <div className={cn(
+              "rounded-xl border p-3 text-xs transition-all",
+              vehicleInfo?.foundInDatabase
+                ? "border-emerald-500/30 bg-emerald-950/20"
+                : "border-blue-500/20 bg-blue-950/20"
+            )}>
+              <div className="flex items-center justify-between">
+                <span className={cn(
+                  "font-mono-tab text-[9px] font-bold uppercase tracking-wider flex items-center gap-1",
+                  vehicleInfo?.foundInDatabase ? "text-emerald-400" : "text-blue-400"
+                )}>
+                  <Car className="size-3" />
+                  {vehicleInfo?.foundInDatabase ? "QC Motorist Registry Match" : "LTO LTMS Vehicle Match"}
+                </span>
+                {lookingUpVehicle && <Loader2 className="size-3 animate-spin text-subtle" />}
+                {vehicleInfo?.ltoAlarmTagged && (
+                  <span className="rounded bg-red-500/20 border border-red-500/30 px-1.5 py-0.2 font-mono-tab text-[9px] font-bold text-red-400 uppercase">
+                    LTO Hold Active
+                  </span>
+                )}
+              </div>
+              <p className="text-white font-semibold text-xs mt-1">
+                {lookingUpVehicle ? "Querying registry database..." : (vehicleInfo?.makeModel || vehicleModel)}
+              </p>
+              <div className="flex items-center justify-between text-[10px] text-white/70 mt-1">
+                <span className="truncate max-w-[160px]">Owner: {vehicleInfo?.registeredOwner || "Verifying..."}</span>
+                {vehicleInfo?.unpaidCitationsCount ? (
+                  <span className="text-amber-400 font-semibold">{vehicleInfo.unpaidCitationsCount} Unpaid Novs</span>
+                ) : (
+                  <span className="text-emerald-400 font-semibold">Clean Record</span>
+                )}
+              </div>
             </div>
           </div>
 

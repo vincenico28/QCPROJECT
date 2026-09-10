@@ -206,6 +206,42 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
       console.error("[Supabase Error: Save Citation]", error);
       throw new Error(`Database Error: ${error.message}`);
     }
+
+    // Automatically synchronize LTO alarm tags and risk status across vehicles & citizen_vehicles
+    if (status === "unpaid" || status === "overdue") {
+      try {
+        const compactPlate = plate.replace(/[\s-]/g, "");
+        // 1. Tag vehicles registry
+        const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+        const matchingVeh = (allVehs || []).find(
+          (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compactPlate
+        );
+        if (matchingVeh) {
+          await supabaseAdmin
+            .from("vehicles")
+            .update({
+              lto_alarm_tagged: true,
+              risk_level: "Flagged",
+            })
+            .eq("plate_number", matchingVeh.plate_number);
+        }
+
+        // 2. Tag citizen_vehicles
+        const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+        const matchingCv = (allCv || []).filter(
+          (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compactPlate
+        );
+        for (const cv of matchingCv) {
+          await supabaseAdmin
+            .from("citizen_vehicles")
+            .update({ lto_alarm_status: "LTO_ALARM_ACTIVE" })
+            .eq("id", cv.id);
+        }
+      } catch (syncErr) {
+        console.warn("[Citation] Could not sync LTO alarm tag:", syncErr);
+      }
+    }
+
     return row || { id, citation_number, plate_number: plate, offense: data.offense, amount: data.amount, status, officer_name: officerName, issued_at };
   });
 
@@ -227,6 +263,60 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
       console.error("[Supabase Error: Update Citation Status]", error);
       throw new Error(`Database Error: ${error.message}`);
     }
+
+    // If citation is marked paid or settled, verify if vehicle has other unpaid citations.
+    // If not, clear the LTO alarm tags!
+    if (data.status === "paid" || data.status === "settled" || data.status === "waived") {
+      try {
+        const { data: citRow } = await supabaseAdmin
+          .from("citations")
+          .select("plate_number")
+          .eq("citation_number", data.citationNumber)
+          .maybeSingle();
+
+        if (citRow?.plate_number) {
+          const compact = citRow.plate_number.replace(/[\s-]/g, "").toUpperCase();
+          const { data: allCitations } = await supabaseAdmin
+            .from("citations")
+            .select("id, status, plate_number")
+            .neq("citation_number", data.citationNumber);
+
+          const remainingUnpaid = (allCitations || []).filter(
+            (c: any) =>
+              c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+              (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+          );
+
+          if (remainingUnpaid.length === 0) {
+            // All cleared!
+            const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+            const matchingVeh = (allVehs || []).find(
+              (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+            );
+            if (matchingVeh) {
+              await supabaseAdmin
+                .from("vehicles")
+                .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+                .eq("plate_number", matchingVeh.plate_number);
+            }
+
+            const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+            const matchingCv = (allCv || []).filter(
+              (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+            );
+            for (const cv of matchingCv) {
+              await supabaseAdmin
+                .from("citizen_vehicles")
+                .update({ lto_alarm_status: "CLEARED" })
+                .eq("id", cv.id);
+            }
+          }
+        }
+      } catch (clearErr) {
+        console.warn("[Citation] Error checking remaining citations for vehicle clearance:", clearErr);
+      }
+    }
+
     return { success: true };
   });
 
@@ -564,6 +654,43 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
         target_resource: `Citation: ${data.citationNumber} (Plate: ${data.plateNumber})`,
         details: `Amount: PHP ${data.amount}, Method: ${data.paymentMethod.toUpperCase()}, Ref: ${receiptNumber}`,
       });
+
+      // Clear vehicle LTO alarms if no unpaid citations remain
+      const compact = data.plateNumber.replace(/[\s-]/g, "").toUpperCase();
+      const { data: allCitations } = await supabaseAdmin
+        .from("citations")
+        .select("id, status, plate_number")
+        .neq("citation_number", data.citationNumber);
+
+      const remainingUnpaid = (allCitations || []).filter(
+        (c: any) =>
+          c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+          (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+      );
+
+      if (remainingUnpaid.length === 0) {
+        const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+        const matchingVeh = (allVehs || []).find(
+          (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+        );
+        if (matchingVeh) {
+          await supabaseAdmin
+            .from("vehicles")
+            .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+            .eq("plate_number", matchingVeh.plate_number);
+        }
+
+        const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+        const matchingCv = (allCv || []).filter(
+          (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+        );
+        for (const cv of matchingCv) {
+          await supabaseAdmin
+            .from("citizen_vehicles")
+            .update({ lto_alarm_status: "CLEARED" })
+            .eq("id", cv.id);
+        }
+      }
     } catch (err) {
       console.warn(err);
     }
@@ -604,6 +731,42 @@ export const verifyVehicleRegistrationLTO = createServerFn({ method: "POST" })
   .validator((data: unknown) => ltoLookupSchema.parse(data))
   .handler(async ({ data }): Promise<LTOVehicleRecord> => {
     const cleanPlate = data.plateNumber.replace(/\s+/g, "").toUpperCase();
+    const compactPlate = cleanPlate.replace(/[\s-]/g, "");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1. Check live database first
+    try {
+      const { data: allVehicles } = await supabaseAdmin.from("vehicles").select("*");
+      const dbVehicle = (allVehicles || []).find(
+        (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compactPlate
+      );
+
+      if (dbVehicle) {
+        // Count unpaid citations
+        const { data: allCitations } = await supabaseAdmin.from("citations").select("id, status, plate_number");
+        const unpaid = (allCitations || []).filter(
+          (c: any) =>
+            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compactPlate &&
+            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+        );
+
+        const citationsCount = unpaid.length;
+        return {
+          plateNumber: dbVehicle.plate_number,
+          makeModel: dbVehicle.make_model || "Registered Vehicle",
+          year: 2024,
+          color: dbVehicle.color || "Silver",
+          chassisNumber: dbVehicle.chassis_number || `CHS-${compactPlate}-QC`,
+          engineNumber: `ENG-${compactPlate}-QC`,
+          registrationStatus: (dbVehicle.registration_status || "CURRENT") as any,
+          ltoAlarmTagged: !!dbVehicle.lto_alarm_tagged || citationsCount > 0,
+          unsettledCitationsCount: citationsCount,
+          registeredOwner: dbVehicle.registered_owner || "Verified Resident (QC Registry)",
+        };
+      }
+    } catch (err) {
+      console.warn("[LTO Lookup] Database lookup error:", err);
+    }
 
     const sampleRecords: Record<string, LTOVehicleRecord> = {
       NDB8921: {
@@ -645,6 +808,7 @@ export const verifyVehicleRegistrationLTO = createServerFn({ method: "POST" })
     };
 
     return (
+      sampleRecords[compactPlate] ||
       sampleRecords[cleanPlate] || {
         plateNumber: data.plateNumber.toUpperCase(),
         makeModel: "Private Vehicle / Sedan",
@@ -916,5 +1080,989 @@ export const serverFetchFinanceAnalytics = createServerFn({ method: "GET" })
       console.error("[Supabase Error: Fetch Finance Analytics]", err);
       return { revenue: [], budget: [] };
     }
+  });
+
+// -------------------------------------------------------------
+// 10. CITIZEN PROFILES, VEHICLES & VOUCHERS
+// -------------------------------------------------------------
+const fetchCitizenSchema = z.object({
+  id: z.string().optional(),
+  email: z.string().optional(),
+});
+
+export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
+  .validator((data: unknown) => fetchCitizenSchema.parse(data || {}))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      let query = supabaseAdmin.from("citizen_profiles").select("*");
+      if (data.id) {
+        query = query.eq("id", data.id);
+      } else if (data.email) {
+        query = query.eq("email", data.email);
+      }
+
+      const { data: profiles } = await query.limit(1);
+      let profile = profiles?.[0];
+
+      // If no profile found in DB, return or seed Juan Dela Cruz
+      if (!profile) {
+        const defaultEmail = data.email || "juan.delacruz@gmail.com";
+        const newId = data.id || "a0000000-0000-0000-0000-000000000001";
+        const now = new Date().toISOString();
+        const { data: created } = await supabaseAdmin
+          .from("citizen_profiles")
+          .upsert({
+            id: newId,
+            full_name: "Juan Dela Cruz",
+            email: defaultEmail,
+            phone: "0917-123-4567",
+            address: "124 Visayas Avenue, Barangay Culiat, Quezon City",
+            driver_license_number: "N01-20-994812",
+            tokens: 280,
+          })
+          .select()
+          .maybeSingle();
+        profile = created || {
+          id: newId,
+          full_name: "Juan Dela Cruz",
+          email: defaultEmail,
+          phone: "0917-123-4567",
+          address: "124 Visayas Avenue, Barangay Culiat, Quezon City",
+          driver_license_number: "N01-20-994812",
+          tokens: 280,
+          created_at: now,
+          updated_at: now,
+        };
+      }
+
+      if (!profile) return null;
+
+      // Fetch citizen vehicles
+      const { data: vRows } = await supabaseAdmin
+        .from("citizen_vehicles")
+        .select("*")
+        .eq("citizen_id", profile.id);
+
+      // Also check vehicles table for any vehicle registered under citizen's name
+      const { data: registryVehicles } = await supabaseAdmin
+        .from("vehicles")
+        .select("*")
+        .ilike("registered_owner", profile.full_name);
+
+      const combinedVehiclesMap = new Map<string, any>();
+      for (const cv of (vRows || [])) {
+        const compact = cv.plate_number.replace(/[\s-]/g, "").toUpperCase();
+        combinedVehiclesMap.set(compact, {
+          id: cv.id,
+          plateNumber: cv.plate_number,
+          makeModel: cv.make_model,
+          type: cv.vehicle_type || "Sedan",
+          status: (cv.status || "verified") as "verified" | "pending",
+          ltoExpiry: cv.lto_expiry || "2027-12-31",
+          ltoAlarmStatus: (cv.lto_alarm_status || "CLEARED") as "CLEARED" | "WARNING_DUE_SOON" | "LTO_ALARM_ACTIVE",
+        });
+      }
+
+      for (const rv of (registryVehicles || [])) {
+        const compact = rv.plate_number.replace(/[\s-]/g, "").toUpperCase();
+        if (!combinedVehiclesMap.has(compact)) {
+          combinedVehiclesMap.set(compact, {
+            id: rv.id || `veh-${compact}`,
+            plateNumber: rv.plate_number,
+            makeModel: rv.make_model || "Registered Vehicle",
+            type: "Sedan",
+            status: "verified",
+            ltoExpiry: "2027-12-31",
+            ltoAlarmStatus: rv.lto_alarm_tagged ? "LTO_ALARM_ACTIVE" : "CLEARED",
+          });
+        }
+      }
+
+      let vehicles = Array.from(combinedVehiclesMap.values());
+      if (vehicles.length === 0) {
+        vehicles = [
+          {
+            id: "veh-001",
+            plateNumber: "NDB 8921",
+            makeModel: "Toyota Vios 1.3E Silver",
+            type: "Sedan",
+            status: "verified" as const,
+            ltoExpiry: "2027-12-31",
+            ltoAlarmStatus: "CLEARED" as const,
+          },
+        ];
+      }
+
+      // Fetch citations for citizen's plates
+      const plateCompacts = new Set(vehicles.map((v: any) => v.plateNumber.replace(/[\s-]/g, "").toUpperCase()));
+      const { data: allCmdCitations } = await supabaseAdmin
+        .from("citations")
+        .select("*, violations(evidence_url, location)")
+        .order("issued_at", { ascending: false });
+
+      const cmdCitations = (allCmdCitations || []).filter((c: any) => {
+        const cCompact = (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        return plateCompacts.has(cCompact);
+      });
+
+      // Update vehicle ltoAlarmStatus dynamically based on real citation state
+      vehicles = vehicles.map((v: any) => {
+        const vCompact = v.plateNumber.replace(/[\s-]/g, "").toUpperCase();
+        const hasUnpaid = cmdCitations.some(
+          (c: any) =>
+            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === vCompact &&
+            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+        );
+        return {
+          ...v,
+          ltoAlarmStatus: hasUnpaid ? ("LTO_ALARM_ACTIVE" as const) : ("CLEARED" as const),
+        };
+      });
+
+      const citations = (cmdCitations || []).map((cmd: any) => {
+        const isPaid = cmd.status === "paid" || cmd.status === "settled";
+        return {
+          id: cmd.id,
+          novNumber: cmd.citation_number,
+          plateNumber: cmd.plate_number,
+          violation: cmd.offense,
+          ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
+          location: cmd.violations?.location || "Quezon City Active Corridor",
+          date: cmd.issued_at,
+          dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
+          amount: Number(cmd.amount) || 2000,
+          surcharge: 0,
+          status: isPaid ? ("settled" as const) : ("unpaid" as const),
+          ltoAlarmStatus: isPaid ? ("CLEARED" as const) : ("LTO_ALARM_ACTIVE" as const),
+          evidenceFrames: [
+            {
+              url: cmd.violations?.evidence_url || "/assets/violation-1.jpg",
+              label: `Optical Sentinel Capture: ${cmd.offense}`,
+              timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
+            },
+          ],
+        };
+      });
+
+      // Fetch citizen vouchers
+      const { data: voucherRows } = await supabaseAdmin
+        .from("citizen_vouchers")
+        .select("*")
+        .eq("citizen_id", profile.id);
+
+      const vouchers = (voucherRows || []).map((v: any) => ({
+        id: v.id,
+        code: v.code,
+        title: v.title,
+        description: v.description || "",
+        cost: Number(v.cost) || 50,
+        claimedAt: v.claimed_at,
+        status: (v.status || "active") as "active" | "used",
+      }));
+
+      // Fetch hazard reports
+      const { data: hazardRows } = await supabaseAdmin
+        .from("hazard_reports")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      const hazards = (hazardRows || []).map((h: any) => ({
+        id: h.id,
+        category: h.category as any,
+        location: h.location,
+        description: h.description,
+        reportedAt: h.created_at,
+        status: (h.status === "resolved" ? "Resolved" : h.status === "dispatched" ? "Officer Dispatched" : "Under Review") as any,
+      }));
+
+      return {
+        id: profile.id,
+        fullName: profile.full_name,
+        email: profile.email,
+        phone: profile.phone || "0917-123-4567",
+        address: profile.address || "124 Visayas Avenue, Barangay Culiat, Quezon City",
+        tokens: Number(profile.tokens) || 280,
+        driverLicenseNumber: profile.driver_license_number || "N01-20-994812",
+        vehicles,
+        citations,
+        vouchers,
+        hazards,
+      };
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Citizen Profile]", err);
+      return null;
+    }
+  });
+
+const saveCitizenProfileSchema = z.object({
+  id: z.string().optional(),
+  fullName: z.string().min(2),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  driverLicenseNumber: z.string().optional(),
+  tokens: z.number().optional(),
+});
+
+export const serverSaveCitizenProfile = createServerFn({ method: "POST" })
+  .validator((data: unknown) => saveCitizenProfileSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = data.id || generateUUID();
+    const now = new Date().toISOString();
+
+    const { data: row, error } = await supabaseAdmin
+      .from("citizen_profiles")
+      .upsert({
+        id,
+        full_name: data.fullName,
+        email: data.email,
+        phone: data.phone || null,
+        address: data.address || "Barangay Culiat, Quezon City",
+        driver_license_number: data.driverLicenseNumber || null,
+        tokens: data.tokens ?? 250,
+        updated_at: now,
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error("[Supabase Error: Save Citizen Profile]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+    return row || { id, ...data };
+  });
+
+const addCitizenVehicleSchema = z.object({
+  citizen_id: z.string(),
+  plate_number: z.string().min(2),
+  make_model: z.string().min(2),
+  vehicle_type: z.string().default("Sedan"),
+});
+
+export const serverAddCitizenVehicle = createServerFn({ method: "POST" })
+  .validator((data: unknown) => addCitizenVehicleSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanPlate = data.plate_number.toUpperCase().trim();
+    const id = generateUUID();
+
+    // Check if plate has outstanding violations in Supabase
+    const { data: unpaid } = await supabaseAdmin
+      .from("citations")
+      .select("id")
+      .eq("plate_number", cleanPlate)
+      .in("status", ["unpaid", "pending"]);
+
+    const alarmStatus = unpaid && unpaid.length > 0 ? "WARNING_DUE_SOON" : "CLEARED";
+
+    // 1. Insert into citizen_vehicles
+    const { data: row, error } = await supabaseAdmin
+      .from("citizen_vehicles")
+      .insert({
+        id,
+        citizen_id: data.citizen_id,
+        plate_number: cleanPlate,
+        make_model: data.make_model,
+        vehicle_type: data.vehicle_type,
+        status: "verified",
+        lto_expiry: "2027-12-31",
+        lto_alarm_status: alarmStatus,
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error("[Supabase Error: Add Citizen Vehicle]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+
+    // 2. Also register into main vehicles table
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from("citizen_profiles")
+        .select("full_name")
+        .eq("id", data.citizen_id)
+        .maybeSingle();
+
+      const ownerName = profile?.full_name || "Verified Resident";
+
+      await supabaseAdmin.from("vehicles").upsert({
+        plate_number: cleanPlate,
+        make_model: data.make_model,
+        registered_owner: ownerName,
+        registration_status: "CURRENT",
+        lto_alarm_tagged: alarmStatus !== "CLEARED",
+        risk_level: alarmStatus !== "CLEARED" ? "Watch" : "Clean",
+      }, { onConflict: "plate_number" });
+    } catch {
+      // main vehicles fallback
+    }
+
+    return row || {
+      id,
+      plateNumber: cleanPlate,
+      makeModel: data.make_model,
+      type: data.vehicle_type,
+      status: "verified",
+      ltoExpiry: "2027-12-31",
+      ltoAlarmStatus: alarmStatus,
+    };
+  });
+
+const removeCitizenVehicleSchema = z.object({
+  vehicle_id: z.string(),
+});
+
+export const serverRemoveCitizenVehicle = createServerFn({ method: "POST" })
+  .validator((data: unknown) => removeCitizenVehicleSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("citizen_vehicles")
+      .delete()
+      .eq("id", data.vehicle_id);
+
+    if (error) {
+      console.error("[Supabase Error: Remove Citizen Vehicle]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+    return { success: true };
+  });
+
+const redeemVoucherSchema = z.object({
+  citizen_id: z.string(),
+  code: z.string(),
+  title: z.string(),
+  cost: z.number(),
+  description: z.string().optional(),
+});
+
+export const serverRedeemCitizenVoucher = createServerFn({ method: "POST" })
+  .validator((data: unknown) => redeemVoucherSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = generateUUID();
+
+    // 1. Insert voucher
+    const { error } = await supabaseAdmin
+      .from("citizen_vouchers")
+      .insert({
+        id,
+        citizen_id: data.citizen_id,
+        code: data.code,
+        title: data.title,
+        description: data.description || null,
+        cost: data.cost,
+        status: "active",
+      });
+
+    if (error) {
+      console.error("[Supabase Error: Redeem Voucher]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+
+    // 2. Decrement tokens
+    const { data: profile } = await supabaseAdmin
+      .from("citizen_profiles")
+      .select("tokens")
+      .eq("id", data.citizen_id)
+      .maybeSingle();
+
+    if (profile) {
+      const remaining = Math.max(0, (profile.tokens || 0) - data.cost);
+      await supabaseAdmin
+        .from("citizen_profiles")
+        .update({ tokens: remaining })
+        .eq("id", data.citizen_id);
+    }
+
+    return { id, code: data.code, title: data.title, cost: data.cost, status: "active" };
+  });
+
+const nominateDriverSchema = z.object({
+  citation_id: z.string(),
+  citizen_id: z.string().optional(),
+  nominee_name: z.string().min(2),
+  nominee_license: z.string().min(4),
+});
+
+export const serverSubmitDriverNomination = createServerFn({ method: "POST" })
+  .validator((data: unknown) => nominateDriverSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = generateUUID();
+
+    const { data: row, error } = await supabaseAdmin
+      .from("driver_nominations")
+      .insert({
+        id,
+        citation_id: data.citation_id,
+        citizen_id: data.citizen_id || null,
+        nominee_name: data.nominee_name,
+        nominee_license: data.nominee_license,
+        status: "submitted",
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error("[Supabase Error: Submit Driver Nomination]", error);
+      throw new Error(`Database Error: ${error.message}`);
+    }
+
+    return row || { id, ...data, status: "submitted" };
+  });
+
+// -------------------------------------------------------------
+// 11. COMMAND DASHBOARD AGGREGATED METRICS
+// -------------------------------------------------------------
+export const serverFetchCommandDashboardMetrics = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const [vRes, cRes, oRes, camRes] = await Promise.all([
+        supabaseAdmin.from("violations").select("id, status, confidence, detected_at, created_at, violation_type, location, plate_number, evidence_url, camera_code", { count: "exact" }).order("detected_at", { ascending: false }).limit(20),
+        supabaseAdmin.from("citations").select("id, citation_number, status, amount, issued_at, offense, plate_number, vehicle_model, officer_name", { count: "exact" }).order("issued_at", { ascending: false }).limit(25),
+        supabaseAdmin.from("officers").select("*"),
+        supabaseAdmin.from("cameras").select("*"),
+      ]);
+
+      const violationsList = vRes.data || [];
+      const citationsList = cRes.data || [];
+      const officersList = oRes.data || [];
+      const camerasList = camRes.data || [];
+
+      // Calculate real totals
+      const totalViolationsCount = vRes.count ?? violationsList.length;
+      const totalCitationsCount = cRes.count ?? citationsList.length;
+      const activeOfficers = officersList.filter((o: any) => o.on_duty !== false).length;
+      const totalOfficers = officersList.length || 10;
+
+      const settlementRevenue = citationsList
+        .filter((c: any) => c.status === "paid" || c.status === "settled")
+        .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
+
+      const pendingCitations = citationsList
+        .filter((c: any) => c.status === "unpaid" || c.status === "pending").length;
+
+      const activeCameras = camerasList.filter((c: any) => c.status !== "offline").length;
+
+      return {
+        dailyViolations: totalViolationsCount > 0 ? totalViolationsCount : violationsList.length,
+        activeOfficers,
+        totalOfficers,
+        settlementRevenue,
+        pendingCitations: pendingCitations > 0 ? pendingCitations : (totalCitationsCount - citationsList.filter((c: any) => c.status === "paid").length),
+        activeCameras: activeCameras > 0 ? activeCameras : camerasList.length,
+        totalCameras: camerasList.length || 6,
+        cameras: camerasList,
+        recentViolations: violationsList.slice(0, 8),
+        recentCitations: citationsList.slice(0, 15),
+      };
+    } catch (err) {
+      console.error("[Supabase Error: Command Metrics]", err);
+      return {
+        dailyViolations: 0,
+        activeOfficers: 0,
+        totalOfficers: 0,
+        settlementRevenue: 0,
+        pendingCitations: 0,
+        activeCameras: 0,
+        totalCameras: 0,
+        cameras: [],
+        recentViolations: [],
+        recentCitations: [],
+      };
+    }
+  });
+
+// -------------------------------------------------------------
+// 12. MOTORIST VEHICLE REGISTRY & LOOKUP
+// -------------------------------------------------------------
+const registerVehicleSchema = z.object({
+  plateNumber: z.string().trim().min(2),
+  makeModel: z.string().trim().min(2),
+  registeredOwner: z.string().trim().min(2),
+  ownerEmail: z.string().email().optional().or(z.literal("")),
+  color: z.string().optional(),
+  vehicleType: z.string().optional(),
+  chassisNumber: z.string().optional(),
+});
+
+export const serverRegisterVehicle = createServerFn({ method: "POST" })
+  .validator((data: unknown) => registerVehicleSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanPlate = data.plateNumber.toUpperCase().trim();
+    const compactPlate = cleanPlate.replace(/[\s-]/g, "");
+
+    // 1. Check citations to compute risk level and LTO alarm
+    const { data: allCitations } = await supabaseAdmin
+      .from("citations")
+      .select("id, status, amount, plate_number");
+
+    const plateCits = (allCitations || []).filter(
+      (c: any) => (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate
+    );
+    const unpaid = plateCits.filter((c: any) => c.status === "unpaid" || c.status === "overdue");
+    const outstanding = unpaid.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
+
+    let riskLevel = "Clean";
+    let ltoAlarmTagged = false;
+    if (outstanding >= 5000 || unpaid.length >= 3) {
+      riskLevel = "Blocked";
+      ltoAlarmTagged = true;
+    } else if (unpaid.length >= 1 || outstanding > 0) {
+      riskLevel = "Flagged";
+      ltoAlarmTagged = true;
+    }
+
+    // 2. Upsert into public.vehicles
+    const now = new Date().toISOString();
+    const { data: vehicleRow, error: vehErr } = await supabaseAdmin
+      .from("vehicles")
+      .upsert(
+        {
+          plate_number: cleanPlate,
+          make_model: data.makeModel,
+          registered_owner: data.registeredOwner,
+          color: data.color || "Silver",
+          chassis_number: data.chassisNumber || null,
+          registration_status: "CURRENT",
+          risk_level: riskLevel,
+          lto_alarm_tagged: ltoAlarmTagged,
+          updated_at: now,
+        },
+        { onConflict: "plate_number" }
+      )
+      .select()
+      .maybeSingle();
+
+    if (vehErr) {
+      console.warn("[Supabase Warning: Register Vehicle in public.vehicles]", vehErr.message);
+    }
+
+    // 3. Link to citizen_profiles & citizen_vehicles
+    try {
+      let citizenId: string | null = null;
+      if (data.ownerEmail && data.ownerEmail.trim()) {
+        const cleanEmail = data.ownerEmail.trim().toLowerCase();
+        const { data: existingProfile } = await supabaseAdmin
+          .from("citizen_profiles")
+          .select("id")
+          .eq("email", cleanEmail)
+          .maybeSingle();
+
+        if (existingProfile?.id) {
+          citizenId = existingProfile.id;
+        } else {
+          const newCitizenId = generateUUID();
+          const { data: newProfile } = await supabaseAdmin
+            .from("citizen_profiles")
+            .insert({
+              id: newCitizenId,
+              full_name: data.registeredOwner,
+              email: cleanEmail,
+              address: "Barangay Culiat, Quezon City",
+              tokens: 150,
+            })
+            .select("id")
+            .maybeSingle();
+          if (newProfile?.id) citizenId = newProfile.id;
+        }
+      }
+
+      if (!citizenId) {
+        // Look up citizen profile by full name
+        const { data: matchingProfile } = await supabaseAdmin
+          .from("citizen_profiles")
+          .select("id")
+          .ilike("full_name", data.registeredOwner)
+          .maybeSingle();
+
+        if (matchingProfile?.id) {
+          citizenId = matchingProfile.id;
+        } else {
+          // Default to demo citizen Juan Dela Cruz
+          citizenId = "a0000000-0000-0000-0000-000000000001";
+        }
+      }
+
+      if (citizenId) {
+        // Upsert into citizen_vehicles
+        const { data: existingCv } = await supabaseAdmin
+          .from("citizen_vehicles")
+          .select("id")
+          .eq("citizen_id", citizenId)
+          .ilike("plate_number", cleanPlate)
+          .maybeSingle();
+
+        const cvAlarmStatus = ltoAlarmTagged ? "LTO_ALARM_ACTIVE" : "CLEARED";
+        if (existingCv?.id) {
+          await supabaseAdmin
+            .from("citizen_vehicles")
+            .update({
+              make_model: data.makeModel,
+              vehicle_type: data.vehicleType || "Sedan",
+              status: "verified",
+              lto_alarm_status: cvAlarmStatus,
+            })
+            .eq("id", existingCv.id);
+        } else {
+          await supabaseAdmin
+            .from("citizen_vehicles")
+            .insert({
+              id: generateUUID(),
+              citizen_id: citizenId,
+              plate_number: cleanPlate,
+              make_model: data.makeModel,
+              vehicle_type: data.vehicleType || "Sedan",
+              status: "verified",
+              lto_expiry: "2027-12-31",
+              lto_alarm_status: cvAlarmStatus,
+            });
+        }
+      }
+    } catch (citizenErr) {
+      console.warn("[Register Vehicle] Error linking citizen profile:", citizenErr);
+    }
+
+    // 4. Audit log
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: "Vehicle Registry Officer",
+        actor_role: "admin",
+        action: "VEHICLE_REGISTERED",
+        target_resource: `Plate: ${cleanPlate}`,
+        details: `Registered ${data.makeModel} to ${data.registeredOwner}. Status: CURRENT, Risk: ${riskLevel}`,
+      });
+    } catch (auditErr) {
+      console.warn(auditErr);
+    }
+
+    return vehicleRow || {
+      plate_number: cleanPlate,
+      make_model: data.makeModel,
+      registered_owner: data.registeredOwner,
+      color: data.color || "Silver",
+      chassis_number: data.chassisNumber || null,
+      registration_status: "CURRENT",
+      risk_level: riskLevel,
+      lto_alarm_tagged: ltoAlarmTagged,
+    };
+  });
+
+export type RegisteredVehicleRecord = {
+  plate: string;
+  model: string | null;
+  owner: string;
+  color?: string;
+  chassis?: string;
+  violations: number;
+  citations: number;
+  unpaid: number;
+  outstanding: number;
+  totalBilled: number;
+  lastSeen: string;
+  lastOffense: string;
+  risk: "clean" | "watch" | "flagged" | "blocked";
+  ltoAlarm: boolean;
+};
+
+export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
+  .handler(async (): Promise<RegisteredVehicleRecord[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const [vRes, cvRes, cRes, vioRes] = await Promise.all([
+        supabaseAdmin.from("vehicles").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("citizen_vehicles").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("citations").select("*").order("issued_at", { ascending: false }),
+        supabaseAdmin.from("violations").select("*").order("detected_at", { ascending: false }),
+      ]);
+
+      const dbVehicles = vRes.data || [];
+      const citizenVehicles = cvRes.data || [];
+      const citations = cRes.data || [];
+      const violations = vioRes.data || [];
+
+      const map = new Map<string, RegisteredVehicleRecord>();
+
+      // Populate from citizen_vehicles first
+      for (const cv of citizenVehicles) {
+        const compact = (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        map.set(compact, {
+          plate: cv.plate_number,
+          model: cv.make_model,
+          owner: "Verified Citizen",
+          color: "Silver",
+          chassis: undefined,
+          violations: 0,
+          citations: 0,
+          unpaid: 0,
+          outstanding: 0,
+          totalBilled: 0,
+          lastSeen: cv.created_at || new Date().toISOString(),
+          lastOffense: "None (Clean Record)",
+          risk: cv.lto_alarm_status === "LTO_ALARM_ACTIVE" ? "flagged" : "clean",
+          ltoAlarm: cv.lto_alarm_status === "LTO_ALARM_ACTIVE",
+        });
+      }
+
+      // Populate from dbVehicles (overriding or enriching)
+      for (const v of dbVehicles) {
+        const compact = (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        map.set(compact, {
+          plate: v.plate_number,
+          model: v.make_model,
+          owner: v.registered_owner || "Verified Motorist",
+          color: v.color || "Silver",
+          chassis: v.chassis_number || undefined,
+          violations: 0,
+          citations: 0,
+          unpaid: 0,
+          outstanding: 0,
+          totalBilled: 0,
+          lastSeen: v.created_at || new Date().toISOString(),
+          lastOffense: "None (Clean Record)",
+          risk: ((v.risk_level || "Clean").toLowerCase()) as "clean" | "watch" | "flagged" | "blocked",
+          ltoAlarm: !!v.lto_alarm_tagged,
+        });
+      }
+
+      // Aggregate violations
+      for (const vio of violations) {
+        const compact = (vio.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        let row = map.get(compact);
+        if (!row) {
+          row = {
+            plate: vio.plate_number,
+            model: null,
+            owner: "Unregistered Motorist",
+            violations: 0,
+            citations: 0,
+            unpaid: 0,
+            outstanding: 0,
+            totalBilled: 0,
+            lastSeen: vio.detected_at,
+            lastOffense: vio.violation_type,
+            risk: "clean",
+            ltoAlarm: false,
+          };
+          map.set(compact, row);
+        }
+        row.violations += 1;
+        if (new Date(vio.detected_at) >= new Date(row.lastSeen)) {
+          row.lastSeen = vio.detected_at;
+          row.lastOffense = vio.violation_type;
+        }
+      }
+
+      // Aggregate citations
+      for (const cit of citations) {
+        const compact = (cit.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        let row = map.get(compact);
+        if (!row) {
+          row = {
+            plate: cit.plate_number,
+            model: cit.vehicle_model,
+            owner: "Unregistered Motorist",
+            violations: 0,
+            citations: 0,
+            unpaid: 0,
+            outstanding: 0,
+            totalBilled: 0,
+            lastSeen: cit.issued_at,
+            lastOffense: cit.offense,
+            risk: "clean",
+            ltoAlarm: false,
+          };
+          map.set(compact, row);
+        }
+        row.model = row.model || cit.vehicle_model;
+        row.citations += 1;
+        row.totalBilled += Number(cit.amount || 0);
+        if (cit.status === "unpaid" || cit.status === "overdue") {
+          row.unpaid += 1;
+          row.outstanding += Number(cit.amount || 0);
+        }
+        if (new Date(cit.issued_at) >= new Date(row.lastSeen)) {
+          row.lastSeen = cit.issued_at;
+          row.lastOffense = cit.offense;
+        }
+      }
+
+      const rows = Array.from(map.values()).map((r) => {
+        const total = r.violations + r.citations;
+        let risk: "clean" | "watch" | "flagged" | "blocked" = r.risk || "clean";
+        let ltoAlarm = r.ltoAlarm || false;
+
+        if (r.outstanding >= 5000 || r.unpaid >= 3) {
+          risk = "blocked";
+          ltoAlarm = true;
+        } else if (total >= 4 || r.outstanding > 0 || r.unpaid >= 1) {
+          risk = "flagged";
+          ltoAlarm = true;
+        } else if (total >= 2) {
+          risk = "watch";
+        }
+        return { ...r, risk, ltoAlarm };
+      });
+
+      rows.sort(
+        (a, b) =>
+          b.outstanding - a.outstanding ||
+          b.violations + b.citations - (a.violations + a.citations) ||
+          new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()
+      );
+      return rows;
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Registered Vehicles]", err);
+      return [];
+    }
+  });
+
+const vehicleLookupSchema = z.object({
+  plateNumber: z.string().trim().min(2),
+});
+
+export type VehicleLookupResult = {
+  foundInDatabase: boolean;
+  plateNumber: string;
+  makeModel: string;
+  registeredOwner: string;
+  ownerEmail?: string;
+  color: string;
+  vehicleType?: string;
+  chassisNumber?: string;
+  registrationStatus: "CURRENT" | "EXPIRED" | "SUSPENDED";
+  riskLevel: "Clean" | "Watch" | "Flagged" | "Blocked";
+  ltoAlarmTagged: boolean;
+  unpaidCitationsCount: number;
+  outstandingAmount: number;
+  citizenName?: string;
+};
+
+export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
+  .validator((data: unknown) => vehicleLookupSchema.parse(data))
+  .handler(async ({ data }): Promise<VehicleLookupResult> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const rawPlate = data.plateNumber.trim();
+    const compactPlate = rawPlate.replace(/[\s-]/g, "").toUpperCase();
+
+    // 1. Check public.vehicles
+    try {
+      const { data: vList } = await supabaseAdmin
+        .from("vehicles")
+        .select("*");
+
+      const match = (vList || []).find((v: any) =>
+        (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate ||
+        (v.plate_number || "").toUpperCase() === rawPlate.toUpperCase()
+      );
+
+      if (match) {
+        // Fetch citations for this plate
+        const { data: allCits } = await supabaseAdmin
+          .from("citations")
+          .select("*");
+
+        const matchingCits = (allCits || []).filter((c: any) =>
+          (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate
+        );
+        const unpaidCits = matchingCits.filter((c: any) => c.status === "unpaid" || c.status === "overdue" || c.status === "pending");
+        const unpaidCount = unpaidCits.length;
+        const outstanding = unpaidCits.reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+
+        let risk: "Clean" | "Watch" | "Flagged" | "Blocked" = (match.risk_level as any) || "Clean";
+        let alarm = !!match.lto_alarm_tagged;
+        if (outstanding >= 5000 || unpaidCount >= 3) {
+          risk = "Blocked";
+          alarm = true;
+        } else if (unpaidCount > 0) {
+          risk = "Flagged";
+          alarm = true;
+        }
+
+        return {
+          foundInDatabase: true,
+          plateNumber: match.plate_number,
+          makeModel: match.make_model || "Registered Vehicle",
+          registeredOwner: match.registered_owner || "Verified Motorist",
+          color: match.color || "Silver",
+          chassisNumber: match.chassis_number || undefined,
+          registrationStatus: (match.registration_status as any) || "CURRENT",
+          riskLevel: risk,
+          ltoAlarmTagged: alarm,
+          unpaidCitationsCount: unpaidCount,
+          outstandingAmount: outstanding,
+        };
+      }
+    } catch (err) {
+      console.warn("[Vehicle Lookup] DB Error:", err);
+    }
+
+    // 2. Check citizen_vehicles
+    try {
+      const { data: cvList } = await supabaseAdmin
+        .from("citizen_vehicles")
+        .select("*");
+
+      const cvMatch = (cvList || []).find((v: any) =>
+        (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate ||
+        (v.plate_number || "").toUpperCase() === rawPlate.toUpperCase()
+      );
+
+      if (cvMatch) {
+        let ownerName = "Verified Resident";
+        let ownerEmail: string | undefined = undefined;
+        if (cvMatch.citizen_id) {
+          const { data: prof } = await supabaseAdmin
+            .from("citizen_profiles")
+            .select("full_name, email")
+            .eq("id", cvMatch.citizen_id)
+            .maybeSingle();
+          if (prof?.full_name) ownerName = prof.full_name;
+          if (prof?.email) ownerEmail = prof.email;
+        }
+
+        const alarm = cvMatch.lto_alarm_status !== "CLEARED";
+        return {
+          foundInDatabase: true,
+          plateNumber: cvMatch.plate_number,
+          makeModel: cvMatch.make_model,
+          registeredOwner: ownerName,
+          ownerEmail,
+          color: "Silver",
+          vehicleType: cvMatch.vehicle_type,
+          registrationStatus: "CURRENT",
+          riskLevel: alarm ? "Flagged" : "Clean",
+          ltoAlarmTagged: alarm,
+          unpaidCitationsCount: alarm ? 1 : 0,
+          outstandingAmount: 0,
+          citizenName: ownerName,
+        };
+      }
+    } catch (err) {
+      console.warn("[Vehicle Lookup] Citizen DB Error:", err);
+    }
+
+    // 3. Fallback to LTO verification
+    const lto = await verifyVehicleRegistrationLTO({ data: { plateNumber: rawPlate } });
+    return {
+      foundInDatabase: false,
+      plateNumber: lto.plateNumber,
+      makeModel: lto.makeModel,
+      registeredOwner: lto.registeredOwner,
+      color: lto.color,
+      chassisNumber: lto.chassisNumber,
+      registrationStatus: lto.registrationStatus,
+      riskLevel: lto.ltoAlarmTagged ? "Flagged" : "Clean",
+      ltoAlarmTagged: lto.ltoAlarmTagged,
+      unpaidCitationsCount: lto.unsettledCitationsCount,
+      outstandingAmount: lto.unsettledCitationsCount * 2000,
+    };
   });
 

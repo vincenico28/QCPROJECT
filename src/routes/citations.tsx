@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useCitations, formatPeso, timeAgo, type Citation, useUpdateCitationStatus, useCreateCitation } from "@/lib/data/traffic";
+import { useEffect, useMemo, useState } from "react";
+import { useCitations, formatPeso, timeAgo, type Citation, useUpdateCitationStatus, useCreateCitation, useVehicleLookup } from "@/lib/data/traffic";
 import { fineFor } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
 import {
@@ -84,6 +84,14 @@ function CitationsPage() {
   const [formAmount, setFormAmount] = useState(1000);
   const [formOfficer, setFormOfficer] = useState("Sgt. Juan Dela Cruz");
 
+  const { data: lookedUpVehicle, isLoading: isLookingUpPlate } = useVehicleLookup(formPlate);
+
+  useEffect(() => {
+    if (lookedUpVehicle?.makeModel && !formVehicle) {
+      setFormVehicle(lookedUpVehicle.makeModel);
+    }
+  }, [lookedUpVehicle, formVehicle]);
+
   const filtered = useMemo(() => {
     return citations.filter((c) => {
       if (status !== "all" && c.status !== status) return false;
@@ -138,25 +146,24 @@ function CitationsPage() {
         new Date(c.issued_at).toISOString(),
       ]),
     ];
-    const csv = rows
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const csv = rows.map((r) => r.map((f) => `"${f}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `qc-citations-ledger-${Date.now()}.csv`;
+    a.download = `citations-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success(`Exported ${filtered.length} citations`);
 
     try {
       const { supabase } = await import("@/integrations/supabase/client");
       await supabase.from("audit_logs").insert({
-        actor_name: "Treasury & Adjudication Officer",
+        actor_name: "Operations Chief",
         actor_role: "admin",
-        action: "CITATIONS_EXPORTED_CSV",
-        target_resource: "Citations Ledger",
-        details: `Exported ${filtered.length} citation records.`,
+        action: "CITATIONS_LEDGER_EXPORTED",
+        target_resource: "Citations Table",
+        details: `Exported ${filtered.length} records to CSV.`,
       });
     } catch (err) {
       console.warn(err);
@@ -166,9 +173,11 @@ function CitationsPage() {
   const handleCreateDirectCitation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPlate) return;
+    const finalVehicle = formVehicle.trim() || lookedUpVehicle?.makeModel || null;
     createCitation.mutate(
       {
         plate_number: formPlate.toUpperCase().trim(),
+        vehicle_model: finalVehicle,
         offense: formOffense,
         amount: formAmount,
         officer_name: formOfficer,
@@ -176,7 +185,7 @@ function CitationsPage() {
       {
         onSuccess: (newC) => {
           toast.success(`Citation ${newC.citation_number} issued successfully`, {
-            description: `Plate: ${newC.plate_number} · Amount: ${formatPeso(newC.amount)}`,
+            description: `Plate: ${newC.plate_number} · ${finalVehicle ? `${finalVehicle} · ` : ""}Amount: ${formatPeso(newC.amount)}`,
           });
           setCreateModalOpen(false);
           setFormPlate("");
@@ -267,10 +276,39 @@ function CitationsPage() {
                       required
                       placeholder="e.g. NDB-8921"
                       value={formPlate}
-                      onChange={(e) => setFormPlate(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setFormPlate(val);
+                      }}
                       className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm uppercase text-foreground focus:border-primary focus:outline-none"
                     />
                   </label>
+
+                  {lookedUpVehicle && formPlate.trim().length >= 3 && (
+                    <div className={cn(
+                      "rounded-xl border p-2.5 text-xs flex items-center justify-between",
+                      lookedUpVehicle.foundInDatabase
+                        ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-400"
+                        : "border-blue-500/20 bg-blue-950/20 text-blue-400"
+                    )}>
+                      <div className="flex items-center gap-2">
+                        <Car className="size-3.5 shrink-0" />
+                        <div>
+                          <p className="font-bold text-[11px] leading-tight">
+                            {lookedUpVehicle.foundInDatabase ? "QC Registered Citizen Motorist" : "LTO LTMS Vehicle Match"}
+                          </p>
+                          <p className="text-[10px] text-white/70">
+                            Owner: <strong>{lookedUpVehicle.registeredOwner}</strong> · {lookedUpVehicle.makeModel}
+                          </p>
+                        </div>
+                      </div>
+                      {lookedUpVehicle.ltoAlarmTagged && (
+                        <span className="rounded bg-red-500/20 border border-red-500/30 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 uppercase">
+                          LTO Hold
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <label className="flex flex-col gap-1.5">
                     <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">

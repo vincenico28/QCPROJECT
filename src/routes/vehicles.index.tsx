@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useViolations, useCitations, formatPeso, timeAgo } from "@/lib/data/traffic";
+import { useViolations, useCitations, formatPeso, timeAgo, useRegisteredVehicles, useRegisterVehicle } from "@/lib/data/traffic";
 import { verifyVehicleRegistrationLTO } from "@/lib/server.functions";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Building2,
   ExternalLink,
+  UserCheck,
+  Mail,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -54,8 +56,8 @@ const RISKS = ["all", "clean", "watch", "flagged", "blocked"] as const;
 type RiskFilter = (typeof RISKS)[number];
 
 function VehiclesPage() {
-  const { data: violations = [], isLoading: vLoading } = useViolations(500);
-  const { data: citations = [], isLoading: cLoading } = useCitations(500);
+  const { data: dbVehicles = [], isLoading } = useRegisteredVehicles();
+  const registerVehicleMutation = useRegisterVehicle();
   const [risk, setRisk] = useState<RiskFilter>("all");
   const [q, setQ] = useState("");
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
@@ -64,99 +66,13 @@ function VehiclesPage() {
   const [plateInput, setPlateInput] = useState("");
   const [makeModel, setMakeModel] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [color, setColor] = useState("Silver");
   const [vehType, setVehType] = useState("Private Sedan");
   const [chassis, setChassis] = useState("");
   const [isLookingUpLTO, setIsLookingUpLTO] = useState(false);
 
-  // Manual registered vehicles storage
-  const [customVehicles, setCustomVehicles] = useState<VehicleRow[]>([]);
-
-  const vehicles = useMemo<VehicleRow[]>(() => {
-    const map = new Map<string, VehicleRow>();
-
-    for (const v of violations) {
-      const row =
-        map.get(v.plate_number) ??
-        ({
-          plate: v.plate_number,
-          model: null,
-          violations: 0,
-          citations: 0,
-          unpaid: 0,
-          outstanding: 0,
-          totalBilled: 0,
-          lastSeen: v.detected_at,
-          lastOffense: v.violation_type,
-          risk: "clean",
-          ltoAlarm: false,
-        } as VehicleRow);
-      row.violations += 1;
-      if (new Date(v.detected_at) >= new Date(row.lastSeen)) {
-        row.lastSeen = v.detected_at;
-        row.lastOffense = v.violation_type;
-      }
-      map.set(v.plate_number, row);
-    }
-
-    for (const c of citations) {
-      const row =
-        map.get(c.plate_number) ??
-        ({
-          plate: c.plate_number,
-          model: c.vehicle_model,
-          violations: 0,
-          citations: 0,
-          unpaid: 0,
-          outstanding: 0,
-          totalBilled: 0,
-          lastSeen: c.issued_at,
-          lastOffense: c.offense,
-          risk: "clean",
-          ltoAlarm: false,
-        } as VehicleRow);
-      row.model = row.model ?? c.vehicle_model;
-      row.citations += 1;
-      row.totalBilled += Number(c.amount);
-      if (c.status === "unpaid" || c.status === "overdue") {
-        row.unpaid += 1;
-        row.outstanding += Number(c.amount);
-      }
-      if (new Date(c.issued_at) >= new Date(row.lastSeen)) {
-        row.lastSeen = c.issued_at;
-        row.lastOffense = c.offense;
-      }
-      map.set(c.plate_number, row);
-    }
-
-    for (const cv of customVehicles) {
-      if (!map.has(cv.plate)) {
-        map.set(cv.plate, cv);
-      }
-    }
-
-    const rows = Array.from(map.values()).map((r) => {
-      const total = r.violations + r.citations;
-      let risk: VehicleRow["risk"] = "clean";
-      let ltoAlarm = false;
-
-      if (r.outstanding >= 5000 || r.unpaid >= 3) {
-        risk = "blocked";
-        ltoAlarm = true;
-      } else if (total >= 4 || r.outstanding > 0) {
-        risk = "flagged";
-      } else if (total >= 2) {
-        risk = "watch";
-      }
-      return { ...r, risk, ltoAlarm };
-    });
-
-    rows.sort(
-      (a, b) =>
-        b.outstanding - a.outstanding || b.violations + b.citations - (a.violations + a.citations),
-    );
-    return rows;
-  }, [violations, citations, customVehicles]);
+  const vehicles = dbVehicles as VehicleRow[];
 
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {
@@ -183,7 +99,6 @@ function VehiclesPage() {
   }, [vehicles]);
 
   const totalOutstanding = vehicles.reduce((s, v) => s + v.outstanding, 0);
-  const isLoading = vLoading || cLoading;
 
   const handleLtoLookup = async () => {
     if (!plateInput) return;
@@ -208,44 +123,26 @@ function VehiclesPage() {
     e.preventDefault();
     if (!plateInput) return;
     const cleanP = plateInput.toUpperCase().trim();
-    const newV: VehicleRow = {
-      plate: cleanP,
-      model: makeModel || "Registered Vehicle",
-      owner: ownerName || "Registered Owner",
-      violations: 0,
-      citations: 0,
-      unpaid: 0,
-      outstanding: 0,
-      totalBilled: 0,
-      lastSeen: new Date().toISOString(),
-      lastOffense: "None (Clean Record)",
-      risk: "clean",
-      ltoAlarm: false,
-    };
 
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { error } = await supabase.from("vehicles").insert({
-        plate_number: cleanP,
-        make_model: makeModel || "Registered Vehicle",
-        registered_owner: ownerName || "Registered Owner",
+      await registerVehicleMutation.mutateAsync({
+        plateNumber: cleanP,
+        makeModel: makeModel || "Registered Vehicle",
+        registeredOwner: ownerName || "Juan Dela Cruz",
+        ownerEmail: ownerEmail || undefined,
         color: color || "Silver",
-        chassis_number: chassis || null,
-        registration_status: "CURRENT",
-        risk_level: "Clean",
-        lto_alarm_tagged: false,
+        vehicleType: vehType || "Private Sedan",
+        chassisNumber: chassis || undefined,
       });
 
-      if (error) throw error;
-
-      setCustomVehicles((prev) => [newV, ...prev]);
       toast.success(`Vehicle ${cleanP} Registered`, {
-        description: `Added to QC Barangay Culiat enforcement database.`,
+        description: `Successfully added to QC Database and linked to Citizen Portal.`,
       });
       setRegisterModalOpen(false);
       setPlateInput("");
       setMakeModel("");
       setOwnerName("");
+      setOwnerEmail("");
       setChassis("");
     } catch (err: any) {
       console.error(err);
@@ -397,18 +294,41 @@ function VehiclesPage() {
                     </label>
                   </div>
 
-                  <label className="flex flex-col gap-1">
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                      Registered Owner Name
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="Juan Dela Cruz"
-                      value={ownerName}
-                      onChange={(e) => setOwnerName(e.target.value)}
-                      className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-                    />
-                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
+                        Registered Owner Name *
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Juan Dela Cruz"
+                        value={ownerName}
+                        onChange={(e) => setOwnerName(e.target.value)}
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle flex items-center gap-1">
+                        <Mail className="size-3 text-primary" /> Citizen Account Email (Optional)
+                      </span>
+                      <input
+                        type="email"
+                        placeholder="e.g. juan.delacruz@gmail.com"
+                        value={ownerEmail}
+                        onChange={(e) => setOwnerEmail(e.target.value)}
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5 flex items-center gap-2">
+                    <UserCheck className="size-4 text-primary shrink-0" />
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      Connecting with the citizen's account automatically syncs this vehicle to their <strong>MMDA NCAP Citizen Portal</strong> with live LTO clearance and NOV inspection.
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <label className="flex flex-col gap-1">
@@ -444,11 +364,15 @@ function VehiclesPage() {
                     </Dialog.Close>
                     <button
                       type="submit"
-                      disabled={!plateInput}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      disabled={!plateInput || registerVehicleMutation.isPending}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-md shadow-primary/20"
                     >
-                      <CheckCircle2 className="size-3.5" />
-                      Save to Registry
+                      {registerVehicleMutation.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-3.5" />
+                      )}
+                      Save & Sync to Registry
                     </button>
                   </div>
                 </form>

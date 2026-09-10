@@ -8,6 +8,141 @@ export type Database = {
   };
   public: {
     Tables: {
+      citizen_profiles: {
+        Row: {
+          id: string;
+          full_name: string;
+          email: string;
+          phone: string | null;
+          address: string;
+          driver_license_number: string | null;
+          tokens: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          email: string;
+          phone?: string | null;
+          address?: string;
+          driver_license_number?: string | null;
+          tokens?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          full_name?: string;
+          email?: string;
+          phone?: string | null;
+          address?: string;
+          driver_license_number?: string | null;
+          tokens?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      citizen_vehicles: {
+        Row: {
+          id: string;
+          citizen_id: string | null;
+          plate_number: string;
+          make_model: string;
+          vehicle_type: string;
+          status: string;
+          lto_expiry: string | null;
+          lto_alarm_status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          citizen_id?: string | null;
+          plate_number: string;
+          make_model: string;
+          vehicle_type?: string;
+          status?: string;
+          lto_expiry?: string | null;
+          lto_alarm_status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          citizen_id?: string | null;
+          plate_number?: string;
+          make_model?: string;
+          vehicle_type?: string;
+          status?: string;
+          lto_expiry?: string | null;
+          lto_alarm_status?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      citizen_vouchers: {
+        Row: {
+          id: string;
+          citizen_id: string | null;
+          code: string;
+          title: string;
+          description: string | null;
+          cost: number;
+          status: string;
+          claimed_at: string;
+        };
+        Insert: {
+          id?: string;
+          citizen_id?: string | null;
+          code: string;
+          title: string;
+          description?: string | null;
+          cost?: number;
+          status?: string;
+          claimed_at?: string;
+        };
+        Update: {
+          id?: string;
+          citizen_id?: string | null;
+          code?: string;
+          title?: string;
+          description?: string | null;
+          cost?: number;
+          status?: string;
+          claimed_at?: string;
+        };
+        Relationships: [];
+      };
+      driver_nominations: {
+        Row: {
+          id: string;
+          citation_id: string;
+          citizen_id: string | null;
+          nominee_name: string;
+          nominee_license: string;
+          status: string;
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          citation_id: string;
+          citizen_id?: string | null;
+          nominee_name: string;
+          nominee_license: string;
+          status?: string;
+          submitted_at?: string;
+        };
+        Update: {
+          id?: string;
+          citation_id?: string;
+          citizen_id?: string | null;
+          nominee_name?: string;
+          nominee_license?: string;
+          status?: string;
+          submitted_at?: string;
+        };
+        Relationships: [];
+      };
       cameras: {
         Row: {
           code: string;
@@ -204,6 +339,8 @@ export type Database = {
           district: string;
           full_name: string;
           id: string;
+          lat: number | null;
+          lng: number | null;
           on_duty: boolean;
           rank: string;
           status: string;
@@ -218,6 +355,8 @@ export type Database = {
           district?: string;
           full_name: string;
           id?: string;
+          lat?: number | null;
+          lng?: number | null;
           on_duty?: boolean;
           rank?: string;
           status?: string;
@@ -232,6 +371,8 @@ export type Database = {
           district?: string;
           full_name?: string;
           id?: string;
+          lat?: number | null;
+          lng?: number | null;
           on_duty?: boolean;
           rank?: string;
           status?: string;

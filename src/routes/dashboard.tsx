@@ -5,6 +5,7 @@ import {
   useCitations,
   useCameras,
   useCreateCitation,
+  useCommandDashboardMetrics,
   formatPeso,
   timeAgo,
   type Violation,
@@ -170,6 +171,7 @@ function CommandDashboard() {
   const { data: violations = [], isLoading: vLoading } = useViolations(8);
   const { data: citations = [] } = useCitations(15);
   const { data: cameras = [] } = useCameras();
+  const { data: metrics, isLoading: mLoading, refetch: refetchMetrics } = useCommandDashboardMetrics();
 
   const [citationFilter, setCitationFilter] = useState<string>("all");
   const [citationSearch, setCitationSearch] = useState<string>("");
@@ -179,20 +181,54 @@ function CommandDashboard() {
   const RoleIcon = roleConfig.icon;
 
   const kpis = useMemo(() => {
+    if (metrics) {
+      return {
+        violations: metrics.dailyViolations,
+        officers: { current: metrics.activeOfficers, total: metrics.totalOfficers },
+        revenue: metrics.settlementRevenue,
+        pending: metrics.pendingCitations,
+        activeCameras: metrics.activeCameras,
+        totalCameras: metrics.totalCameras,
+      };
+    }
+
     const revenue = citations
-      .filter((c) => c.status === "paid")
-      .reduce((sum, c) => sum + Number(c.amount), 0);
-    const pending = citations.filter((c) => c.status === "pending").length;
+      .filter((c) => c.status === "paid" || c.status === "settled")
+      .reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const pending = citations.filter((c) => c.status === "pending" || c.status === "unpaid").length;
     const activeCameras = cameras.filter((c) => c.status !== "offline").length;
     return {
-      violations: violations.length > 0 ? 2842 : 0,
-      officers: { current: 156, total: 200 },
-      revenue: 428_000 + revenue,
-      pending: 812 + pending,
+      violations: violations.length,
+      officers: { current: 3, total: 4 },
+      revenue,
+      pending,
       activeCameras,
-      totalCameras: cameras.length || 120,
+      totalCameras: cameras.length || 6,
     };
-  }, [violations, citations, cameras]);
+  }, [metrics, violations, citations, cameras]);
+
+  const liveFeeds = useMemo(() => {
+    const defaultImages = [cctv1, cctv2, cctv3];
+    const cameraList = cameras.length > 0 ? cameras : (metrics?.cameras || []);
+
+    if (cameraList.length === 0) {
+      return CCTV_FEEDS;
+    }
+
+    return cameraList.slice(0, 3).map((cam, idx) => {
+      const isOnline = cam.status !== "offline";
+      const isAlert = cam.status === "alert" || cam.status === "maintenance";
+      return {
+        img: defaultImages[idx % defaultImages.length],
+        code: cam.code || `CAM-${String(idx + 1).padStart(3, "0")}`,
+        location: (cam.location || "QUEZON CITY CORRIDOR").toUpperCase(),
+        status: isAlert ? "alert" : isOnline ? "detection" : "offline",
+        label: isAlert ? "INCIDENT / ANPR FLAGGED" : isOnline ? "DETECTION ACTIVE (4K)" : "OFFLINE / RECONNECTING",
+        fps: isOnline ? "30 FPS" : "0 FPS",
+        res: "4K 60Hz",
+      };
+    });
+  }, [cameras, metrics?.cameras]);
 
   const filteredCitations = useMemo(() => {
     return citations.filter((c) => {
@@ -232,6 +268,20 @@ function CommandDashboard() {
 
         {/* Live Operational Status Pills */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            onClick={async () => {
+              await refetchMetrics();
+              toast.success("Database Telemetry Refreshed", {
+                description: "Latest sensor counts, enforcers, and revenue synced from Supabase.",
+              });
+            }}
+            title="Refresh database telemetry"
+            className="flex items-center gap-1.5 rounded-xl bg-panel-elevated border border-border px-3 py-1.5 font-mono-tab text-[11px] text-subtle hover:text-foreground hover:border-primary transition-all"
+          >
+            <RefreshCw className={cn("size-3", mLoading && "animate-spin text-primary")} />
+            <span>DB Telemetry</span>
+          </button>
+
           <div className="flex items-center gap-2 rounded-xl bg-panel-elevated border border-border px-3 py-1.5 font-mono-tab text-[11px]">
             <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-subtle">AI Inference:</span>
@@ -257,17 +307,17 @@ function CommandDashboard() {
       {/* KPI STATS ROW */}
       <KpiCard
         label="Daily Violations"
-        value="2,842"
-        delta="+14% Today"
-        deltaKind="danger"
+        value={kpis.violations.toLocaleString()}
+        delta={kpis.violations > 0 ? "+Live Feed" : "Normal"}
+        deltaKind={kpis.violations > 0 ? "danger" : "success"}
         icon={Activity}
-        sub="Auto-captured by ANPR"
+        sub="Auto-captured by Optical Sentinel"
       />
       <KpiCard
         label="Active Enforcers"
-        value="156"
-        secondary={`/ ${kpis.officers.total} Shift`}
-        delta="92% Coverage"
+        value={String(kpis.officers.current)}
+        secondary={`/ ${kpis.officers.total} Active`}
+        delta={`${Math.round((kpis.officers.current / Math.max(1, kpis.officers.total)) * 100)}% Coverage`}
         deltaKind="success"
         icon={ShieldCheck}
         sub="Patrol sectors online"
@@ -275,7 +325,7 @@ function CommandDashboard() {
       <KpiCard
         label="Settlement Revenue"
         value={formatPeso(kpis.revenue).replace("PHP", "₱")}
-        delta="↑ Targeted"
+        delta="Verified Realtime"
         deltaKind="success"
         icon={TrendingUp}
         sub="GCash, Maya & Landbank"
@@ -283,8 +333,8 @@ function CommandDashboard() {
       <KpiCard
         label="Pending Citations"
         value={kpis.pending.toLocaleString()}
-        delta="24h Overdue"
-        deltaKind="warning"
+        delta={kpis.pending > 0 ? `${kpis.pending} Unpaid` : "Cleared"}
+        deltaKind={kpis.pending > 0 ? "warning" : "success"}
         icon={Clock}
         sub="Awaiting LTO Tagging"
       />
@@ -379,7 +429,7 @@ function CommandDashboard() {
 
         {/* CCTV MULTI-FEED GRID */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {CCTV_FEEDS.map((feed) => (
+          {liveFeeds.map((feed) => (
             <CctvTile key={feed.code} feed={feed} />
           ))}
         </div>
