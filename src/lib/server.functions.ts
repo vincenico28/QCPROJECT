@@ -47,7 +47,45 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
         .order("issued_at", { ascending: false })
         .limit(limit);
       if (!error && data) {
-        return data.map((c: any) => ({
+        // Group by violation_id to deduplicate any duplicate records
+        const seenViolations = new Set<string>();
+        const uniqueList: any[] = [];
+        const duplicateIdsToDelete: string[] = [];
+
+        // Sort so paid citations or earlier issued ones are preserved
+        const sorted = [...data].sort((a, b) => {
+          if (a.status === "paid" && b.status !== "paid") return -1;
+          if (b.status === "paid" && a.status !== "paid") return 1;
+          return new Date(a.issued_at).getTime() - new Date(b.issued_at).getTime();
+        });
+
+        for (const c of sorted) {
+          if (c.violation_id) {
+            if (seenViolations.has(c.violation_id)) {
+              duplicateIdsToDelete.push(c.id);
+              continue;
+            }
+            seenViolations.add(c.violation_id);
+          }
+          uniqueList.push(c);
+        }
+
+        // Background purge of duplicate IDs from database if any exist
+        if (duplicateIdsToDelete.length > 0) {
+          Promise.resolve(
+            supabaseAdmin
+              .from("citations")
+              .delete()
+              .in("id", duplicateIdsToDelete)
+          )
+            .then(() => console.log(`[Deduplication] Purged ${duplicateIdsToDelete.length} duplicate citation rows.`))
+            .catch((e: any) => console.warn("[Deduplication] Could not purge duplicate rows:", e));
+        }
+
+        // Re-sort by issued_at DESC for display
+        uniqueList.sort((a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime());
+
+        return uniqueList.map((c: any) => ({
           ...c,
           evidence_url: c.violations?.evidence_url || c.evidence_url || "/assets/violation-1.jpg",
           location: c.violations?.location || c.location || "Quezon City Road Corridor",
@@ -185,6 +223,49 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     const officerName = data.officer_name || data.officerName || "QC Enforcer";
     const status = data.status || "unpaid";
 
+    // 1. DEDUPLICATION: If a citation already exists for this violation, return it idempotently
+    if (violationId) {
+      const { data: existingCitation } = await supabaseAdmin
+        .from("citations")
+        .select("*")
+        .eq("violation_id", violationId)
+        .order("issued_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingCitation) {
+        console.warn(
+          `[serverSaveCitation] Citation already exists for violation ${violationId}: ${existingCitation.citation_number}. Preventing duplicate creation.`
+        );
+        // Ensure the violation status is marked confirmed
+        await supabaseAdmin
+          .from("violations")
+          .update({ status: "confirmed" })
+          .eq("id", violationId);
+
+        return existingCitation;
+      }
+    }
+
+    // 2. DOUBLE-CLICK PROTECTION: Prevent rapid duplicate issuance for same plate and offense within 10s
+    if (!violationId && plate) {
+      const tenSecondsAgo = new Date(Date.now() - 10_000).toISOString();
+      const { data: recentDup } = await supabaseAdmin
+        .from("citations")
+        .select("*")
+        .eq("plate_number", plate)
+        .eq("offense", data.offense)
+        .gte("issued_at", tenSecondsAgo)
+        .maybeSingle();
+
+      if (recentDup) {
+        console.warn(
+          `[serverSaveCitation] Duplicate citation attempt detected for plate ${plate} within 10s. Returning existing citation ${recentDup.citation_number}.`
+        );
+        return recentDup;
+      }
+    }
+
     const { data: row, error } = await supabaseAdmin
       .from("citations")
       .insert({
@@ -205,6 +286,18 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     if (error) {
       console.error("[Supabase Error: Save Citation]", error);
       throw new Error(`Database Error: ${error.message}`);
+    }
+
+    // Automatically transition violation status to 'confirmed' upon citation creation
+    if (violationId) {
+      try {
+        await supabaseAdmin
+          .from("violations")
+          .update({ status: "confirmed" })
+          .eq("id", violationId);
+      } catch (vioErr) {
+        console.warn("[serverSaveCitation] Could not update violation status to confirmed:", vioErr);
+      }
     }
 
     // Automatically synchronize LTO alarm tags and risk status across vehicles & citizen_vehicles

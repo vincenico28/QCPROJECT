@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useViolations, timeAgo, type Violation, formatPeso } from "@/lib/data/traffic";
+import { useViolations, useCitations, timeAgo, type Violation, type Citation, formatPeso } from "@/lib/data/traffic";
 import { ViolationReviewDialog } from "@/components/violations/violation-review-dialog";
 import { useBulkReviewViolations, useAddManualViolation, fineFor } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
@@ -69,8 +69,19 @@ const VIOLATION_TYPES = [
 
 function ViolationsPage() {
   const { data: violations = [], isLoading } = useViolations(100);
+  const { data: citations = [] } = useCitations(200);
   const bulkReview = useBulkReviewViolations();
   const addManual = useAddManualViolation();
+
+  const citationsByViolationId = useMemo(() => {
+    const map = new Map<string, Citation>();
+    for (const c of citations) {
+      if (c.violation_id) {
+        map.set(c.violation_id, c);
+      }
+    }
+    return map;
+  }, [citations]);
 
   const [status, setStatus] = useState<StatusFilter>("all");
   const [offenseFilter, setOffenseFilter] = useState<string>("All Offenses");
@@ -183,6 +194,7 @@ function ViolationsPage() {
       const { serverSaveViolation, serverSaveCitation } = await import("@/lib/server.functions");
       const fineAmount = fineFor(manualType);
       const cleanPlate = manualPlate.toUpperCase().trim();
+      const initialStatus = autoIssueCitation ? "confirmed" : "pending";
 
       const savedViolation = await serverSaveViolation({
         data: {
@@ -198,11 +210,13 @@ function ViolationsPage() {
           aiDetected: false,
           evidence_url: manualEvidenceUrl,
           evidenceUrl: manualEvidenceUrl,
+          status: initialStatus,
         },
       });
 
+      let issuedNovNumber = "";
       if (autoIssueCitation) {
-        await serverSaveCitation({
+        const cit = await serverSaveCitation({
           data: {
             violation_id: savedViolation.id,
             violationId: savedViolation.id,
@@ -211,16 +225,25 @@ function ViolationsPage() {
             offense: manualType,
             amount: fineAmount,
             officer_name: "Field Traffic Enforcer",
+            status: "unpaid",
           },
         });
+        issuedNovNumber = cit?.citation_number || "";
       }
 
       await qc.invalidateQueries({ queryKey: ["violations"] });
       await qc.invalidateQueries({ queryKey: ["citations"] });
+      await qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
 
-      toast.success(`Violation & CCTV Evidence Frame Stored to Database!`, {
-        description: `Plate: ${cleanPlate} · ${manualType} · Photo permanently linked to NOV.`,
-      });
+      if (autoIssueCitation) {
+        toast.success(`Violation Confirmed & NOV Citation Issued!`, {
+          description: `Plate: ${cleanPlate} · ${manualType} · Ticket ${issuedNovNumber || "Generated"} linked to citizen & LTO ledger.`,
+        });
+      } else {
+        toast.success(`Field Violation Logged to Review Queue!`, {
+          description: `Plate: ${cleanPlate} · ${manualType} · Status: Pending Review in review console.`,
+        });
+      }
 
       setManualModalOpen(false);
       setManualPlate("");
@@ -235,6 +258,7 @@ function ViolationsPage() {
         camera_code: manualCam,
         evidence_url: manualEvidenceUrl,
         confidence: 99,
+        status: autoIssueCitation ? "confirmed" : "pending",
       }, {
         onSuccess: () => {
           toast.success(`Violation & Evidence Frame Stored! (Queue Synced)`);
@@ -818,11 +842,13 @@ function ViolationsPage() {
               {!isLoading &&
                 filtered.map((v) => {
                   const isSelected = selectedIds.includes(v.id);
+                  const linkedCitation = citationsByViolationId.get(v.id);
                   return (
                     <ViolationRow
                       key={v.id}
                       v={v}
                       isSelected={isSelected}
+                      linkedCitation={linkedCitation}
                       onToggleSelect={() => toggleSelect(v.id)}
                       onReview={() => setReview(v)}
                     />
@@ -848,16 +874,19 @@ function ViolationsPage() {
 function ViolationRow({
   v,
   isSelected,
+  linkedCitation,
   onToggleSelect,
   onReview,
 }: {
   v: Violation;
   isSelected: boolean;
+  linkedCitation?: Citation;
   onToggleSelect: () => void;
   onReview: () => void;
 }) {
   const conf = Number(v.confidence) > 1 ? Number(v.confidence) : Math.round(Number(v.confidence) * 100);
   const confTone = conf >= 90 ? "text-emerald-400" : conf >= 80 ? "text-blue-400" : "text-amber-400";
+  const isCited = Boolean(linkedCitation || v.status === "confirmed" || v.status === "verified");
 
   return (
     <tr className={cn("transition-colors hover:bg-panel-elevated/40", isSelected && "bg-primary/5")}>
@@ -942,29 +971,46 @@ function ViolationRow({
 
       {/* Status */}
       <td className="px-4 py-3.5">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-            v.status === "confirmed" || v.status === "verified"
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : v.status === "dismissed" || v.status === "rejected"
-              ? "bg-white/10 text-white/50"
-              : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-          )}
-        >
-          {v.status === "verified" ? "confirmed" : v.status === "rejected" ? "dismissed" : v.status}
-        </span>
+        {linkedCitation ? (
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <CheckCircle2 className="size-3 text-emerald-400" />
+            Cited ({linkedCitation.citation_number})
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+              v.status === "confirmed" || v.status === "verified"
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : v.status === "dismissed" || v.status === "rejected"
+                ? "bg-white/10 text-white/50"
+                : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+            )}
+          >
+            {v.status === "verified" ? "confirmed" : v.status === "rejected" ? "dismissed" : v.status}
+          </span>
+        )}
       </td>
 
       {/* Actions */}
       <td className="px-4 py-3.5 text-right">
-        <button
-          onClick={onReview}
-          className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
-        >
-          Review & Issue
-          <ArrowUpRight className="size-3" />
-        </button>
+        {isCited ? (
+          <button
+            onClick={onReview}
+            className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/40 hover:text-white transition-colors"
+          >
+            View Details
+            <Eye className="size-3" />
+          </button>
+        ) : (
+          <button
+            onClick={onReview}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
+          >
+            Review & Issue
+            <ArrowUpRight className="size-3" />
+          </button>
+        )}
       </td>
     </tr>
   );

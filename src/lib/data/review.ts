@@ -157,6 +157,7 @@ export function useAddManualViolation() {
       camera_code?: string;
       evidence_url?: string;
       confidence?: number;
+      status?: string;
     }) => {
       // Save to real database
       const row = await serverSaveViolation({
@@ -168,7 +169,7 @@ export function useAddManualViolation() {
           ai_detected: false,
           camera_code: input.camera_code || "FIELD-OFFICER",
           evidence_url: input.evidence_url || "/assets/violation-1.jpg",
-          status: "pending",
+          status: input.status || "pending",
         },
       });
 

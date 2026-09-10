@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fineFor, useIssueCitation, useReviewViolation } from "@/lib/data/review";
-import { formatPeso, timeAgo, useOfficers, type Violation, useVehicleLookup } from "@/lib/data/traffic";
+import { formatPeso, timeAgo, useOfficers, useCitations, type Violation, useVehicleLookup } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 
 export function ViolationReviewDialog({
@@ -40,8 +40,13 @@ export function ViolationReviewDialog({
 
   const { data: officers = [] } = useOfficers();
   const { data: vehicleInfo, isLoading: lookingUpVehicle } = useVehicleLookup(violation?.plate_number ?? "");
+  const { data: citations = [] } = useCitations(200);
   const issue = useIssueCitation();
   const review = useReviewViolation();
+
+  const existingCitation = violation
+    ? citations.find((c) => c.violation_id === violation.id)
+    : null;
 
   useEffect(() => {
     if (!violation) return;
@@ -61,6 +66,14 @@ export function ViolationReviewDialog({
   const conf = Number(v.confidence) > 1 ? Number(v.confidence) : Math.round(Number(v.confidence) * 100);
 
   async function confirmAndIssue() {
+    if (existingCitation) {
+      toast.info("Notice of Violation already active", {
+        description: `Citation ${existingCitation.citation_number} has already been issued for this violation.`,
+      });
+      onClose();
+      return;
+    }
+
     const officer = officers.find((o) => o.id === officerId) ?? null;
     const finalModel = vehicleModel.trim() || vehicleInfo?.makeModel || null;
     try {
@@ -145,6 +158,15 @@ export function ViolationReviewDialog({
                   No evidence frame available
                 </div>
               )}
+              {v.evidence_url && (
+                <button
+                  type="button"
+                  onClick={() => setZoomEvidence(!zoomEvidence)}
+                  className="absolute top-2 right-2 rounded-lg bg-black/60 border border-white/10 px-2 py-1 text-[10px] font-mono-tab text-white/80 hover:text-white"
+                >
+                  {zoomEvidence ? "Reset Zoom" : "2x Optical Zoom"}
+                </button>
+              )}
             </div>
 
             {/* Camera & Location Metadata */}
@@ -198,14 +220,46 @@ export function ViolationReviewDialog({
 
           {/* Right Column: Citation Form */}
           <div className="flex flex-col gap-3">
+            {existingCitation && (
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3.5 text-xs flex flex-col gap-2 shadow-inner animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-400 flex items-center gap-1.5 font-mono-tab text-[10px] uppercase tracking-wider">
+                    <CheckCircle2 className="size-3.5 text-emerald-400" />
+                    Notice of Violation (NOV) Active
+                  </span>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono-tab",
+                    existingCitation.status === "paid"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                  )}>
+                    {existingCitation.status}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-white pt-1.5 border-t border-emerald-500/20">
+                  <span className="text-white/70">Citation Number:</span>
+                  <strong className="font-mono-tab text-emerald-300 font-bold">{existingCitation.citation_number}</strong>
+                </div>
+                <div className="flex items-center justify-between text-xs text-white">
+                  <span className="text-white/70">Statutory Fine:</span>
+                  <span className="font-bold text-white">{formatPeso(existingCitation.amount)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-white/60">
+                  <span>Adjudicating Officer: {existingCitation.officer_name || "Field Enforcer"}</span>
+                  <span>Issued: {timeAgo(existingCitation.issued_at)}</span>
+                </div>
+              </div>
+            )}
+
             <Field label="Offense Classification">
               <input
                 value={offense}
+                disabled={!!existingCitation}
                 onChange={(e) => {
                   setOffense(e.target.value);
                   setAmount(fineFor(e.target.value));
                 }}
-                className={inputClass}
+                className={cn(inputClass, existingCitation && "opacity-60 cursor-not-allowed")}
               />
             </Field>
 
@@ -215,25 +269,28 @@ export function ViolationReviewDialog({
                 min={0}
                 step={100}
                 value={amount}
+                disabled={!!existingCitation}
                 onChange={(e) => setAmount(Number(e.target.value))}
-                className={inputClass}
+                className={cn(inputClass, existingCitation && "opacity-60 cursor-not-allowed")}
               />
             </Field>
 
             <Field label="Verified Vehicle Model">
               <input
                 value={vehicleModel}
+                disabled={!!existingCitation}
                 onChange={(e) => setVehicleModel(e.target.value)}
                 placeholder="e.g. Toyota Vios 2021"
-                className={inputClass}
+                className={cn(inputClass, existingCitation && "opacity-60 cursor-not-allowed")}
               />
             </Field>
 
             <Field label="Assign Reviewing Officer">
               <select
                 value={officerId}
+                disabled={!!existingCitation}
                 onChange={(e) => setOfficerId(e.target.value)}
-                className={inputClass}
+                className={cn(inputClass, existingCitation && "opacity-60 cursor-not-allowed")}
               >
                 <option value="">AI Auto-Validator (Default)</option>
                 {officers.map((o) => (
@@ -246,7 +303,9 @@ export function ViolationReviewDialog({
 
             <div className="rounded-xl border border-border bg-background/50 p-3 mt-1 text-[11px] text-muted-foreground leading-relaxed">
               <p>
-                Confirming this violation will automatically issue an official <strong>Notice of Violation (NOV)</strong> and synchronize with the public <em>"May Huli Ka"</em> citizen verifier.
+                {existingCitation
+                  ? "This violation has been officially adjudicated and dispatched into the public \"May Huli Ka\" citizen verifier."
+                  : "Confirming this violation will automatically issue an official Notice of Violation (NOV) and synchronize with the public \"May Huli Ka\" citizen verifier."}
               </p>
             </div>
           </div>
@@ -256,7 +315,7 @@ export function ViolationReviewDialog({
           <button
             type="button"
             onClick={dismiss}
-            disabled={busy}
+            disabled={busy || !!existingCitation}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-colors disabled:opacity-50"
           >
             {review.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <XCircle className="size-3.5" />}
@@ -269,21 +328,28 @@ export function ViolationReviewDialog({
               onClick={onClose}
               className="rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated"
             >
-              Cancel
+              Close
             </button>
-            <button
-              type="button"
-              onClick={confirmAndIssue}
-              disabled={busy || amount <= 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-500 transition-colors disabled:opacity-50"
-            >
-              {issue.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <ShieldCheck className="size-3.5" />
-              )}
-              Confirm & Issue Citation ({formatPeso(amount)})
-            </button>
+            {existingCitation ? (
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300">
+                <CheckCircle2 className="size-3.5 text-emerald-400" />
+                Citation Active ({existingCitation.citation_number})
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={confirmAndIssue}
+                disabled={busy || amount <= 0}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-500 transition-colors disabled:opacity-50"
+              >
+                {issue.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="size-3.5" />
+                )}
+                Confirm & Issue Citation ({formatPeso(amount)})
+              </button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
