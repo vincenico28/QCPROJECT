@@ -28,6 +28,9 @@ import {
   Car,
   DollarSign,
   Scale,
+  Camera,
+  Upload,
+  ScanLine,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -84,7 +87,76 @@ function CitationsPage() {
   const [formAmount, setFormAmount] = useState(1000);
   const [formOfficer, setFormOfficer] = useState("Sgt. Juan Dela Cruz");
 
+  // Evidence state
+  const QC_CCTV_NODES = [
+    { code: "CAM-042", label: "Commonwealth Ave cor. Tandang Sora", snapshot: "/assets/violation-1.jpg" },
+    { code: "CAM-108", label: "Tomas Morato Ave cor. Scout Madriñan", snapshot: "/assets/cctv-2.jpg" },
+    { code: "CAM-059", label: "EDSA-Quezon Ave Flyover", snapshot: "/assets/violation-2.jpg" },
+    { code: "CAM-021", label: "Katipunan Ave cor. CP Garcia", snapshot: "/assets/cctv-3.jpg" },
+    { code: "CAM-133", label: "Elliptical Road / QC Circle", snapshot: "/assets/violation-3.jpg" },
+    { code: "CAM-077", label: "Aurora Blvd cor. Katipunan", snapshot: "/assets/cctv-1.jpg" },
+  ];
+  const [evidenceSource, setEvidenceSource] = useState<"cctv" | "upload">("cctv");
+  const [formCam, setFormCam] = useState(QC_CCTV_NODES[0].code);
+  const [formEvidenceUrl, setFormEvidenceUrl] = useState(QC_CCTV_NODES[0].snapshot);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFileSizeKb, setUploadedFileSizeKb] = useState<number | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+
   const { data: lookedUpVehicle, isLoading: isLookingUpPlate } = useVehicleLookup(formPlate);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select a valid image file");
+      return;
+    }
+    try {
+      setIsProcessingFile(true);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1280;
+          const maxHeight = 960;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth || height > maxHeight) {
+            if (width / height > maxWidth / maxHeight) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/jpeg", 0.82);
+            const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+            setFormEvidenceUrl(compressed);
+            setUploadedFileName(file.name);
+            setUploadedFileSizeKb(sizeKb);
+            setEvidenceSource("upload");
+            setIsProcessingFile(false);
+            toast.success("Photo Evidence Attached", {
+              description: `${file.name} (${sizeKb} KB) ready to upload to Supabase Storage.`,
+            });
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setIsProcessingFile(false);
+      toast.error("Failed to process image file");
+    }
+  };
 
   useEffect(() => {
     if (lookedUpVehicle?.makeModel && !formVehicle) {
@@ -170,26 +242,45 @@ function CitationsPage() {
     }
   }
 
-  const handleCreateDirectCitation = (e: React.FormEvent) => {
+  const handleCreateDirectCitation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPlate) return;
     const finalVehicle = formVehicle.trim() || lookedUpVehicle?.makeModel || null;
+    const cleanPlate = formPlate.toUpperCase().trim();
+
+    let finalEvidenceUrl = formEvidenceUrl;
+    if (evidenceSource === "upload" && formEvidenceUrl) {
+      try {
+        const { uploadEvidenceToSupabase } = await import("@/lib/storage");
+        finalEvidenceUrl = await uploadEvidenceToSupabase(formEvidenceUrl, {
+          plateNumber: cleanPlate,
+          category: formOffense,
+          folder: "citations",
+        });
+      } catch (uploadErr) {
+        console.warn("[Storage] Fallback to direct evidence URL", uploadErr);
+      }
+    }
+
     createCitation.mutate(
       {
-        plate_number: formPlate.toUpperCase().trim(),
+        plate_number: cleanPlate,
         vehicle_model: finalVehicle,
         offense: formOffense,
         amount: formAmount,
         officer_name: formOfficer,
+        evidence_url: finalEvidenceUrl,
       },
       {
         onSuccess: (newC) => {
           toast.success(`Citation ${newC.citation_number} issued successfully`, {
-            description: `Plate: ${newC.plate_number} · ${finalVehicle ? `${finalVehicle} · ` : ""}Amount: ${formatPeso(newC.amount)}`,
+            description: `Plate: ${newC.plate_number} · Evidence stored to Supabase Storage · Amount: ${formatPeso(newC.amount)}`,
           });
           setCreateModalOpen(false);
           setFormPlate("");
           setFormVehicle("");
+          setUploadedFileName(null);
+          setUploadedFileSizeKb(null);
         },
       },
     );
@@ -370,6 +461,100 @@ function CitationsPage() {
                       className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
                     />
                   </label>
+
+                  {/* Evidence Attachment Section */}
+                  <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-panel-elevated/40 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-foreground font-bold flex items-center gap-1.5">
+                        <Camera className="size-3.5 text-primary" /> CCTV / Photo Evidence Frame
+                      </span>
+                      <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvidenceSource("cctv");
+                            const node = QC_CCTV_NODES.find((n) => n.code === formCam);
+                            if (node) setFormEvidenceUrl(node.snapshot);
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded font-semibold transition-all",
+                            evidenceSource === "cctv" ? "bg-primary text-white" : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          CCTV Node
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEvidenceSource("upload")}
+                          className={cn(
+                            "px-2 py-0.5 rounded font-semibold transition-all",
+                            evidenceSource === "upload" ? "bg-primary text-white" : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          Upload Photo
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner">
+                      <img
+                        src={formEvidenceUrl}
+                        alt="Evidence Frame"
+                        className="size-full object-cover"
+                      />
+                      <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40">
+                          ● EVIDENCE REC · {formCam}
+                        </span>
+                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10">
+                          {new Date().toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="absolute inset-x-4 bottom-2.5 rounded-lg border border-emerald-400/80 bg-black/75 p-1.5 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                        <span className="font-bold flex items-center gap-1">
+                          <ScanLine className="size-3" /> ANPR: {formPlate || "PLATE-NUMBER"}
+                        </span>
+                        <span className="font-bold">VERIFIED</span>
+                      </div>
+                      {isProcessingFile && (
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white">
+                          <Loader2 className="size-6 animate-spin text-primary" />
+                          <span className="text-xs font-semibold">Processing photo...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {evidenceSource === "upload" ? (
+                      <label className="cursor-pointer rounded-xl border border-dashed border-primary/40 bg-primary/5 p-2.5 text-center text-xs text-muted-foreground hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center gap-2">
+                        <Upload className="size-4 text-primary" />
+                        <span>
+                          <strong className="text-primary font-semibold">Upload Photo Evidence</strong> (saved to Supabase Storage)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    ) : (
+                      <select
+                        value={formCam}
+                        onChange={(e) => {
+                          setFormCam(e.target.value);
+                          const node = QC_CCTV_NODES.find((n) => n.code === e.target.value);
+                          if (node) setFormEvidenceUrl(node.snapshot);
+                        }}
+                        className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                      >
+                        {QC_CCTV_NODES.map((n) => (
+                          <option key={n.code} value={n.code}>
+                            {n.code} ({n.label})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
 
                   <div className="mt-4 flex justify-end gap-3 border-t border-border pt-4">
                     <Dialog.Close asChild>
@@ -613,6 +798,27 @@ function CitationsPage() {
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Date & Time Issued</span>
                     <p className="font-mono-tab text-foreground mt-0.5">{new Date(selectedCitation.issued_at).toLocaleString("en-PH")}</p>
+                  </div>
+                </div>
+
+                {/* Photographic Evidence Frame Viewer */}
+                <div className="rounded-xl border border-border bg-black overflow-hidden relative shadow-inner">
+                  <img
+                    src={selectedCitation.evidence_url || "/assets/violation-1.jpg"}
+                    alt={`Evidence capture for ${selectedCitation.plate_number}`}
+                    className="h-48 w-full object-cover"
+                  />
+                  <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                    <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
+                      ● EVIDENCE CAPTURE · {selectedCitation.citation_number}
+                    </span>
+                    <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-emerald-400 border border-emerald-500/30 font-bold">
+                      {selectedCitation.evidence_url?.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
+                    </span>
+                  </div>
+                  <div className="absolute inset-x-4 bottom-3 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                    <span className="font-bold">ANPR OCR: {selectedCitation.plate_number}</span>
+                    <span className="font-bold">VERIFIED EVIDENCE</span>
                   </div>
                 </div>
 

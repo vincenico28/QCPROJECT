@@ -177,6 +177,7 @@ export type Database = {
         Row: {
           amount: number;
           citation_number: string;
+          evidence_url: string | null;
           id: string;
           issued_at: string;
           offense: string;
@@ -189,6 +190,7 @@ export type Database = {
         Insert: {
           amount?: number;
           citation_number: string;
+          evidence_url?: string | null;
           id?: string;
           issued_at?: string;
           offense: string;
@@ -201,6 +203,7 @@ export type Database = {
         Update: {
           amount?: number;
           citation_number?: string;
+          evidence_url?: string | null;
           id?: string;
           issued_at?: string;
           offense?: string;

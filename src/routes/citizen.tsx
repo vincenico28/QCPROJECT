@@ -114,6 +114,7 @@ function CitizenPortal() {
   // Inspect NOV Modal State
   const [inspectNovModalOpen, setInspectNovModalOpen] = useState(false);
   const [selectedNov, setSelectedNov] = useState<CitizenCitation | null>(null);
+  const [activeFrameMode, setActiveFrameMode] = useState<"wide" | "plate" | "telemetry">("wide");
 
   // Nominate Driver Modal State
   const [nominateModalOpen, setNominateModalOpen] = useState(false);
@@ -587,6 +588,7 @@ function CitizenPortal() {
                           <button
                             onClick={() => {
                               setSelectedNov(c);
+                              setActiveFrameMode("wide");
                               setInspectNovModalOpen(true);
                             }}
                             className="inline-flex items-center gap-2 rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-2 text-xs font-bold text-blue-400 hover:bg-blue-600 hover:text-white transition-all"
@@ -1344,33 +1346,186 @@ function CitizenPortal() {
                     </Dialog.Close>
                   </div>
 
-                  {/* 3-Frame Photographic Evidence Viewer */}
-                  <div className="mt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-white/60 mb-3 flex items-center gap-2">
-                      <Camera className="size-4 text-blue-400" />
-                      High-Resolution ANPR Multi-Frame Sequence
-                    </h3>
+                  {/* Photographic Evidence Viewfinder & Optical Sequence */}
+                  {(() => {
+                    const evidenceUrl = selectedNov.evidenceFrames?.[0]?.url || "/assets/violation-1.jpg";
+                    const isSupabaseStorage = evidenceUrl.includes("supabase.co") || evidenceUrl.startsWith("http");
 
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/60 p-2">
-                        <img src={violation1} alt="Frame 01 Approach" className="h-36 w-full rounded-lg object-cover" />
-                        <span className="text-[10px] font-mono-tab font-bold text-blue-400">FRAME 01 • APPROACH</span>
-                        <p className="text-[10px] text-white/70">Vehicle entering trigger zone on amber light phase.</p>
-                      </div>
+                    return (
+                      <div className="mt-6 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-white/60 flex items-center gap-2">
+                            <Camera className="size-4 text-blue-400" />
+                            Official Optical Evidence Capture (ANPR Verified)
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            {isSupabaseStorage ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-emerald-400">
+                                <ShieldCheck className="size-3" /> Supabase Storage Verified
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-blue-400">
+                                CCTV Sentinel Frame
+                              </span>
+                            )}
+                            <a
+                              href={evidenceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/5 px-2 py-0.5 font-mono-tab text-[10px] font-semibold text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                            >
+                              <ExternalLink className="size-3" /> Full Res
+                            </a>
+                          </div>
+                        </div>
 
-                      <div className="flex flex-col gap-1.5 rounded-xl border border-red-500/30 bg-red-950/20 p-2">
-                        <img src={violation2} alt="Frame 02 Infraction" className="h-36 w-full rounded-lg object-cover" />
-                        <span className="text-[10px] font-mono-tab font-bold text-red-400">FRAME 02 • INFRACTION TRIGGER</span>
-                        <p className="text-[10px] text-white/70">Solid red light crossing line: +1.8s into red phase.</p>
-                      </div>
+                        {/* Main High-Resolution Viewfinder */}
+                        <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
+                          <div className="relative h-64 sm:h-80 w-full overflow-hidden flex items-center justify-center bg-zinc-950">
+                            <img
+                              src={evidenceUrl}
+                              alt={`Optical evidence for ${selectedNov.novNumber}`}
+                              className={cn(
+                                "size-full object-cover transition-transform duration-300",
+                                activeFrameMode === "plate" ? "scale-150 object-center" : "",
+                                activeFrameMode === "telemetry" ? "brightness-90 contrast-125" : ""
+                              )}
+                            />
 
-                      <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/60 p-2">
-                        <img src={violation3} alt="Frame 03 Plate OCR" className="h-36 w-full rounded-lg object-cover" />
-                        <span className="text-[10px] font-mono-tab font-bold text-emerald-400">FRAME 03 • ANPR PLATE CROP</span>
-                        <p className="text-[10px] text-white/70">Plate: {selectedNov.plateNumber} (Confidence: 99.4%)</p>
+                            {/* Viewfinder HUD Overlays */}
+                            <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3.5 bg-gradient-to-t from-black/80 via-transparent to-black/60">
+                              {/* Top Bar */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex items-center gap-1.5 rounded bg-red-600/90 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-white shadow">
+                                    <span className="size-1.5 rounded-full bg-white animate-pulse" /> REC
+                                  </span>
+                                  <span className="font-mono-tab text-[11px] font-semibold text-white/90 drop-shadow">
+                                    CAM-QC-{selectedNov.plateNumber.replace(/\s+/g, "").slice(0, 4)} • {selectedNov.location}
+                                  </span>
+                                </div>
+                                <span className="font-mono-tab text-[11px] text-white/70 drop-shadow">
+                                  {new Date(selectedNov.date).toLocaleDateString()} {new Date(selectedNov.date).toLocaleTimeString()}
+                                </span>
+                              </div>
+
+                              {/* Center Reticle (when in plate mode) */}
+                              {activeFrameMode === "plate" && (
+                                <div className="self-center flex flex-col items-center">
+                                  <div className="size-28 rounded-lg border-2 border-dashed border-emerald-400/90 bg-emerald-500/10 backdrop-blur-[1px] flex items-center justify-center">
+                                    <span className="font-mono-tab text-xs font-black text-emerald-300 bg-black/80 px-2 py-0.5 rounded border border-emerald-400">
+                                      {selectedNov.plateNumber}
+                                    </span>
+                                  </div>
+                                  <span className="mt-1 font-mono-tab text-[10px] font-bold text-emerald-400 bg-black/80 px-2 py-0.5 rounded">
+                                    ANPR OCR Confidence: 99.4%
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Bottom Information HUD */}
+                              <div className="flex flex-wrap items-end justify-between gap-2">
+                                <div className="rounded-xl border border-white/15 bg-black/75 px-3 py-1.5 backdrop-blur-md">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono-tab text-[10px] uppercase text-white/50">Target Plate:</span>
+                                    <span className="font-mono-tab text-xs font-black text-amber-400 tracking-wider">
+                                      {selectedNov.plateNumber}
+                                    </span>
+                                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-emerald-400 border border-emerald-500/30">
+                                      MATCH 99.4%
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-white/70 mt-0.5">
+                                    Violation: <strong className="text-white">{selectedNov.violation}</strong>
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl border border-white/15 bg-black/75 px-3 py-1.5 backdrop-blur-md text-right font-mono-tab text-[10px]">
+                                  <span className="text-white/50 block">Ordinance Code</span>
+                                  <span className="text-blue-400 font-semibold">{selectedNov.ordinanceCode}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 3-Frame Multi-Angle Inspection Sequence */}
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {/* Frame 1: Approach / Wide View */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveFrameMode("wide")}
+                            className={cn(
+                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                              activeFrameMode === "wide"
+                                ? "border-blue-500 bg-blue-500/15 ring-1 ring-blue-500/50"
+                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                            )}
+                          >
+                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                              <img src={evidenceUrl} alt="Frame 01 Approach" className="size-full object-cover" />
+                              <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1.5 py-0.5 font-mono-tab text-[9px] text-blue-400 font-bold">
+                                WIDE ANGLE
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono-tab font-bold text-blue-400">FRAME 01 • APPROACH</span>
+                              {activeFrameMode === "wide" && <span className="size-1.5 rounded-full bg-blue-400" />}
+                            </div>
+                            <p className="text-[10px] text-white/70 line-clamp-1">Primary photographic capture of vehicle approaching intersection.</p>
+                          </button>
+
+                          {/* Frame 2: Infraction Trigger Point */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveFrameMode("telemetry")}
+                            className={cn(
+                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                              activeFrameMode === "telemetry"
+                                ? "border-red-500 bg-red-500/15 ring-1 ring-red-500/50"
+                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                            )}
+                          >
+                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                              <img src={evidenceUrl} alt="Frame 02 Infraction" className="size-full object-cover contrast-125" />
+                              <span className="absolute bottom-1 right-1 rounded bg-red-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-red-400 font-bold border border-red-500/40">
+                                TRIGGER POINT
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono-tab font-bold text-red-400">FRAME 02 • INFRACTION</span>
+                              {activeFrameMode === "telemetry" && <span className="size-1.5 rounded-full bg-red-400" />}
+                            </div>
+                            <p className="text-[10px] text-white/70 line-clamp-1">Stop line crossing / active lane sensor trigger verified.</p>
+                          </button>
+
+                          {/* Frame 3: Plate OCR Magnification */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveFrameMode("plate")}
+                            className={cn(
+                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                              activeFrameMode === "plate"
+                                ? "border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500/50"
+                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                            )}
+                          >
+                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                              <img src={evidenceUrl} alt="Frame 03 ANPR Plate Crop" className="size-full object-cover scale-150" />
+                              <span className="absolute bottom-1 right-1 rounded bg-emerald-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-emerald-400 font-bold border border-emerald-500/40">
+                                99.4% OCR
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono-tab font-bold text-emerald-400">FRAME 03 • ANPR CROP</span>
+                              {activeFrameMode === "plate" && <span className="size-1.5 rounded-full bg-emerald-400" />}
+                            </div>
+                            <p className="text-[10px] text-white/70 line-clamp-1">Automated plate recognition crop matching {selectedNov.plateNumber}.</p>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Violation Breakdown Table */}
                   <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs">

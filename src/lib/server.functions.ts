@@ -87,7 +87,7 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
 
         return uniqueList.map((c: any) => ({
           ...c,
-          evidence_url: c.violations?.evidence_url || c.evidence_url || "/assets/violation-1.jpg",
+          evidence_url: c.evidence_url || c.violations?.evidence_url || "/assets/violation-1.jpg",
           location: c.violations?.location || c.location || "Quezon City Road Corridor",
         }));
       }
@@ -204,6 +204,8 @@ const citationInsertSchema = z.object({
   status: z.string().default("unpaid").optional(),
   officer_name: z.string().nullable().optional(),
   officerName: z.string().nullable().optional(),
+  evidence_url: z.string().nullable().optional(),
+  evidenceUrl: z.string().nullable().optional(),
 });
 
 export const serverSaveCitation = createServerFn({ method: "POST" })
@@ -222,6 +224,7 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     const vehicleModel = data.vehicle_model || data.vehicleModel || null;
     const officerName = data.officer_name || data.officerName || "QC Enforcer";
     const status = data.status || "unpaid";
+    const evidenceUrl = data.evidence_url || data.evidenceUrl || null;
 
     // 1. DEDUPLICATION: If a citation already exists for this violation, return it idempotently
     if (violationId) {
@@ -237,10 +240,12 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
         console.warn(
           `[serverSaveCitation] Citation already exists for violation ${violationId}: ${existingCitation.citation_number}. Preventing duplicate creation.`
         );
-        // Ensure the violation status is marked confirmed
+        // Ensure the violation status is marked confirmed and evidence synced
+        const updatePayload: { status: string; evidence_url?: string } = { status: "confirmed" };
+        if (evidenceUrl) updatePayload.evidence_url = evidenceUrl;
         await supabaseAdmin
           .from("violations")
-          .update({ status: "confirmed" })
+          .update(updatePayload as any)
           .eq("id", violationId);
 
         return existingCitation;
@@ -278,6 +283,7 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
         amount: data.amount,
         status,
         officer_name: officerName,
+        evidence_url: evidenceUrl,
         issued_at,
       })
       .select()
@@ -291,12 +297,34 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     // Automatically transition violation status to 'confirmed' upon citation creation
     if (violationId) {
       try {
+        const updatePayload: { status: string; evidence_url?: string } = { status: "confirmed" };
+        if (evidenceUrl) updatePayload.evidence_url = evidenceUrl;
         await supabaseAdmin
           .from("violations")
-          .update({ status: "confirmed" })
+          .update(updatePayload as any)
           .eq("id", violationId);
       } catch (vioErr) {
         console.warn("[serverSaveCitation] Could not update violation status to confirmed:", vioErr);
+      }
+    } else if (evidenceUrl) {
+      try {
+        const newVioId = generateUUID();
+        await supabaseAdmin.from("violations").insert({
+          id: newVioId,
+          plate_number: plate,
+          violation_type: data.offense,
+          location: "Quezon City Road Corridor",
+          confidence: 100,
+          status: "confirmed",
+          evidence_url: evidenceUrl,
+          ai_detected: false,
+          camera_code: "FIELD-OVR",
+          detected_at: issued_at,
+          created_at: issued_at,
+        });
+        await supabaseAdmin.from("citations").update({ violation_id: newVioId }).eq("id", id);
+      } catch (vioErr) {
+        console.warn("[serverSaveCitation] Could not create linked violation record for direct citation:", vioErr);
       }
     }
 
@@ -1330,7 +1358,7 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           ltoAlarmStatus: isPaid ? ("CLEARED" as const) : ("LTO_ALARM_ACTIVE" as const),
           evidenceFrames: [
             {
-              url: cmd.violations?.evidence_url || "/assets/violation-1.jpg",
+              url: cmd.evidence_url || cmd.violations?.evidence_url || "/assets/violation-1.jpg",
               label: `Optical Sentinel Capture: ${cmd.offense}`,
               timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
             },

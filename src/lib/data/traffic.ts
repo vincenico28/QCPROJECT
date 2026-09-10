@@ -45,6 +45,7 @@ export type Citation = {
   amount: number;
   status: string;
   officer_name: string | null;
+  evidence_url?: string | null;
   issued_at: string;
 };
 
@@ -285,6 +286,7 @@ export function useCreateCitation() {
           amount: input.amount,
           status: "unpaid",
           officer_name: input.officer_name || "QC Enforcer",
+          evidence_url: input.evidence_url || null,
         },
       });
 

@@ -196,6 +196,19 @@ function ViolationsPage() {
       const cleanPlate = manualPlate.toUpperCase().trim();
       const initialStatus = autoIssueCitation ? "confirmed" : "pending";
 
+      let finalEvidenceUrl = manualEvidenceUrl;
+      if (evidenceSource === "upload" && manualEvidenceUrl) {
+        try {
+          const { uploadEvidenceToSupabase } = await import("@/lib/storage");
+          finalEvidenceUrl = await uploadEvidenceToSupabase(manualEvidenceUrl, {
+            plateNumber: cleanPlate,
+            category: manualType,
+          });
+        } catch (uploadErr) {
+          console.warn("[Storage] Fallback to direct evidence URL", uploadErr);
+        }
+      }
+
       const savedViolation = await serverSaveViolation({
         data: {
           plate_number: cleanPlate,
@@ -208,8 +221,8 @@ function ViolationsPage() {
           cameraCode: manualCam,
           ai_detected: false,
           aiDetected: false,
-          evidence_url: manualEvidenceUrl,
-          evidenceUrl: manualEvidenceUrl,
+          evidence_url: finalEvidenceUrl,
+          evidenceUrl: finalEvidenceUrl,
           status: initialStatus,
         },
       });
@@ -225,6 +238,7 @@ function ViolationsPage() {
             offense: manualType,
             amount: fineAmount,
             officer_name: "Field Traffic Enforcer",
+            evidence_url: finalEvidenceUrl,
             status: "unpaid",
           },
         });
