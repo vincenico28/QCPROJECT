@@ -59,6 +59,7 @@ import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
+import { getPrimaryEvidenceUrl, parseEvidenceUrls } from "@/lib/storage";
 
 export const Route = createFileRoute("/officers/$badge")({
   head: ({ params }) => ({
@@ -1083,16 +1084,19 @@ export function OfficerDetailPage() {
               {/* Photo Evidence Frame */}
               <div className="mt-4 rounded-xl border border-border bg-black overflow-hidden relative shadow-inner">
                 <img
-                  src={selectedCitation.evidence_url || "/assets/violation-1.jpg"}
+                  src={getPrimaryEvidenceUrl(selectedCitation.evidence_url)}
                   alt={`Evidence capture for ${selectedCitation.plate_number}`}
                   className="h-44 w-full object-cover"
                 />
                 <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
                   <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
                     ● OFFICER CAPTURE · {selectedCitation.citation_number}
+                    {parseEvidenceUrls(selectedCitation.evidence_url).length > 1 && (
+                      <span> ({parseEvidenceUrls(selectedCitation.evidence_url).length} frames)</span>
+                    )}
                   </span>
                   <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-emerald-400 border border-emerald-500/30 font-bold">
-                    {selectedCitation.evidence_url?.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
+                    {getPrimaryEvidenceUrl(selectedCitation.evidence_url)?.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
                   </span>
                 </div>
                 <div className="absolute inset-x-3 bottom-2 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
@@ -1155,7 +1159,7 @@ export function OfficerDetailPage() {
                 </button>
                 {selectedCitation.evidence_url && (
                   <a
-                    href={selectedCitation.evidence_url}
+                    href={getPrimaryEvidenceUrl(selectedCitation.evidence_url)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated text-primary"

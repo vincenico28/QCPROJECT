@@ -83,3 +83,72 @@ export async function uploadEvidenceToSupabase(
   if (typeof evidence === "string") return evidence;
   return "/assets/violation-1.jpg";
 }
+
+/**
+ * Concurrently uploads multiple evidence frames to Supabase Storage.
+ * Returns array of public CDN URLs.
+ */
+export async function uploadMultipleEvidenceToSupabase(
+  evidenceList: (File | Blob | string)[],
+  options: UploadEvidenceOptions = {},
+): Promise<string[]> {
+  if (!evidenceList || evidenceList.length === 0) {
+    return [];
+  }
+  return Promise.all(
+    evidenceList.map((item) => uploadEvidenceToSupabase(item, options))
+  );
+}
+
+/**
+ * Serializes an array of evidence URLs into a string for storage in citations.evidence_url.
+ * If 1 URL is provided, returns that URL directly.
+ * If multiple URLs are provided, serializes as a JSON array string.
+ */
+export function serializeEvidenceUrls(urls: string[]): string {
+  const valid = urls.filter((u) => u && typeof u === "string" && u.trim().length > 0);
+  if (valid.length === 0) return "/assets/violation-1.jpg";
+  if (valid.length === 1) return valid[0];
+  return JSON.stringify(valid);
+}
+
+/**
+ * Parses citations.evidence_url into an array of URLs.
+ * Gracefully handles:
+ * - JSON array string: '["https://...", "https://..."]'
+ * - Comma or pipe-separated URLs
+ * - Plain single URL string
+ * - Null/undefined/empty: returns fallback default
+ */
+export function parseEvidenceUrls(raw: string | null | undefined): string[] {
+  if (!raw) return ["/assets/violation-1.jpg"];
+  const trimmed = raw.trim();
+  if (!trimmed) return ["/assets/violation-1.jpg"];
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const filtered = parsed.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+        if (filtered.length > 0) return filtered;
+      }
+    } catch {
+      // ignore json parse error, fall through
+    }
+  }
+
+  if (trimmed.includes(" || ")) {
+    return trimmed.split(" || ").map((s) => s.trim()).filter(Boolean);
+  }
+
+  return [trimmed];
+}
+
+/**
+ * Returns the primary (first) evidence URL from a raw evidence_url string.
+ */
+export function getPrimaryEvidenceUrl(raw: string | null | undefined): string {
+  const list = parseEvidenceUrls(raw);
+  return list[0] || "/assets/violation-1.jpg";
+}
+

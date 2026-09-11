@@ -25,6 +25,7 @@ import { lookupCitation, type PublicCitation } from "@/lib/citation-lookup.funct
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
+import { parseEvidenceUrls } from "@/lib/storage";
 
 export const Route = createFileRoute("/lookup")({
   head: () => ({
@@ -268,6 +269,7 @@ function LookupPage() {
 
 function CitationCard({ citation }: { citation: PublicCitation }) {
   const [showEvidence, setShowEvidence] = useState(false);
+  const [activeFrameIndex, setActiveFrameIndex] = useState(0);
 
   const isPaid = citation.status === "paid";
   const isContested = citation.status === "contested";
@@ -377,26 +379,55 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
           </span>
         </button>
 
-        {showEvidence && (
-          <div className="p-4 pt-0 border-t border-border/50">
-            <div className="relative overflow-hidden rounded-xl border border-border bg-black mt-3">
-              <img
-                src={citation.evidence_url || "/assets/violation-1.jpg"}
-                alt="Violation photographic evidence"
-                className="w-full max-h-72 object-cover"
-              />
-              <div className="absolute top-2 left-2 rounded-lg bg-black/80 px-2.5 py-1 font-mono-tab text-[10px] text-white border border-white/10 backdrop-blur-sm">
-                ANPR MATCH: <strong className="text-emerald-400">{citation.plate_number}</strong> (99.4% Optical Conf.)
+        {showEvidence && (() => {
+          const frames = parseEvidenceUrls(citation.evidence_url);
+          const activeUrl = frames[activeFrameIndex] || frames[0] || "/assets/violation-1.jpg";
+          return (
+            <div className="p-4 pt-0 border-t border-border/50">
+              <div className="relative overflow-hidden rounded-xl border border-border bg-black mt-3">
+                <img
+                  src={activeUrl}
+                  alt="Violation photographic evidence"
+                  className="w-full max-h-72 object-cover"
+                />
+                <div className="absolute top-2 left-2 rounded-lg bg-black/80 px-2.5 py-1 font-mono-tab text-[10px] text-white border border-white/10 backdrop-blur-sm">
+                  ANPR MATCH: <strong className="text-emerald-400">{citation.plate_number}</strong> (99.4% Optical Conf.)
+                  {frames.length > 1 && ` · Frame ${activeFrameIndex + 1} of ${frames.length}`}
+                </div>
+                <div className="absolute bottom-2 right-2 rounded-lg bg-black/80 px-2.5 py-1 font-mono-tab text-[10px] text-muted-foreground border border-white/10 backdrop-blur-sm">
+                  {citation.location || "QC Sentinel Node #04"} · T+0.0s Event Record
+                </div>
               </div>
-              <div className="absolute bottom-2 right-2 rounded-lg bg-black/80 px-2.5 py-1 font-mono-tab text-[10px] text-muted-foreground border border-white/10 backdrop-blur-sm">
-                {citation.location || "QC Sentinel Node #04"} · T+0.0s Event Record
-              </div>
+
+              {frames.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pt-2 justify-center">
+                  {frames.map((frameUrl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveFrameIndex(idx)}
+                      className={cn(
+                        "relative h-12 w-16 overflow-hidden rounded-lg border-2 transition-all",
+                        activeFrameIndex === idx
+                          ? "border-primary ring-2 ring-primary/40"
+                          : "border-border opacity-70 hover:opacity-100"
+                      )}
+                    >
+                      <img src={frameUrl} alt={`Frame ${idx + 1}`} className="size-full object-cover" />
+                      <span className="absolute bottom-0.5 right-0.5 rounded bg-black/85 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-white">
+                        #{idx + 1}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-2 text-[11px] text-subtle text-center">
+                Official timestamped frame recorded by Quezon City High-Definition Traffic Sentinel Camera.
+              </p>
             </div>
-            <p className="mt-2 text-[11px] text-subtle text-center">
-              Official timestamped frame recorded by Quezon City High-Definition Traffic Sentinel Camera.
-            </p>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Action Buttons */}

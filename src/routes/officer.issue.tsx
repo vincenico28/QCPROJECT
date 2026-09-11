@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -14,11 +14,16 @@ import {
   Sparkles,
   Upload,
   Trash2,
+  Plus,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { fineFor } from "@/lib/data/review";
-import { uploadEvidenceToSupabase } from "@/lib/storage";
+import { uploadMultipleEvidenceToSupabase, serializeEvidenceUrls } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/issue")({
@@ -27,6 +32,21 @@ export const Route = createFileRoute("/officer/issue")({
   }),
   component: IssuePage,
 });
+
+export type CitationViolationItem = {
+  id: string;
+  offense: string;
+  amount: number;
+  isCustom: boolean;
+  customText: string;
+};
+
+export type EvidenceItem = {
+  id: string;
+  url: string;
+  fileName: string;
+  sizeKb: number;
+};
 
 const OFFENSES = [
   "Illegal Parking",
@@ -41,33 +61,8 @@ const OFFENSES = [
   "Number Coding",
 ];
 
-function IssuePage() {
-  const { user } = useAuth();
-  const createCitation = useCreateCitation();
-
-  const [plate, setPlate] = useState("");
-  const [model, setModel] = useState("");
-  const [offense, setOffense] = useState(OFFENSES[0]);
-  const [isCustomOffense, setIsCustomOffense] = useState(false);
-  const [customOffenseText, setCustomOffenseText] = useState("");
-  const [amount, setAmount] = useState(fineFor(OFFENSES[0]));
-  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
-  const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
-  const [evidenceSizeKb, setEvidenceSizeKb] = useState<number | null>(null);
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
-
-  const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please attach an image file (PNG, JPG, WebP)");
-      return;
-    }
-
-    setIsCompressing(true);
+const compressImageFile = (file: File): Promise<{ url: string; sizeKb: number }> => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -95,41 +90,162 @@ function IssuePage() {
           ctx.drawImage(img, 0, 0, width, height);
           const compressed = canvas.toDataURL("image/jpeg", 0.82);
           const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
-          setEvidenceUrl(compressed);
-          setEvidenceFileName(file.name);
-          setEvidenceSizeKb(sizeKb);
-          setIsCompressing(false);
-          toast.success("Officer Camera Frame Attached", {
-            description: `${file.name} compressed to ${sizeKb} KB HD frame.`,
-          });
+          resolve({ url: compressed, sizeKb });
+        } else {
+          reject(new Error("Canvas context failed"));
         }
       };
+      img.onerror = reject;
       img.src = event.target?.result as string;
     };
+    reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+};
+
+function IssuePage() {
+  const { user } = useAuth();
+  const createCitation = useCreateCitation();
+
+  const [plate, setPlate] = useState("");
+  const [model, setModel] = useState("");
+  const [violationItems, setViolationItems] = useState<CitationViolationItem[]>([
+    {
+      id: "item-1",
+      offense: OFFENSES[0],
+      amount: fineFor(OFFENSES[0]),
+      isCustom: false,
+      customText: "",
+    },
+  ]);
+  const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
+  const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState(0);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
+
+  const totalAmount = useMemo(() => {
+    return violationItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+  }, [violationItems]);
+
+  const totalEvidenceKb = useMemo(() => {
+    return evidenceItems.reduce((acc, item) => acc + (item.sizeKb || 0), 0);
+  }, [evidenceItems]);
+
+  const addViolationItem = () => {
+    const nextOffense = OFFENSES.find((o) => !violationItems.some((item) => item.offense === o)) || OFFENSES[0];
+    setViolationItems((prev) => [
+      ...prev,
+      {
+        id: `v-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        offense: nextOffense,
+        amount: fineFor(nextOffense),
+        isCustom: false,
+        customText: "",
+      },
+    ]);
+  };
+
+  const removeViolationItem = (id: string) => {
+    if (violationItems.length <= 1) return;
+    setViolationItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const updateViolationItem = (id: string, updates: Partial<CitationViolationItem>) => {
+    setViolationItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, ...updates };
+        if (updates.offense && updates.offense !== item.offense && !updated.isCustom) {
+          updated.amount = fineFor(updates.offense);
+        }
+        return updated;
+      }),
+    );
+  };
+
+  const handleEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (validFiles.length === 0) {
+      toast.error("Please attach valid image files (PNG, JPG, WebP)");
+      return;
+    }
+
+    setIsCompressing(true);
+    try {
+      const newItems: EvidenceItem[] = [];
+      for (const file of validFiles) {
+        const { url, sizeKb } = await compressImageFile(file);
+        newItems.push({
+          id: `ev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          url,
+          fileName: file.name,
+          sizeKb,
+        });
+      }
+
+      setEvidenceItems((prev) => {
+        const updated = [...prev, ...newItems];
+        setSelectedEvidenceIndex(updated.length - 1);
+        return updated;
+      });
+
+      toast.success(
+        validFiles.length === 1
+          ? `Evidence Frame Attached (${newItems[0].sizeKb} KB)`
+          : `${validFiles.length} Evidence Frames Attached`
+      );
+    } catch (err) {
+      console.error("Image compression error", err);
+      toast.error("Failed to process attached photo(s)");
+    } finally {
+      setIsCompressing(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeEvidenceItem = (id: string) => {
+    setEvidenceItems((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      setSelectedEvidenceIndex((curr) => (curr >= next.length ? Math.max(0, next.length - 1) : curr));
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plate) return;
 
-    let finalEvidenceUrl = evidenceUrl;
-    const finalOffense = isCustomOffense ? customOffenseText.trim() : offense;
-    if (!finalOffense) {
-      toast.error("Please enter or select a violation classification");
+    const offenseNames = violationItems
+      .map((item) => (item.isCustom ? item.customText.trim() : item.offense.trim()))
+      .filter(Boolean);
+
+    if (offenseNames.length === 0) {
+      toast.error("Please enter or select at least one violation classification");
       return;
     }
 
-    if (evidenceUrl) {
+    const combinedOffense = offenseNames.join(", ");
+
+    let finalEvidenceUrl: string | null = null;
+    if (evidenceItems.length > 0) {
       setIsUploading(true);
       try {
-        finalEvidenceUrl = await uploadEvidenceToSupabase(evidenceUrl, {
-          plateNumber: plate,
-          category: finalOffense,
-          folder: "officer_apprehensions",
-        });
+        const uploadedUrls = await uploadMultipleEvidenceToSupabase(
+          evidenceItems.map((item) => item.url),
+          {
+            plateNumber: plate,
+            category: combinedOffense,
+            folder: "officer_apprehensions",
+          }
+        );
+        finalEvidenceUrl = serializeEvidenceUrls(uploadedUrls);
       } catch (err) {
         console.warn("Storage upload fallback:", err);
+        finalEvidenceUrl = serializeEvidenceUrls(evidenceItems.map((item) => item.url));
       } finally {
         setIsUploading(false);
       }
@@ -140,23 +256,31 @@ function IssuePage() {
         violation_id: null,
         plate_number: plate,
         vehicle_model: model || null,
-        offense: finalOffense,
-        amount,
+        offense: combinedOffense,
+        amount: totalAmount,
         officer_name: user?.email ?? "Enforcement Officer",
         evidence_url: finalEvidenceUrl,
         location: "Quezon City Road Apprehension",
       },
       {
         onSuccess: (data) => {
-          toast.success(`Citation #${data.citation_number} issued for ${plate}`);
+          toast.success(`Citation #${data.citation_number} issued for ${plate}`, {
+            description: `${offenseNames.length} violation(s) charged · ${evidenceItems.length} evidence photo(s) · Total: ${formatPeso(totalAmount)}`,
+          });
           setLastIssuedNumber(data.citation_number);
           setPlate("");
           setModel("");
-          setIsCustomOffense(false);
-          setCustomOffenseText("");
-          setEvidenceUrl(null);
-          setEvidenceFileName(null);
-          setEvidenceSizeKb(null);
+          setViolationItems([
+            {
+              id: "item-1",
+              offense: OFFENSES[0],
+              amount: fineFor(OFFENSES[0]),
+              isCustom: false,
+              customText: "",
+            },
+          ]);
+          setEvidenceItems([]);
+          setSelectedEvidenceIndex(0);
         },
         onError: (err) => toast.error(err.message),
       }
@@ -241,157 +365,319 @@ function IssuePage() {
           />
         </div>
 
-        {/* Violation Classification */}
-        <div className="flex flex-col gap-1.5">
+        {/* Multi-Violation & Assessed Penalties Section */}
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
-              Violation Classification *
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab flex items-center gap-1.5">
+                <Layers className="size-3.5 text-primary" />
+                Charged Violations ({violationItems.length})
+              </label>
+              {violationItems.length > 1 && (
+                <span className="rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
+                  Multi-Offense
+                </span>
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => {
-                setIsCustomOffense(!isCustomOffense);
-              }}
-              className={cn(
-                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-all flex items-center gap-1",
-                isCustomOffense
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-panel border-border text-muted-foreground hover:text-foreground"
-              )}
+              onClick={addViolationItem}
+              className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-primary/20 transition-all shadow-sm"
             >
-              <Sparkles className="size-3" />
-              {isCustomOffense ? "Use Standard List" : "+ Custom Classification"}
+              <Plus className="size-3" />
+              Add Violation
             </button>
           </div>
 
-          {isCustomOffense ? (
-            <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
-              <input
-                type="text"
-                required
-                value={customOffenseText}
-                onChange={(e) => setCustomOffenseText(e.target.value)}
-                placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
-                className="rounded-xl border border-primary/50 bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
-              />
-              <span className="text-[10px] text-muted-foreground">
-                Enter custom QC ordinance, MMDA violation code, or special classification.
-              </span>
-            </div>
-          ) : (
-            <select
-              value={offense}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "__custom__") {
-                  setIsCustomOffense(true);
-                } else {
-                  setOffense(val);
-                  setAmount(fineFor(val));
-                }
-              }}
-              className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
-            >
-              {OFFENSES.map((o) => (
-                <option key={o} value={o}>
-                  {o} (₱{fineFor(o).toLocaleString()})
-                </option>
-              ))}
-              <option value="__custom__">★ Other / Custom Violation...</option>
-            </select>
-          )}
-        </div>
-
-        {/* Assessed Penalty Amount (PHP) */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
-              Assessed Penalty Amount (PHP) *
-            </label>
-            <span className="text-xs font-mono-tab font-bold text-primary">
-              ₱{Number(amount || 0).toLocaleString()}
-            </span>
-          </div>
-
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground font-mono-tab">
-              ₱
-            </span>
-            <input
-              type="number"
-              required
-              min={100}
-              step={50}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full rounded-xl border border-border bg-panel-elevated pl-8 pr-3.5 py-2.5 text-sm font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
-            />
-          </div>
-
-          {/* Quick Preset Buttons */}
-          <div className="flex items-center gap-1.5 flex-wrap pt-1">
-            <span className="text-[10px] text-muted-foreground font-mono-tab">Presets:</span>
-            {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setAmount(preset)}
-                className={cn(
-                  "rounded-lg px-2.5 py-1 text-[11px] font-mono-tab font-semibold border transition-all",
-                  amount === preset
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                    : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
-                )}
+          {/* List of Violation Items */}
+          <div className="flex flex-col gap-3">
+            {violationItems.map((item, index) => (
+              <div
+                key={item.id}
+                className="rounded-2xl border border-border bg-panel-elevated/80 p-4 shadow-sm flex flex-col gap-3 transition-all relative"
               >
-                ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
-              </button>
+                <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md bg-white/10 px-2 py-0.5 font-mono-tab text-[10px] font-black text-foreground">
+                      #{index + 1}
+                    </span>
+                    <span className="text-xs font-bold text-foreground truncate max-w-[200px]">
+                      {item.isCustom
+                        ? item.customText || "Custom Violation"
+                        : item.offense}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateViolationItem(item.id, { isCustom: !item.isCustom })}
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded border transition-all flex items-center gap-1",
+                        item.isCustom
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-panel border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Sparkles className="size-2.5" />
+                      {item.isCustom ? "Standard List" : "+ Custom"}
+                    </button>
+
+                    {violationItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeViolationItem(item.id)}
+                        className="rounded p-1 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remove this violation"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Classification Picker */}
+                {item.isCustom ? (
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="text"
+                      required
+                      value={item.customText}
+                      onChange={(e) => updateViolationItem(item.id, { customText: e.target.value })}
+                      placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
+                      className="rounded-xl border border-primary/50 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                    />
+                    <span className="text-[10px] text-muted-foreground">
+                      Custom local ordinance, MMDA regulation, or special citation code.
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={item.offense}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__custom__") {
+                        updateViolationItem(item.id, { isCustom: true });
+                      } else {
+                        updateViolationItem(item.id, { offense: val });
+                      }
+                    }}
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    {OFFENSES.map((o) => (
+                      <option key={o} value={o}>
+                        {o} (₱{fineFor(o).toLocaleString()})
+                      </option>
+                    ))}
+                    <option value="__custom__">★ Other / Custom Violation...</option>
+                  </select>
+                )}
+
+                {/* Fine Amount & Presets */}
+                <div className="flex flex-col gap-1.5 pt-1 border-t border-border/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-subtle font-mono-tab">
+                      Penalty Fine (PHP)
+                    </span>
+                    <span className="text-xs font-mono-tab font-bold text-primary">
+                      ₱{Number(item.amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono-tab">
+                      ₱
+                    </span>
+                    <input
+                      type="number"
+                      required
+                      min={100}
+                      step={50}
+                      value={item.amount}
+                      onChange={(e) => updateViolationItem(item.id, { amount: Number(e.target.value) })}
+                      className="w-full rounded-xl border border-border bg-background pl-7 pr-3 py-1.5 text-xs font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => updateViolationItem(item.id, { amount: preset })}
+                        className={cn(
+                          "rounded px-2 py-0.5 text-[10px] font-mono-tab font-semibold border transition-all",
+                          item.amount === preset
+                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                            : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
+                        )}
+                      >
+                        ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
+
+          {/* Quick Add Violation Button */}
+          <button
+            type="button"
+            onClick={addViolationItem}
+            className="w-full rounded-xl border border-dashed border-border py-2 text-xs font-bold text-muted-foreground hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all flex items-center justify-center gap-1.5"
+          >
+            <Plus className="size-3.5" />
+            Add Another Violation to Citation Ticket
+          </button>
+
+          {/* Combined Total Summary Card */}
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3.5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle">
+                Total Combined Statutory Penalty
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {violationItems.length} {violationItems.length === 1 ? "violation" : "violations"} charged on single citation slip
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="font-mono-tab text-lg font-black text-primary">
+                ₱{totalAmount.toLocaleString()}
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Evidence Photo Attachment */}
-        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-panel-elevated/60 p-3.5">
+        {/* Evidence Photo Attachment (Multiple Frames) */}
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-panel-elevated/60 p-3.5">
           <div className="flex items-center justify-between">
             <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold flex items-center gap-1.5">
-              <Camera className="size-3.5 text-primary" /> Body-Cam / CCTV Evidence Attachment
+              <Camera className="size-3.5 text-primary" /> Body-Cam / Evidence Attachment
             </span>
-            {evidenceUrl && (
+            {evidenceItems.length > 0 && (
               <span className="text-[10px] font-mono-tab text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                1 Frame Attached ({evidenceSizeKb} KB)
+                {evidenceItems.length} {evidenceItems.length === 1 ? "Frame" : "Frames"} Attached ({totalEvidenceKb} KB)
               </span>
             )}
           </div>
 
-          {evidenceUrl ? (
-            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black">
-              <img src={evidenceUrl} alt="Evidence Frame" className="size-full object-cover" />
-              <div className="absolute inset-x-2 bottom-2 flex items-center justify-between bg-black/70 backdrop-blur-sm p-2 rounded-lg text-[10px] text-white">
-                <span className="truncate max-w-[200px] font-medium text-white/90">{evidenceFileName || "Snapshot Frame"}</span>
+          {evidenceItems.length > 0 ? (
+            <div className="flex flex-col gap-2.5">
+              {/* Active High-Definition Frame Preview */}
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner group">
+                <img
+                  src={evidenceItems[selectedEvidenceIndex]?.url}
+                  alt={`Evidence frame ${selectedEvidenceIndex + 1}`}
+                  className="size-full object-cover"
+                />
+
+                {/* Top Overlay Badge */}
+                <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                  <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                    ● FRAME {selectedEvidenceIndex + 1} OF {evidenceItems.length} · {plate || "UNREGISTERED"}
+                  </span>
+                  <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10 truncate max-w-[140px]">
+                    {evidenceItems[selectedEvidenceIndex]?.fileName}
+                  </span>
+                </div>
+
+                {/* Left/Right Arrow Overlays when multiple frames exist */}
+                {evidenceItems.length > 1 && (
+                  <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEvidenceIndex((prev) =>
+                          prev > 0 ? prev - 1 : evidenceItems.length - 1
+                        )
+                      }
+                      className="pointer-events-auto rounded-full bg-black/70 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                      title="Previous frame"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEvidenceIndex((prev) =>
+                          prev < evidenceItems.length - 1 ? prev + 1 : 0
+                        )
+                      }
+                      className="pointer-events-auto rounded-full bg-black/70 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                      title="Next frame"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Bottom Overlay Status */}
+                <div className="absolute inset-x-4 bottom-3 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                  <span className="font-bold">ANPR OCR: {plate || "PENDING"}</span>
+                  <span className="font-bold">{evidenceItems[selectedEvidenceIndex]?.sizeKb} KB OPTIMIZED</span>
+                </div>
+
+                {/* Remove active frame */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setEvidenceUrl(null);
-                    setEvidenceFileName(null);
-                    setEvidenceSizeKb(null);
-                    toast.info("Evidence frame removed");
-                  }}
-                  className="rounded px-2 py-0.5 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors font-semibold flex items-center gap-1"
+                  onClick={() => removeEvidenceItem(evidenceItems[selectedEvidenceIndex]?.id)}
+                  className="absolute right-3 bottom-3 rounded-lg bg-red-500/80 hover:bg-red-500 text-white p-1.5 shadow transition-all pointer-events-auto z-10"
+                  title="Remove this frame"
                 >
-                  <Trash2 className="size-3" /> Remove
+                  <Trash2 className="size-3.5" />
                 </button>
+              </div>
+
+              {/* Thumbnails Strip & Add Frame Button */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {evidenceItems.map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedEvidenceIndex(idx)}
+                    className={cn(
+                      "relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all group",
+                      selectedEvidenceIndex === idx
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-border opacity-70 hover:opacity-100"
+                    )}
+                  >
+                    <img src={item.url} alt={`Thumb ${idx + 1}`} className="size-full object-cover" />
+                    <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-white">
+                      #{idx + 1}
+                    </span>
+                  </button>
+                ))}
+
+                {/* Add another photo frame */}
+                <label className="cursor-pointer flex h-14 w-20 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10 transition-all">
+                  <Plus className="size-4" />
+                  <span className="text-[9px] font-bold mt-0.5">+ Photo</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleEvidenceUpload}
+                    disabled={isCompressing}
+                    className="hidden"
+                  />
+                </label>
               </div>
             </div>
           ) : (
             <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-panel p-4 text-center hover:border-primary transition-all">
               <Upload className="size-5 text-primary" />
               <span className="text-xs font-semibold text-foreground">
-                {isCompressing ? "Processing photo..." : "Attach Photo / Body Camera Snapshot"}
+                {isCompressing ? "Processing photo(s)..." : "Attach Evidence Photos / Body-Cam Frames"}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                Auto-optimized to HD format & synced to QC central enforcement database.
+                Supports multiple frames (vehicle angle, plate close-up, driver perspective). Auto-optimized.
               </span>
               <input
                 type="file"
+                multiple
                 accept="image/*"
                 onChange={handleEvidenceUpload}
                 disabled={isCompressing}
@@ -408,10 +694,11 @@ function IssuePage() {
         >
           {(createCitation.isPending || isUploading) && <Loader2 className="size-4 animate-spin" />}
           {isUploading
-            ? "Uploading Evidence..."
-            : `Issue Digital Citation (${formatPeso(amount).replace("PHP", "₱")})`}
+            ? `Uploading ${evidenceItems.length} Evidence Photo(s)...`
+            : `Issue Digital Citation (${violationItems.length > 1 ? `${violationItems.length} Violations · ` : ""}${evidenceItems.length > 0 ? `${evidenceItems.length} Photo${evidenceItems.length > 1 ? "s" : ""} · ` : ""}${formatPeso(totalAmount).replace("PHP", "₱")})`}
         </button>
       </form>
     </div>
   );
 }
+

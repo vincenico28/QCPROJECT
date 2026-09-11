@@ -32,9 +32,18 @@ import {
   Upload,
   ScanLine,
   Sparkles,
+  Layers,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
+import {
+  uploadMultipleEvidenceToSupabase,
+  serializeEvidenceUrls,
+  parseEvidenceUrls,
+} from "@/lib/storage";
 
 export const Route = createFileRoute("/citations")({
   head: () => ({
@@ -55,6 +64,76 @@ export const Route = createFileRoute("/citations")({
   }),
   component: CitationsPage,
 });
+
+export type CitationViolationItem = {
+  id: string;
+  offense: string;
+  amount: number;
+  isCustom: boolean;
+  customText: string;
+};
+
+export type FormEvidenceItem = {
+  id: string;
+  url: string;
+  fileName: string;
+  sizeKb: number;
+};
+
+const compressImageFile = (file: File): Promise<{ url: string; sizeKb: number }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1280;
+        const maxHeight = 960;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.82);
+          const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+          resolve({ url: compressed, sizeKb });
+        } else {
+          reject(new Error("Canvas context failed"));
+        }
+      };
+      img.onerror = reject;
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+export const STANDARD_OFFENSES = [
+  "Illegal Parking",
+  "Red Light",
+  "Counterflow",
+  "Yellow Box Infraction",
+  "Bus Lane Violation",
+  "No Helmet",
+  "Overspeeding",
+  "Obstruction",
+  "No Entry Zone",
+  "Number Coding",
+];
 
 const STATUSES = ["all", "unpaid", "paid", "contested", "overdue"] as const;
 type StatusFilter = (typeof STATUSES)[number];
@@ -84,11 +163,53 @@ function CitationsPage() {
   // Form State for Direct Citation
   const [formPlate, setFormPlate] = useState("");
   const [formVehicle, setFormVehicle] = useState("");
-  const [formOffense, setFormOffense] = useState("Illegal Parking");
-  const [isCustomOffense, setIsCustomOffense] = useState(false);
-  const [customOffenseText, setCustomOffenseText] = useState("");
-  const [formAmount, setFormAmount] = useState(1000);
+  const [formViolationItems, setFormViolationItems] = useState<CitationViolationItem[]>([
+    {
+      id: "item-1",
+      offense: "Illegal Parking",
+      amount: 1000,
+      isCustom: false,
+      customText: "",
+    },
+  ]);
   const [formOfficer, setFormOfficer] = useState("Sgt. Juan Dela Cruz");
+
+  const totalFormAmount = useMemo(() => {
+    return formViolationItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+  }, [formViolationItems]);
+
+  const addFormViolationItem = () => {
+    const nextOffense =
+      STANDARD_OFFENSES.find((o) => !formViolationItems.some((item) => item.offense === o)) || "Obstruction";
+    setFormViolationItems((prev) => [
+      ...prev,
+      {
+        id: `v-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        offense: nextOffense,
+        amount: fineFor(nextOffense),
+        isCustom: false,
+        customText: "",
+      },
+    ]);
+  };
+
+  const removeFormViolationItem = (id: string) => {
+    if (formViolationItems.length <= 1) return;
+    setFormViolationItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const updateFormViolationItem = (id: string, updates: Partial<CitationViolationItem>) => {
+    setFormViolationItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, ...updates };
+        if (updates.offense && updates.offense !== item.offense && !updated.isCustom) {
+          updated.amount = fineFor(updates.offense);
+        }
+        return updated;
+      }),
+    );
+  };
 
   // Evidence state
   const QC_CCTV_NODES = [
@@ -101,65 +222,66 @@ function CitationsPage() {
   ];
   const [evidenceSource, setEvidenceSource] = useState<"cctv" | "upload">("cctv");
   const [formCam, setFormCam] = useState(QC_CCTV_NODES[0].code);
-  const [formEvidenceUrl, setFormEvidenceUrl] = useState(QC_CCTV_NODES[0].snapshot);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [uploadedFileSizeKb, setUploadedFileSizeKb] = useState<number | null>(null);
+  const [formCctvSnapshot, setFormCctvSnapshot] = useState(QC_CCTV_NODES[0].snapshot);
+  const [formUploadedItems, setFormUploadedItems] = useState<FormEvidenceItem[]>([]);
+  const [selectedUploadIndex, setSelectedUploadIndex] = useState(0);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const [activeSlipFrameIndex, setActiveSlipFrameIndex] = useState(0);
 
   const { data: lookedUpVehicle, isLoading: isLookingUpPlate } = useVehicleLookup(formPlate);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select a valid image file");
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const validFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (validFiles.length === 0) {
+      toast.error("Please select valid image file(s)");
       return;
     }
     try {
       setIsProcessingFile(true);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxWidth = 1280;
-          const maxHeight = 960;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxWidth || height > maxHeight) {
-            if (width / height > maxWidth / maxHeight) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            } else {
-              width = Math.round((width * maxHeight) / height);
-              height = maxHeight;
-            }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL("image/jpeg", 0.82);
-            const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
-            setFormEvidenceUrl(compressed);
-            setUploadedFileName(file.name);
-            setUploadedFileSizeKb(sizeKb);
-            setEvidenceSource("upload");
-            setIsProcessingFile(false);
-            toast.success("Photo Evidence Attached", {
-              description: `${file.name} (${sizeKb} KB) ready to upload to Supabase Storage.`,
-            });
-          }
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+      const newItems: FormEvidenceItem[] = [];
+      for (const file of validFiles) {
+        const { url, sizeKb } = await compressImageFile(file);
+        newItems.push({
+          id: `ev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          url,
+          fileName: file.name,
+          sizeKb,
+        });
+      }
+      setFormUploadedItems((prev) => {
+        const updated = [...prev, ...newItems];
+        setSelectedUploadIndex(updated.length - 1);
+        return updated;
+      });
+      setEvidenceSource("upload");
+      toast.success(
+        validFiles.length === 1
+          ? `Evidence Frame Attached (${newItems[0].sizeKb} KB)`
+          : `${validFiles.length} Evidence Frames Attached`
+      );
     } catch (err) {
+      console.error("Image processing error", err);
+      toast.error("Failed to process image file(s)");
+    } finally {
       setIsProcessingFile(false);
-      toast.error("Failed to process image file");
+      e.target.value = "";
     }
   };
+
+  const removeUploadedItem = (id: string) => {
+    setFormUploadedItems((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      setSelectedUploadIndex((curr) => (curr >= next.length ? Math.max(0, next.length - 1) : curr));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setActiveSlipFrameIndex(0);
+  }, [selectedCitation]);
 
   useEffect(() => {
     if (lookedUpVehicle?.makeModel && !formVehicle) {
@@ -248,49 +370,71 @@ function CitationsPage() {
   const handleCreateDirectCitation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPlate) return;
-    const finalOffense = isCustomOffense ? customOffenseText.trim() : formOffense;
-    if (!finalOffense) {
-      toast.error("Please enter or select a violation classification");
+
+    const offenseNames = formViolationItems
+      .map((item) => (item.isCustom ? item.customText.trim() : item.offense.trim()))
+      .filter(Boolean);
+
+    if (offenseNames.length === 0) {
+      toast.error("Please enter or select at least one violation classification");
       return;
     }
+
+    const combinedOffense = offenseNames.join(", ");
     const finalVehicle = formVehicle.trim() || lookedUpVehicle?.makeModel || null;
     const cleanPlate = formPlate.toUpperCase().trim();
 
-    let finalEvidenceUrl = formEvidenceUrl;
-    if (evidenceSource === "upload" && formEvidenceUrl) {
+    let finalEvidenceUrl: string = formCctvSnapshot;
+    if (evidenceSource === "upload" && formUploadedItems.length > 0) {
+      setIsUploadingEvidence(true);
       try {
-        const { uploadEvidenceToSupabase } = await import("@/lib/storage");
-        finalEvidenceUrl = await uploadEvidenceToSupabase(formEvidenceUrl, {
-          plateNumber: cleanPlate,
-          category: finalOffense,
-          folder: "citations",
-        });
+        const uploadedUrls = await uploadMultipleEvidenceToSupabase(
+          formUploadedItems.map((item) => item.url),
+          {
+            plateNumber: cleanPlate,
+            category: combinedOffense,
+            folder: "citations",
+          }
+        );
+        finalEvidenceUrl = serializeEvidenceUrls(uploadedUrls);
       } catch (uploadErr) {
         console.warn("[Storage] Fallback to direct evidence URL", uploadErr);
+        finalEvidenceUrl = serializeEvidenceUrls(formUploadedItems.map((item) => item.url));
+      } finally {
+        setIsUploadingEvidence(false);
       }
+    } else if (evidenceSource === "cctv") {
+      finalEvidenceUrl = formCctvSnapshot;
     }
 
     createCitation.mutate(
       {
         plate_number: cleanPlate,
         vehicle_model: finalVehicle,
-        offense: finalOffense,
-        amount: formAmount,
+        offense: combinedOffense,
+        amount: totalFormAmount,
         officer_name: formOfficer,
         evidence_url: finalEvidenceUrl,
       },
       {
         onSuccess: (newC) => {
           toast.success(`Citation ${newC.citation_number} issued successfully`, {
-            description: `Plate: ${newC.plate_number} · Evidence stored to Supabase Storage · Amount: ${formatPeso(newC.amount)}`,
+            description: `Plate: ${newC.plate_number} · ${offenseNames.length} violation(s) · Amount: ${formatPeso(newC.amount)}`,
           });
           setCreateModalOpen(false);
           setFormPlate("");
           setFormVehicle("");
-          setIsCustomOffense(false);
-          setCustomOffenseText("");
-          setUploadedFileName(null);
-          setUploadedFileSizeKb(null);
+          setFormViolationItems([
+            {
+              id: "item-1",
+              offense: "Illegal Parking",
+              amount: 1000,
+              isCustom: false,
+              customText: "",
+            },
+          ]);
+          setFormUploadedItems([]);
+          setSelectedUploadIndex(0);
         },
       },
     );
@@ -424,113 +568,188 @@ function CitationsPage() {
                     />
                   </label>
 
-                  {/* Violation Classification */}
-                  <div className="flex flex-col gap-1.5">
+                  {/* Multi-Violation & Assessed Penalties Section */}
+                  <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold">
-                        Violation Classification *
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold flex items-center gap-1.5">
+                          <Layers className="size-3.5 text-primary" />
+                          Charged Violations ({formViolationItems.length})
+                        </span>
+                        {formViolationItems.length > 1 && (
+                          <span className="rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
+                            Multi-Offense
+                          </span>
+                        )}
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => setIsCustomOffense(!isCustomOffense)}
-                        className={cn(
-                          "text-[10px] font-semibold px-2 py-0.5 rounded border transition-all flex items-center gap-1",
-                          isCustomOffense
-                            ? "bg-primary/15 border-primary/40 text-primary"
-                            : "bg-panel border-border text-muted-foreground hover:text-foreground"
-                        )}
+                        onClick={addFormViolationItem}
+                        className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition-all shadow-sm"
                       >
-                        <Sparkles className="size-2.5" />
-                        {isCustomOffense ? "Standard List" : "+ Custom Classification"}
+                        <Plus className="size-3" />
+                        Add Violation
                       </button>
                     </div>
 
-                    {isCustomOffense ? (
-                      <div className="flex flex-col gap-1 animate-in fade-in duration-200">
-                        <input
-                          type="text"
-                          required
-                          value={customOffenseText}
-                          onChange={(e) => setCustomOffenseText(e.target.value)}
-                          placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
-                          className="rounded-lg border border-primary/50 bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
-                        />
+                    {/* List of Form Violation Items */}
+                    <div className="flex flex-col gap-2.5">
+                      {formViolationItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className="rounded-xl border border-border bg-panel-elevated/60 p-3 shadow-sm flex flex-col gap-2.5 transition-all relative"
+                        >
+                          <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono-tab text-[10px] font-black text-foreground">
+                                #{index + 1}
+                              </span>
+                              <span className="text-xs font-bold text-foreground truncate max-w-[180px]">
+                                {item.isCustom
+                                  ? item.customText || "Custom Violation"
+                                  : item.offense}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => updateFormViolationItem(item.id, { isCustom: !item.isCustom })}
+                                className={cn(
+                                  "text-[10px] font-semibold px-2 py-0.5 rounded border transition-all flex items-center gap-1",
+                                  item.isCustom
+                                    ? "bg-primary/15 border-primary/40 text-primary"
+                                    : "bg-panel border-border text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                <Sparkles className="size-2.5" />
+                                {item.isCustom ? "Standard List" : "+ Custom"}
+                              </button>
+
+                              {formViolationItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeFormViolationItem(item.id)}
+                                  className="rounded p-1 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                  title="Remove this violation"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Classification Picker */}
+                          {item.isCustom ? (
+                            <div className="flex flex-col gap-1">
+                              <input
+                                type="text"
+                                required
+                                value={item.customText}
+                                onChange={(e) => updateFormViolationItem(item.id, { customText: e.target.value })}
+                                placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
+                                className="rounded-lg border border-primary/50 bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                              />
+                              <span className="text-[10px] text-muted-foreground">
+                                Enter custom QC ordinance, MMDA violation code, or special classification.
+                              </span>
+                            </div>
+                          ) : (
+                            <select
+                              value={item.offense}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "__custom__") {
+                                  updateFormViolationItem(item.id, { isCustom: true });
+                                } else {
+                                  updateFormViolationItem(item.id, { offense: val });
+                                }
+                              }}
+                              className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                            >
+                              {STANDARD_OFFENSES.map((o) => (
+                                <option key={o} value={o}>
+                                  {o} (₱{fineFor(o).toLocaleString()})
+                                </option>
+                              ))}
+                              <option value="__custom__">★ Other / Custom Violation...</option>
+                            </select>
+                          )}
+
+                          {/* Fine Amount & Presets */}
+                          <div className="flex flex-col gap-1.5 pt-1 border-t border-border/30">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-subtle font-mono-tab">
+                                Penalty Fine (PHP)
+                              </span>
+                              <span className="text-xs font-mono-tab font-bold text-primary">
+                                ₱{Number(item.amount || 0).toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono-tab">
+                                ₱
+                              </span>
+                              <input
+                                type="number"
+                                required
+                                min={100}
+                                step={50}
+                                value={item.amount}
+                                onChange={(e) => updateFormViolationItem(item.id, { amount: Number(e.target.value) })}
+                                className="w-full rounded-lg border border-border bg-background pl-7 pr-3 py-1.5 text-xs font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                              {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => updateFormViolationItem(item.id, { amount: preset })}
+                                  className={cn(
+                                    "rounded px-2 py-0.5 text-[10px] font-mono-tab font-semibold border transition-all",
+                                    item.amount === preset
+                                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                                      : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
+                                  )}
+                                >
+                                  ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Quick Add Violation Button */}
+                    <button
+                      type="button"
+                      onClick={addFormViolationItem}
+                      className="w-full rounded-xl border border-dashed border-border py-2 text-xs font-bold text-muted-foreground hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="size-3.5" />
+                      Add Another Violation to Citation Ticket
+                    </button>
+
+                    {/* Combined Total Summary Card */}
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle">
+                          Total Combined Statutory Penalty
+                        </span>
                         <span className="text-[10px] text-muted-foreground">
-                          Enter custom QC ordinance, MMDA regulation, or special citation classification.
+                          {formViolationItems.length} {formViolationItems.length === 1 ? "violation" : "violations"} charged on single citation slip
                         </span>
                       </div>
-                    ) : (
-                      <select
-                        value={formOffense}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "__custom__") {
-                            setIsCustomOffense(true);
-                          } else {
-                            setFormOffense(val);
-                            setFormAmount(fineFor(val));
-                          }
-                        }}
-                        className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                      >
-                        <option value="Illegal Parking">Illegal Parking (₱1,000)</option>
-                        <option value="Red Light">Red Light / Beating the Red Light (₱2,000)</option>
-                        <option value="Counterflow">Counterflow (₱2,500)</option>
-                        <option value="Yellow Box Infraction">Yellow Box Infraction (₱1,500)</option>
-                        <option value="Bus Lane Violation">Bus Lane Violation (₱5,000)</option>
-                        <option value="No Helmet">No Helmet (₱1,500)</option>
-                        <option value="Overspeeding">Overspeeding (₱3,000)</option>
-                        <option value="Obstruction">Obstruction (₱1,000)</option>
-                        <option value="No Entry Zone">No Entry Zone (₱1,000)</option>
-                        <option value="Number Coding">Number Coding (₱500)</option>
-                        <option value="__custom__">★ Other / Custom Violation...</option>
-                      </select>
-                    )}
-                  </div>
-
-                  {/* Assessed Penalty Amount */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold">
-                        Assessed Penalty Amount (PHP) *
-                      </span>
-                      <span className="font-mono-tab text-xs font-bold text-primary">
-                        ₱{Number(formAmount || 0).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground font-mono-tab">
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        min={100}
-                        step={50}
-                        value={formAmount}
-                        onChange={(e) => setFormAmount(Number(e.target.value))}
-                        className="w-full rounded-lg border border-border bg-background pl-7 pr-3 py-2 text-sm font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Quick Amount Presets */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      <span className="text-[10px] text-muted-foreground font-mono-tab">Presets:</span>
-                      {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setFormAmount(preset)}
-                          className={cn(
-                            "rounded px-2 py-0.5 text-[10px] font-mono-tab font-semibold border transition-all",
-                            formAmount === preset
-                              ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                              : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
-                          )}
-                        >
-                          ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
-                        </button>
-                      ))}
+                      <div className="text-right">
+                        <span className="font-mono-tab text-base font-black text-primary">
+                          ₱{totalFormAmount.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -547,19 +766,15 @@ function CitationsPage() {
                   </label>
 
                   {/* Evidence Attachment Section */}
-                  <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-panel-elevated/40 p-3">
+                  <div className="flex flex-col gap-2.5 rounded-xl border border-white/10 bg-panel-elevated/40 p-3">
                     <div className="flex items-center justify-between">
                       <span className="font-mono-tab text-[10px] uppercase tracking-widest text-foreground font-bold flex items-center gap-1.5">
-                        <Camera className="size-3.5 text-primary" /> CCTV / Photo Evidence Frame
+                        <Camera className="size-3.5 text-primary" /> CCTV / Photo Evidence Attachment
                       </span>
                       <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10 text-[10px]">
                         <button
                           type="button"
-                          onClick={() => {
-                            setEvidenceSource("cctv");
-                            const node = QC_CCTV_NODES.find((n) => n.code === formCam);
-                            if (node) setFormEvidenceUrl(node.snapshot);
-                          }}
+                          onClick={() => setEvidenceSource("cctv")}
                           className={cn(
                             "px-2 py-0.5 rounded font-semibold transition-all",
                             evidenceSource === "cctv" ? "bg-primary text-white" : "text-white/60 hover:text-white"
@@ -575,68 +790,172 @@ function CitationsPage() {
                             evidenceSource === "upload" ? "bg-primary text-white" : "text-white/60 hover:text-white"
                           )}
                         >
-                          Upload Photo
+                          Upload Photos {formUploadedItems.length > 0 && `(${formUploadedItems.length})`}
                         </button>
                       </div>
                     </div>
 
-                    <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner">
-                      <img
-                        src={formEvidenceUrl}
-                        alt="Evidence Frame"
-                        className="size-full object-cover"
-                      />
-                      <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
-                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40">
-                          ● EVIDENCE REC · {formCam}
-                        </span>
-                        <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10">
-                          {new Date().toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="absolute inset-x-4 bottom-2.5 rounded-lg border border-emerald-400/80 bg-black/75 p-1.5 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
-                        <span className="font-bold flex items-center gap-1">
-                          <ScanLine className="size-3" /> ANPR: {formPlate || "PLATE-NUMBER"}
-                        </span>
-                        <span className="font-bold">VERIFIED</span>
-                      </div>
-                      {isProcessingFile && (
-                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white">
-                          <Loader2 className="size-6 animate-spin text-primary" />
-                          <span className="text-xs font-semibold">Processing photo...</span>
+                    {evidenceSource === "cctv" ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner">
+                          <img
+                            src={formCctvSnapshot}
+                            alt="CCTV Node Frame"
+                            className="size-full object-cover"
+                          />
+                          <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                            <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40">
+                              ● EVIDENCE REC · {formCam}
+                            </span>
+                            <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10">
+                              {new Date().toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <div className="absolute inset-x-4 bottom-2.5 rounded-lg border border-emerald-400/80 bg-black/75 p-1.5 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                            <span className="font-bold flex items-center gap-1">
+                              <ScanLine className="size-3" /> ANPR: {formPlate || "PLATE-NUMBER"}
+                            </span>
+                            <span className="font-bold">VERIFIED</span>
+                          </div>
                         </div>
-                      )}
-                    </div>
 
-                    {evidenceSource === "upload" ? (
-                      <label className="cursor-pointer rounded-xl border border-dashed border-primary/40 bg-primary/5 p-2.5 text-center text-xs text-muted-foreground hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center gap-2">
-                        <Upload className="size-4 text-primary" />
-                        <span>
-                          <strong className="text-primary font-semibold">Upload Photo Evidence</strong> (saved to Supabase Storage)
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
+                        <select
+                          value={formCam}
+                          onChange={(e) => {
+                            setFormCam(e.target.value);
+                            const node = QC_CCTV_NODES.find((n) => n.code === e.target.value);
+                            if (node) setFormCctvSnapshot(node.snapshot);
+                          }}
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                        >
+                          {QC_CCTV_NODES.map((n) => (
+                            <option key={n.code} value={n.code}>
+                              {n.code} ({n.label})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     ) : (
-                      <select
-                        value={formCam}
-                        onChange={(e) => {
-                          setFormCam(e.target.value);
-                          const node = QC_CCTV_NODES.find((n) => n.code === e.target.value);
-                          if (node) setFormEvidenceUrl(node.snapshot);
-                        }}
-                        className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
-                      >
-                        {QC_CCTV_NODES.map((n) => (
-                          <option key={n.code} value={n.code}>
-                            {n.code} ({n.label})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex flex-col gap-2.5">
+                        {formUploadedItems.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {/* Active uploaded preview */}
+                            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner group">
+                              <img
+                                src={formUploadedItems[selectedUploadIndex]?.url}
+                                alt={`Uploaded frame ${selectedUploadIndex + 1}`}
+                                className="size-full object-cover"
+                              />
+                              <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                                <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-amber-400 border border-amber-500/30">
+                                  ● FRAME {selectedUploadIndex + 1} OF {formUploadedItems.length}
+                                </span>
+                                <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] text-white/80 border border-white/10 truncate max-w-[130px]">
+                                  {formUploadedItems[selectedUploadIndex]?.fileName}
+                                </span>
+                              </div>
+
+                              {formUploadedItems.length > 1 && (
+                                <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedUploadIndex((prev) =>
+                                        prev > 0 ? prev - 1 : formUploadedItems.length - 1
+                                      )
+                                    }
+                                    className="pointer-events-auto rounded-full bg-black/70 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                                    title="Previous frame"
+                                  >
+                                    <ChevronLeft className="size-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedUploadIndex((prev) =>
+                                        prev < formUploadedItems.length - 1 ? prev + 1 : 0
+                                      )
+                                    }
+                                    className="pointer-events-auto rounded-full bg-black/70 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                                    title="Next frame"
+                                  >
+                                    <ChevronRight className="size-4" />
+                                  </button>
+                                </div>
+                              )}
+
+                              <div className="absolute inset-x-4 bottom-2.5 rounded-lg border border-emerald-400/80 bg-black/75 p-1.5 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                                <span className="font-bold flex items-center gap-1">
+                                  <ScanLine className="size-3" /> ANPR: {formPlate || "PLATE-NUMBER"}
+                                </span>
+                                <span className="font-bold">{formUploadedItems[selectedUploadIndex]?.sizeKb} KB OPTIMIZED</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => removeUploadedItem(formUploadedItems[selectedUploadIndex]?.id)}
+                                className="absolute right-3 bottom-2.5 rounded-lg bg-red-500/80 hover:bg-red-500 text-white p-1.5 shadow transition-all pointer-events-auto z-10"
+                                title="Remove photo"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Thumbnail row */}
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                              {formUploadedItems.map((item, uIdx) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => setSelectedUploadIndex(uIdx)}
+                                  className={cn(
+                                    "relative h-12 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                                    selectedUploadIndex === uIdx
+                                      ? "border-primary ring-2 ring-primary/30"
+                                      : "border-border opacity-70 hover:opacity-100"
+                                  )}
+                                >
+                                  <img src={item.url} alt={`Thumb ${uIdx + 1}`} className="size-full object-cover" />
+                                  <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-white">
+                                    #{uIdx + 1}
+                                  </span>
+                                </button>
+                              ))}
+
+                              <label className="cursor-pointer flex h-12 w-16 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10 transition-all">
+                                <Plus className="size-3.5" />
+                                <span className="text-[8px] font-bold">+ Photo</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/*"
+                                  onChange={handleFileUpload}
+                                  disabled={isProcessingFile}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 text-center text-xs text-muted-foreground hover:border-primary hover:bg-primary/10 transition-all flex flex-col items-center justify-center gap-1.5">
+                            <Upload className="size-5 text-primary" />
+                            <span>
+                              <strong className="text-primary font-semibold">Upload Photo Evidence</strong> (saved to Supabase Storage)
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              Select multiple photos (e.g. angle, plate close-up, wide context). Auto-optimized.
+                            </span>
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              onChange={handleFileUpload}
+                              disabled={isProcessingFile}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -648,11 +967,13 @@ function CitationsPage() {
                     </Dialog.Close>
                     <button
                       type="submit"
-                      disabled={createCitation.isPending || !formPlate}
+                      disabled={createCitation.isPending || isUploadingEvidence || !formPlate}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
                     >
-                      {createCitation.isPending && <Loader2 className="size-3.5 animate-spin" />}
-                      Issue Citation ({formatPeso(formAmount)})
+                      {(createCitation.isPending || isUploadingEvidence) && <Loader2 className="size-3.5 animate-spin" />}
+                      {isUploadingEvidence
+                        ? `Uploading ${formUploadedItems.length} Photo(s)...`
+                        : `Issue Citation (${formViolationItems.length > 1 ? `${formViolationItems.length} Violations · ` : ""}${evidenceSource === "upload" && formUploadedItems.length > 0 ? `${formUploadedItems.length} Photo${formUploadedItems.length > 1 ? "s" : ""} · ` : ""}${formatPeso(totalFormAmount)})`}
                     </button>
                   </div>
                 </form>
@@ -867,12 +1188,43 @@ function CitationsPage() {
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Vehicle Model</span>
                     <p className="font-medium text-foreground mt-0.5">{selectedCitation.vehicle_model || "Registered Vehicle"}</p>
                   </div>
-                  <div>
-                    <span className="text-subtle font-mono-tab text-[10px] uppercase">Violation Offense</span>
-                    <p className="font-semibold text-foreground mt-0.5">{selectedCitation.offense}</p>
+                  <div className="col-span-2 rounded-xl border border-border/60 bg-background/50 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-subtle font-mono-tab text-[10px] uppercase font-bold">
+                        Charged Violation(s)
+                      </span>
+                      {selectedCitation.offense.includes(",") && (
+                        <span className="rounded bg-primary/20 border border-primary/30 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
+                          {selectedCitation.offense.split(",").length} Offenses on 1 Ticket
+                        </span>
+                      )}
+                    </div>
+                    {selectedCitation.offense.includes(",") ? (
+                      <div className="flex flex-col divide-y divide-border/30">
+                        {selectedCitation.offense.split(",").map((off, idx) => {
+                          const cleanOff = off.trim();
+                          const estFine = fineFor(cleanOff);
+                          return (
+                            <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-muted-foreground">
+                                  {idx + 1}
+                                </span>
+                                {cleanOff}
+                              </span>
+                              <span className="font-mono-tab text-[11px] text-muted-foreground">
+                                {estFine ? formatPeso(estFine) : "Statutory Fine"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="font-semibold text-foreground text-sm">{selectedCitation.offense}</p>
+                    )}
                   </div>
                   <div>
-                    <span className="text-subtle font-mono-tab text-[10px] uppercase">Fine Amount</span>
+                    <span className="text-subtle font-mono-tab text-[10px] uppercase">Total Assessed Fine</span>
                     <p className="font-mono-tab text-base font-black text-foreground mt-0.5">{formatPeso(selectedCitation.amount)}</p>
                   </div>
                   <div>
@@ -885,26 +1237,104 @@ function CitationsPage() {
                   </div>
                 </div>
 
-                {/* Photographic Evidence Frame Viewer */}
-                <div className="rounded-xl border border-border bg-black overflow-hidden relative shadow-inner">
-                  <img
-                    src={selectedCitation.evidence_url || "/assets/violation-1.jpg"}
-                    alt={`Evidence capture for ${selectedCitation.plate_number}`}
-                    className="h-48 w-full object-cover"
-                  />
-                  <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
-                    <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
-                      ● EVIDENCE CAPTURE · {selectedCitation.citation_number}
-                    </span>
-                    <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-emerald-400 border border-emerald-500/30 font-bold">
-                      {selectedCitation.evidence_url?.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
-                    </span>
-                  </div>
-                  <div className="absolute inset-x-4 bottom-3 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
-                    <span className="font-bold">ANPR OCR: {selectedCitation.plate_number}</span>
-                    <span className="font-bold">VERIFIED EVIDENCE</span>
-                  </div>
-                </div>
+                {/* Photographic Evidence Frame Viewer (Interactive Multi-Frame Gallery) */}
+                {(() => {
+                  const slipFrames = parseEvidenceUrls(selectedCitation.evidence_url);
+                  const activeUrl = slipFrames[activeSlipFrameIndex] || slipFrames[0] || "/assets/violation-1.jpg";
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <div className="rounded-xl border border-border bg-black overflow-hidden relative shadow-inner">
+                        <img
+                          src={activeUrl}
+                          alt={`Evidence capture for ${selectedCitation.plate_number} frame ${activeSlipFrameIndex + 1}`}
+                          className="h-52 w-full object-cover"
+                        />
+                        <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                          <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
+                            ● EVIDENCE CAPTURE · {selectedCitation.citation_number}
+                            {slipFrames.length > 1 && ` [${activeSlipFrameIndex + 1}/${slipFrames.length}]`}
+                          </span>
+                          <span className="rounded bg-black/75 px-2 py-0.5 font-mono-tab text-[9px] text-emerald-400 border border-emerald-500/30 font-bold">
+                            {activeUrl.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
+                          </span>
+                        </div>
+
+                        {slipFrames.length > 1 && (
+                          <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveSlipFrameIndex((prev) =>
+                                  prev > 0 ? prev - 1 : slipFrames.length - 1
+                                )
+                              }
+                              className="pointer-events-auto rounded-full bg-black/75 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                              title="Previous evidence frame"
+                            >
+                              <ChevronLeft className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveSlipFrameIndex((prev) =>
+                                  prev < slipFrames.length - 1 ? prev + 1 : 0
+                                )
+                              }
+                              className="pointer-events-auto rounded-full bg-black/75 hover:bg-black p-1.5 text-white shadow border border-white/10 transition-all"
+                              title="Next evidence frame"
+                            >
+                              <ChevronRight className="size-4" />
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-x-4 bottom-3 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                          <span className="font-bold">ANPR OCR: {selectedCitation.plate_number}</span>
+                          <span className="font-bold">
+                            {slipFrames.length > 1
+                              ? `FRAME ${activeSlipFrameIndex + 1} OF ${slipFrames.length} VERIFIED`
+                              : "VERIFIED EVIDENCE"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {slipFrames.length > 1 && (
+                        <div className="flex items-center justify-between gap-2 px-0.5">
+                          <div className="flex items-center gap-2 overflow-x-auto py-1">
+                            {slipFrames.map((frameUrl, fIdx) => (
+                              <button
+                                key={fIdx}
+                                type="button"
+                                onClick={() => setActiveSlipFrameIndex(fIdx)}
+                                className={cn(
+                                  "relative h-12 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                                  activeSlipFrameIndex === fIdx
+                                    ? "border-primary ring-2 ring-primary/40 shadow-sm"
+                                    : "border-border opacity-70 hover:opacity-100"
+                                )}
+                              >
+                                <img src={frameUrl} alt={`Frame ${fIdx + 1}`} className="size-full object-cover" />
+                                <span className="absolute bottom-0.5 right-0.5 rounded bg-black/85 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-white">
+                                  #{fIdx + 1}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+
+                          <a
+                            href={activeUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-panel-elevated transition-colors shrink-0"
+                          >
+                            <ExternalLink className="size-3" />
+                            HD Frame
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* QR Code & LTO status */}
                 <div className="rounded-xl border border-border bg-panel p-3 flex items-center justify-between">
@@ -1044,7 +1474,25 @@ function CitationRow({
       </td>
       <td className="px-5 py-3.5 font-mono-tab font-semibold text-foreground">{c.plate_number}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.vehicle_model ?? "—"}</td>
-      <td className="px-5 py-3.5 text-xs font-semibold text-foreground">{c.offense}</td>
+      <td className="px-5 py-3.5 text-xs">
+        {c.offense.includes(",") ? (
+          <div className="flex flex-col gap-0.5 max-w-xs">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="rounded bg-primary/20 border border-primary/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary whitespace-nowrap">
+                {c.offense.split(",").length} Violations
+              </span>
+              <span className="font-semibold text-foreground truncate">
+                {c.offense.split(",")[0].trim()}
+              </span>
+            </div>
+            <span className="text-[10px] text-muted-foreground truncate" title={c.offense}>
+              +{c.offense.split(",").slice(1).map((s) => s.trim()).join(", ")}
+            </span>
+          </div>
+        ) : (
+          <span className="font-semibold text-foreground">{c.offense}</span>
+        )}
+      </td>
       <td className="px-5 py-3.5 font-mono-tab font-bold text-foreground">{formatPeso(Number(c.amount))}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.officer_name ?? "AI Camera Grid"}</td>
       <td className="px-5 py-3.5">
