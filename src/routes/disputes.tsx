@@ -675,11 +675,23 @@ function DisputeCard({
                 <p className="text-xs text-muted-foreground">
                   Official sensor capture securely hashed with SHA-256 for evidentiary integrity.
                 </p>
-                <Dialog.Close asChild>
-                  <button className="rounded-xl border border-border bg-panel px-4 py-2 text-xs font-semibold text-white hover:bg-panel-elevated">
-                    Close Preview
-                  </button>
-                </Dialog.Close>
+                <div className="flex items-center gap-2">
+                  {citation?.evidenceUrl && (
+                    <a
+                      href={citation.evidenceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-primary transition-colors"
+                    >
+                      <ExternalLink className="size-3.5" /> Open Full Image
+                    </a>
+                  )}
+                  <Dialog.Close asChild>
+                    <button className="rounded-xl border border-border bg-panel px-4 py-2 text-xs font-semibold text-white hover:bg-panel-elevated">
+                      Close Preview
+                    </button>
+                  </Dialog.Close>
+                </div>
               </div>
             </Dialog.Content>
           </Dialog.Portal>
@@ -796,6 +808,25 @@ function OfficialResolutionOrderModal({
                 </p>
               </div>
             </div>
+
+            {/* Official Evidentiary Snapshot Exhibit */}
+            {citation?.evidenceUrl && (
+              <div className="mt-4 rounded-xl border border-border p-3.5 bg-black/40 print:bg-transparent print:border-neutral-300">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono-tab text-[10px] uppercase font-bold text-muted-foreground print:text-black flex items-center gap-1.5">
+                    <Camera className="size-3 text-primary print:text-black" /> Optical CCTV Evidence Exhibit A
+                  </span>
+                  <span className="font-mono-tab text-[9px] text-emerald-400 print:text-green-800 font-bold">
+                    ANPR VERIFIED · {citation.plate_number}
+                  </span>
+                </div>
+                <img
+                  src={citation.evidenceUrl}
+                  alt="Optical Evidence Exhibit"
+                  className="h-40 w-full object-cover rounded-lg border border-white/10 print:border-neutral-300"
+                />
+              </div>
+            )}
 
             {/* Findings & Ruling */}
             <div className="mt-6 space-y-3 text-xs leading-relaxed">

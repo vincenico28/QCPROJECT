@@ -16,6 +16,7 @@ export type MockCitation = {
   status: "unpaid" | "settled" | "waived" | "contested";
   location?: string;
   evidenceUrl?: string;
+  evidence_url?: string | null;
   speedKph?: number;
   lane?: string;
   timestamp?: string;
@@ -183,7 +184,15 @@ export function useDisputes() {
       try {
         const rows = await serverFetchDisputes();
         if (Array.isArray(rows) && rows.length > 0) {
-          return rows as unknown as Dispute[];
+          return rows.map((r: any) => ({
+            ...r,
+            citation: r.citation
+              ? {
+                  ...r.citation,
+                  evidenceUrl: r.citation.evidence_url || r.citation.evidenceUrl || "/assets/violation-1.jpg",
+                }
+              : undefined,
+          })) as Dispute[];
         }
       } catch (err) {
         console.warn("[Disputes] Server fetch error, using fallback dockets:", err);
@@ -200,7 +209,15 @@ export function useCitizenDisputes() {
       try {
         const rows = await serverFetchDisputes();
         if (Array.isArray(rows) && rows.length > 0) {
-          return rows as unknown as Dispute[];
+          return rows.map((r: any) => ({
+            ...r,
+            citation: r.citation
+              ? {
+                  ...r.citation,
+                  evidenceUrl: r.citation.evidence_url || r.citation.evidenceUrl || "/assets/violation-1.jpg",
+                }
+              : undefined,
+          })) as Dispute[];
         }
       } catch {
         // fallback
