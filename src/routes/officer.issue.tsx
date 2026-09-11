@@ -19,6 +19,7 @@ import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { fineFor } from "@/lib/data/review";
 import { uploadEvidenceToSupabase } from "@/lib/storage";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/issue")({
   head: () => ({
@@ -47,6 +48,8 @@ function IssuePage() {
   const [plate, setPlate] = useState("");
   const [model, setModel] = useState("");
   const [offense, setOffense] = useState(OFFENSES[0]);
+  const [isCustomOffense, setIsCustomOffense] = useState(false);
+  const [customOffenseText, setCustomOffenseText] = useState("");
   const [amount, setAmount] = useState(fineFor(OFFENSES[0]));
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
   const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
@@ -111,12 +114,18 @@ function IssuePage() {
     if (!plate) return;
 
     let finalEvidenceUrl = evidenceUrl;
-    if (evidenceUrl && evidenceUrl.startsWith("data:")) {
+    const finalOffense = isCustomOffense ? customOffenseText.trim() : offense;
+    if (!finalOffense) {
+      toast.error("Please enter or select a violation classification");
+      return;
+    }
+
+    if (evidenceUrl) {
       setIsUploading(true);
       try {
         finalEvidenceUrl = await uploadEvidenceToSupabase(evidenceUrl, {
           plateNumber: plate,
-          category: offense,
+          category: finalOffense,
           folder: "officer_apprehensions",
         });
       } catch (err) {
@@ -131,7 +140,7 @@ function IssuePage() {
         violation_id: null,
         plate_number: plate,
         vehicle_model: model || null,
-        offense,
+        offense: finalOffense,
         amount,
         officer_name: user?.email ?? "Enforcement Officer",
         evidence_url: finalEvidenceUrl,
@@ -143,6 +152,8 @@ function IssuePage() {
           setLastIssuedNumber(data.citation_number);
           setPlate("");
           setModel("");
+          setIsCustomOffense(false);
+          setCustomOffenseText("");
           setEvidenceUrl(null);
           setEvidenceFileName(null);
           setEvidenceSizeKb(null);
@@ -230,40 +241,112 @@ function IssuePage() {
           />
         </div>
 
+        {/* Violation Classification */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
-            Violation Classification *
-          </label>
-          <select
-            value={offense}
-            onChange={(e) => {
-              const val = e.target.value;
-              setOffense(val);
-              setAmount(fineFor(val));
-            }}
-            className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
-          >
-            {OFFENSES.map((o) => (
-              <option key={o} value={o}>
-                {o} (₱{fineFor(o).toLocaleString()})
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
+              Violation Classification *
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCustomOffense(!isCustomOffense);
+              }}
+              className={cn(
+                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-all flex items-center gap-1",
+                isCustomOffense
+                  ? "bg-primary/15 border-primary/40 text-primary"
+                  : "bg-panel border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Sparkles className="size-3" />
+              {isCustomOffense ? "Use Standard List" : "+ Custom Classification"}
+            </button>
+          </div>
+
+          {isCustomOffense ? (
+            <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
+              <input
+                type="text"
+                required
+                value={customOffenseText}
+                onChange={(e) => setCustomOffenseText(e.target.value)}
+                placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
+                className="rounded-xl border border-primary/50 bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                Enter custom QC ordinance, MMDA violation code, or special classification.
+              </span>
+            </div>
+          ) : (
+            <select
+              value={offense}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "__custom__") {
+                  setIsCustomOffense(true);
+                } else {
+                  setOffense(val);
+                  setAmount(fineFor(val));
+                }
+              }}
+              className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
+            >
+              {OFFENSES.map((o) => (
+                <option key={o} value={o}>
+                  {o} (₱{fineFor(o).toLocaleString()})
+                </option>
+              ))}
+              <option value="__custom__">★ Other / Custom Violation...</option>
+            </select>
+          )}
         </div>
 
+        {/* Assessed Penalty Amount (PHP) */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
-            Assessed Penalty Amount (PHP) *
-          </label>
-          <input
-            type="number"
-            required
-            min={500}
-            step={100}
-            value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
-          />
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">
+              Assessed Penalty Amount (PHP) *
+            </label>
+            <span className="text-xs font-mono-tab font-bold text-primary">
+              ₱{Number(amount || 0).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground font-mono-tab">
+              ₱
+            </span>
+            <input
+              type="number"
+              required
+              min={100}
+              step={50}
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              className="w-full rounded-xl border border-border bg-panel-elevated pl-8 pr-3.5 py-2.5 text-sm font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          {/* Quick Preset Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+            <span className="text-[10px] text-muted-foreground font-mono-tab">Presets:</span>
+            {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setAmount(preset)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-[11px] font-mono-tab font-semibold border transition-all",
+                  amount === preset
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
+                )}
+              >
+                ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Evidence Photo Attachment */}

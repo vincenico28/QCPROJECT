@@ -105,6 +105,9 @@ function ViolationsPage() {
   // Manual Log State
   const [manualPlate, setManualPlate] = useState("");
   const [manualType, setManualType] = useState("Illegal Parking");
+  const [isCustomType, setIsCustomType] = useState(false);
+  const [customTypeText, setCustomTypeText] = useState("");
+  const [manualAmount, setManualAmount] = useState(1000);
   const [manualCam, setManualCam] = useState(QC_CCTV_NODES[0].code);
   const [manualLocation, setManualLocation] = useState(QC_CCTV_NODES[0].label);
   const [manualEvidenceUrl, setManualEvidenceUrl] = useState<string>(QC_CCTV_NODES[0].snapshot);
@@ -192,7 +195,13 @@ function ViolationsPage() {
 
     try {
       const { serverSaveViolation, serverSaveCitation } = await import("@/lib/server.functions");
-      const fineAmount = fineFor(manualType);
+      const finalType = isCustomType ? customTypeText.trim() : manualType;
+      if (!finalType) {
+        toast.error("Please enter or select a violation classification");
+        setIsSubmittingManual(false);
+        return;
+      }
+      const fineAmount = manualAmount > 0 ? manualAmount : fineFor(finalType);
       const cleanPlate = manualPlate.toUpperCase().trim();
       const initialStatus = autoIssueCitation ? "confirmed" : "pending";
 
@@ -202,7 +211,7 @@ function ViolationsPage() {
           const { uploadEvidenceToSupabase } = await import("@/lib/storage");
           finalEvidenceUrl = await uploadEvidenceToSupabase(manualEvidenceUrl, {
             plateNumber: cleanPlate,
-            category: manualType,
+            category: finalType,
           });
         } catch (uploadErr) {
           console.warn("[Storage] Fallback to direct evidence URL", uploadErr);
@@ -213,8 +222,8 @@ function ViolationsPage() {
         data: {
           plate_number: cleanPlate,
           plateNumber: cleanPlate,
-          violation_type: manualType,
-          violationType: manualType,
+          violation_type: finalType,
+          violationType: finalType,
           location: manualLocation,
           confidence: 99,
           camera_code: manualCam,
@@ -235,7 +244,7 @@ function ViolationsPage() {
             violationId: savedViolation.id,
             plate_number: cleanPlate,
             plateNumber: cleanPlate,
-            offense: manualType,
+            offense: finalType,
             amount: fineAmount,
             officer_name: "Field Traffic Enforcer",
             evidence_url: finalEvidenceUrl,
@@ -251,23 +260,26 @@ function ViolationsPage() {
 
       if (autoIssueCitation) {
         toast.success(`Violation Confirmed & NOV Citation Issued!`, {
-          description: `Plate: ${cleanPlate} · ${manualType} · Ticket ${issuedNovNumber || "Generated"} linked to citizen & LTO ledger.`,
+          description: `Plate: ${cleanPlate} · ${finalType} (${formatPeso(fineAmount)}) · Ticket ${issuedNovNumber || "Generated"} linked to citizen & LTO ledger.`,
         });
       } else {
         toast.success(`Field Violation Logged to Review Queue!`, {
-          description: `Plate: ${cleanPlate} · ${manualType} · Status: Pending Review in review console.`,
+          description: `Plate: ${cleanPlate} · ${finalType} · Status: Pending Review in review console.`,
         });
       }
 
       setManualModalOpen(false);
       setManualPlate("");
+      setIsCustomType(false);
+      setCustomTypeText("");
       setUploadedFileName(null);
       setUploadedFileSizeKb(null);
     } catch (err: any) {
       console.error("Direct server function error, using resilient mutation fallback", err);
+      const fallbackType = isCustomType ? customTypeText.trim() || manualType : manualType;
       addManual.mutate({
         plate_number: manualPlate.toUpperCase().trim(),
-        violation_type: manualType,
+        violation_type: fallbackType,
         location: manualLocation,
         camera_code: manualCam,
         evidence_url: manualEvidenceUrl,
@@ -278,6 +290,8 @@ function ViolationsPage() {
           toast.success(`Violation & Evidence Frame Stored! (Queue Synced)`);
           setManualModalOpen(false);
           setManualPlate("");
+          setIsCustomType(false);
+          setCustomTypeText("");
           setUploadedFileName(null);
           setUploadedFileSizeKb(null);
         },
@@ -456,7 +470,7 @@ function ViolationsPage() {
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
-              <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl animate-in fade-in zoom-in-95">
+              <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
                 <div className="flex items-start justify-between border-b border-border pb-3">
                   <Dialog.Title className="text-base font-bold text-foreground flex items-center gap-2">
                     <Camera className="size-4 text-primary" />
@@ -484,24 +498,115 @@ function ViolationsPage() {
                     />
                   </label>
 
-                  <label className="flex flex-col gap-1.5">
-                    <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
-                      Violation Classification *
-                    </span>
-                    <select
-                      value={manualType}
-                      onChange={(e) => setManualType(e.target.value)}
-                      className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                    >
-                      <option value="Illegal Parking">Illegal Parking (₱1,000)</option>
-                      <option value="Red Light">Red Light Jump (₱2,000)</option>
-                      <option value="Counterflow">Counterflow (₱2,500)</option>
-                      <option value="Yellow Box Infraction">Yellow Box Infraction (₱1,500)</option>
-                      <option value="Bus Lane Violation">Bus Lane Violation (₱5,000)</option>
-                      <option value="No Helmet">No Helmet (₱1,500)</option>
-                      <option value="Overspeeding">Overspeeding (₱3,000)</option>
-                    </select>
-                  </label>
+                  {/* Violation Classification */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold">
+                        Violation Classification *
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomType(!isCustomType)}
+                        className={cn(
+                          "text-[10px] font-semibold px-2 py-0.5 rounded border transition-all flex items-center gap-1",
+                          isCustomType
+                            ? "bg-primary/15 border-primary/40 text-primary"
+                            : "bg-panel border-border text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Sparkles className="size-2.5" />
+                        {isCustomType ? "Standard List" : "+ Custom Classification"}
+                      </button>
+                    </div>
+
+                    {isCustomType ? (
+                      <div className="flex flex-col gap-1 animate-in fade-in duration-200">
+                        <input
+                          type="text"
+                          required
+                          value={customTypeText}
+                          onChange={(e) => setCustomTypeText(e.target.value)}
+                          placeholder="e.g. Operating Colorum PUV / Ordinance SP-2957"
+                          className="rounded-lg border border-primary/50 bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                        />
+                        <span className="text-[10px] text-muted-foreground">
+                          Enter custom QC ordinance, MMDA violation code, or special classification.
+                        </span>
+                      </div>
+                    ) : (
+                      <select
+                        value={manualType}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "__custom__") {
+                            setIsCustomType(true);
+                          } else {
+                            setManualType(val);
+                            setManualAmount(fineFor(val));
+                          }
+                        }}
+                        className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="Illegal Parking">Illegal Parking (₱1,000)</option>
+                        <option value="Red Light">Red Light Jump (₱2,000)</option>
+                        <option value="Counterflow">Counterflow (₱2,500)</option>
+                        <option value="Yellow Box Infraction">Yellow Box Infraction (₱1,500)</option>
+                        <option value="Bus Lane Violation">Bus Lane Violation (₱5,000)</option>
+                        <option value="No Helmet">No Helmet (₱1,500)</option>
+                        <option value="Overspeeding">Overspeeding (₱3,000)</option>
+                        <option value="Obstruction">Obstruction (₱1,000)</option>
+                        <option value="No Entry Zone">No Entry Zone (₱1,000)</option>
+                        <option value="Number Coding">Number Coding (₱500)</option>
+                        <option value="__custom__">★ Other / Custom Violation...</option>
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Assessed Penalty Amount */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle font-bold">
+                        Assessed Penalty Amount (PHP) *
+                      </span>
+                      <span className="font-mono-tab text-xs font-bold text-primary">
+                        ₱{Number(manualAmount || 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground font-mono-tab">
+                        ₱
+                      </span>
+                      <input
+                        type="number"
+                        min={100}
+                        step={50}
+                        value={manualAmount}
+                        onChange={(e) => setManualAmount(Number(e.target.value))}
+                        className="w-full rounded-lg border border-border bg-background pl-7 pr-3 py-2 text-sm font-mono-tab font-bold text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Presets */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] text-muted-foreground font-mono-tab">Presets:</span>
+                      {[500, 1000, 1500, 2000, 2500, 3000, 5000].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setManualAmount(preset)}
+                          className={cn(
+                            "rounded px-2 py-0.5 text-[10px] font-mono-tab font-semibold border transition-all",
+                            manualAmount === preset
+                              ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                              : "bg-panel border-border text-muted-foreground hover:text-foreground hover:bg-panel-elevated"
+                          )}
+                        >
+                          ₱{preset >= 1000 ? `${preset / 1000}k` : preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="flex flex-col gap-1.5">
