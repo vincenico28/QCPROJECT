@@ -43,10 +43,172 @@ export function fineFor(offense: string): number {
   return 1000;
 }
 
+export interface OffenseMetadata {
+  code: string;
+  category:
+    | "Moving Violation"
+    | "Franchise & Colorum"
+    | "Registration & Licensing"
+    | "Obstruction & Parking"
+    | "Environmental & Safety";
+  description: string;
+  ordinance: string;
+}
+
+export const OFFENSE_DETAILS: Record<string, OffenseMetadata> = {
+  "Colorum Vehicle": {
+    code: "QC-ORD-SP-2636-S1",
+    category: "Franchise & Colorum",
+    description: "Operating a public conveyance or commercial transport vehicle without valid LTFRB Certificate of Public Convenience (CPC) or franchise authorization.",
+    ordinance: "QC Ordinance SP-2636, S-2017 / LTFRB Joint Admin Order 2014-01",
+  },
+  "Unregistered Vehicle": {
+    code: "RA-4136-SEC5",
+    category: "Registration & Licensing",
+    description: "Operating an unregistered or non-renewed motor vehicle on public thoroughfares without current LTO validation tags.",
+    ordinance: "R.A. 4136 (Land Transportation and Traffic Code) Sec. 5 / LTO JAO 2014-01",
+  },
+  "Unregister Vehicle": {
+    code: "RA-4136-SEC5",
+    category: "Registration & Licensing",
+    description: "Operating an unregistered or non-renewed motor vehicle on public thoroughfares without current LTO validation tags.",
+    ordinance: "R.A. 4136 (Land Transportation and Traffic Code) Sec. 5 / LTO JAO 2014-01",
+  },
+  "Red Light": {
+    code: "MMDA-REG-16-002-RL",
+    category: "Moving Violation",
+    description: "Disregarding traffic control signals by crossing the designated pedestrian zebra stop line during a steady red signal phase.",
+    ordinance: "MMDA Regulation No. 16-002 / QC Traffic Code Art. VII Sec. 28",
+  },
+  "Red Light Jump": {
+    code: "MMDA-REG-16-002-RLJ",
+    category: "Moving Violation",
+    description: "Premature vehicle acceleration across intersection junction prior to traffic signal transition to green phase.",
+    ordinance: "MMDA Regulation No. 16-002 / QC Traffic Code Art. VII Sec. 28",
+  },
+  "Overspeeding": {
+    code: "QC-ORD-SP-3045-SPD",
+    category: "Moving Violation",
+    description: "Exceeding statutory speed limit on designated city corridor, calibrated and recorded via Doppler radar / optical sentinel.",
+    ordinance: "QC Speed Limit Ordinance SP-3045, S-2021",
+  },
+  "No Entry Zone": {
+    code: "QC-TRAF-ART8-NEZ",
+    category: "Moving Violation",
+    description: "Traversing a designated restricted route, prohibited one-way arterial, or pedestrianized civic corridor.",
+    ordinance: "QC Traffic Management Code Article VIII Sec. 34",
+  },
+  "Counterflow": {
+    code: "QC-ORD-SP-2752-CF",
+    category: "Moving Violation",
+    description: "Driving against oncoming traffic flow or traversing opposing traffic lanes, endangering oncoming motorists.",
+    ordinance: "QC Ordinance SP-2752, S-2018 (Anti-Counterflowing Ordinance)",
+  },
+  "Obstruction": {
+    code: "MMDA-MC-04-2018-OBS",
+    category: "Obstruction & Parking",
+    description: "Stopping or blocking travel lanes causing traffic congestion or impediment of pedestrian and vehicular passage.",
+    ordinance: "MMDA Memorandum Circular No. 04, S-2018 / QC Traffic Code",
+  },
+  "Illegal Parking": {
+    code: "QC-ORD-SP-2812-IP",
+    category: "Obstruction & Parking",
+    description: "Parking on marked primary or secondary thoroughfares, sidewalks, or designated tow-away zones.",
+    ordinance: "QC Ordinance SP-2812, S-2019 / MMDA Towing Regulations",
+  },
+  "No Helmet": {
+    code: "RA-10054-HLM",
+    category: "Environmental & Safety",
+    description: "Operating or riding a motorcycle without standard protective motorcycle helmet complying with DTI/BPS standards.",
+    ordinance: "Republic Act No. 10054 (Mandatory Helmet Act of 2010)",
+  },
+  "Number Coding": {
+    code: "MMDA-UVVRP-95-01",
+    category: "Moving Violation",
+    description: "Operating vehicle during restricted hours in accordance with the Unified Vehicular Volume Reduction Program.",
+    ordinance: "MMDA Regulation No. 95-001 (UVVRP / Number Coding Scheme)",
+  },
+  "Yellow Box Infraction": {
+    code: "MMDA-REG-16-002-YB",
+    category: "Moving Violation",
+    description: "Entering intersection junction grid markings without sufficient exit clearance, causing junction gridlock.",
+    ordinance: "MMDA Regulation No. 16-002 Sec. 4 / QC Traffic Code",
+  },
+  "Bus Lane Violation": {
+    code: "MMDA-REG-23-002-BL",
+    category: "Moving Violation",
+    description: "Unauthorized private vehicle use of exclusive public transit bus lane or EDSA carousel feeder corridor.",
+    ordinance: "MMDA Regulation No. 23-002 (Exclusive Bus Lane Policy)",
+  },
+  "Reckless Driving": {
+    code: "RA-4136-SEC48-RD",
+    category: "Moving Violation",
+    description: "Operating a motor vehicle without reasonable caution, endangering the life, limb, or property of others.",
+    ordinance: "R.A. 4136 Sec. 48 / QC Traffic Code Art. V Sec. 19",
+  },
+  "Disregarding Traffic Sign": {
+    code: "QC-TRAF-ART7-DTS",
+    category: "Moving Violation",
+    description: "Failing to obey posted regulatory, mandatory, or prohibitive traffic signs or pavement arrows.",
+    ordinance: "QC Traffic Code Article VII / MMDA Guidelines",
+  },
+  "Driving Without License": {
+    code: "RA-4136-SEC19-DWL",
+    category: "Registration & Licensing",
+    description: "Operating a motor vehicle without possessing a valid driver's license issued by the LTO.",
+    ordinance: "R.A. 4136 Sec. 19 / LTO JAO 2014-01",
+  },
+  "Expired Registration": {
+    code: "RA-4136-SEC5-EXP",
+    category: "Registration & Licensing",
+    description: "Operating a vehicle with lapsed annual LTO motor vehicle registration and validation tags.",
+    ordinance: "R.A. 4136 Sec. 5 / DOTR-LTO Regulations",
+  },
+  "Illegal Turn": {
+    code: "QC-TRAF-ART8-IT",
+    category: "Moving Violation",
+    description: "Making an unauthorized U-turn, left turn, or right turn on red where prohibited by traffic control device.",
+    ordinance: "QC Traffic Code Article VIII Sec. 32",
+  },
+  "Smoke Belching": {
+    code: "RA-8749-SEC46-SB",
+    category: "Environmental & Safety",
+    description: "Operating a motor vehicle emitting exhaust fumes exceeding standard smoke opacity limits.",
+    ordinance: "Republic Act No. 8749 (Philippine Clean Air Act of 1999)",
+  },
+  "Jaywalking": {
+    code: "QC-ORD-SP-2415-JW",
+    category: "Moving Violation",
+    description: "Crossing roadway outside designated pedestrian zebra lanes or overhead pedestrian footbridges.",
+    ordinance: "QC Ordinance SP-2415, S-2015 (Anti-Jaywalking Ordinance)",
+  },
+};
+
+export function getOffenseDetails(offenseName: string): OffenseMetadata {
+  const clean = (offenseName || "").trim();
+  if (OFFENSE_DETAILS[clean]) {
+    return OFFENSE_DETAILS[clean];
+  }
+  const lower = clean.toLowerCase();
+  for (const [k, v] of Object.entries(OFFENSE_DETAILS)) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  return {
+    code: "QC-TRAF-GEN-001",
+    category: "Moving Violation",
+    description: "Violation of Quezon City Traffic Management Code and MMDA NCAP Regulations.",
+    ordinance: "QC Traffic Management Code / MMDA Regulation 16-002",
+  };
+}
+
 export type ParsedOffenseItem = {
   name: string;
   amount: number;
   isCustom?: boolean;
+  code?: string;
+  category?: string;
+  ordinance?: string;
+  description?: string;
 };
 
 /**
@@ -120,12 +282,32 @@ export function parseCitationOffenses(
   totalAmount?: number
 ): ParsedOffenseItem[] {
   if (!rawOffense || !rawOffense.trim()) {
-    return [{ name: "Traffic Infraction", amount: totalAmount || 1000 }];
+    const meta = getOffenseDetails("Traffic Infraction");
+    return [
+      {
+        name: "Traffic Infraction",
+        amount: totalAmount || 1000,
+        code: meta.code,
+        category: meta.category,
+        ordinance: meta.ordinance,
+        description: meta.description,
+      },
+    ];
   }
 
   const rawParts = splitOffenses(rawOffense);
   if (rawParts.length === 0) {
-    return [{ name: rawOffense.trim(), amount: totalAmount || 1000 }];
+    const meta = getOffenseDetails(rawOffense.trim());
+    return [
+      {
+        name: rawOffense.trim(),
+        amount: totalAmount || 1000,
+        code: meta.code,
+        category: meta.category,
+        ordinance: meta.ordinance,
+        description: meta.description,
+      },
+    ];
   }
 
   // Regex to extract trailing amount e.g. "Colorum Vehicle (₱5,000)" or "[₱3,000]" or "(5000)"
@@ -159,11 +341,17 @@ export function parseCitationOffenses(
 
   // If only 1 offense and totalAmount is provided, that 1 offense has totalAmount
   if (parsed.length === 1) {
+    const name = parsed[0].name;
+    const meta = getOffenseDetails(name);
     return [
       {
-        name: parsed[0].name,
-        amount: parsed[0].explicitAmount || totalAmount || fineFor(parsed[0].name),
+        name,
+        amount: parsed[0].explicitAmount || totalAmount || fineFor(name),
         isCustom: parsed[0].isCustom,
+        code: meta.code,
+        category: meta.category,
+        ordinance: meta.ordinance,
+        description: meta.description,
       },
     ];
   }
@@ -253,7 +441,18 @@ export function parseCitationOffenses(
     }
   }
 
-  return resolved;
+  return resolved.map((item) => {
+    const meta = getOffenseDetails(item.name);
+    return {
+      name: item.name,
+      amount: item.amount,
+      isCustom: item.isCustom,
+      code: meta.code,
+      category: meta.category,
+      ordinance: meta.ordinance,
+      description: meta.description,
+    };
+  });
 }
 
 export function nextCitationNumber() {

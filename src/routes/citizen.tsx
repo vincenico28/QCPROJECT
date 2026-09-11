@@ -55,9 +55,13 @@ import {
   ChevronRight,
   ChevronLeft,
   RefreshCw,
+  Receipt,
+  Tag,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
-import { parseCitationOffenses } from "@/lib/data/review";
+import { parseCitationOffenses, getOffenseDetails } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -485,24 +489,31 @@ function CitizenPortal() {
                   const isSettled = c.status === "settled";
                   const isAppealed = c.status === "appealed";
 
+                  const parsedOffenses = parseCitationOffenses(c.violation, c.amount);
+                  const isMultiOffense = parsedOffenses.length > 1;
+                  const baseSubtotal = parsedOffenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+                  const surcharge = c.surcharge || 0;
+                  const totalLiability = c.amount + surcharge;
+
                   return (
                     <div
                       key={c.id}
                       className={cn(
-                        "rounded-2xl border p-6 transition-all flex flex-col gap-6 shadow-xl",
-                        isUnpaid ? "border-red-500/30 bg-red-950/10 hover:border-red-500/50" :
-                        isSettled ? "border-emerald-500/30 bg-emerald-950/10" :
-                        "border-blue-500/30 bg-blue-950/10",
+                        "rounded-2xl border p-6 transition-all flex flex-col gap-5 shadow-xl backdrop-blur-sm",
+                        isUnpaid ? "border-red-500/30 bg-gradient-to-br from-red-950/20 via-black/40 to-black/60 hover:border-red-500/50" :
+                        isSettled ? "border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-black/40 to-black/60" :
+                        "border-blue-500/30 bg-gradient-to-br from-blue-950/20 via-black/40 to-black/60",
                       )}
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-white/10 pb-4">
+                      {/* Top Header: Identity, Tags, Total Amount */}
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 border-b border-white/10 pb-4">
                         <div className="flex items-start gap-3.5">
                           <div
                             className={cn(
-                              "grid size-11 shrink-0 place-items-center rounded-xl",
-                              isUnpaid ? "bg-red-500/20 text-red-400" :
-                              isSettled ? "bg-emerald-500/20 text-emerald-400" :
-                              "bg-blue-500/20 text-blue-400",
+                              "grid size-11 shrink-0 place-items-center rounded-xl shadow-inner",
+                              isUnpaid ? "bg-red-500/20 text-red-400 border border-red-500/30" :
+                              isSettled ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+                              "bg-blue-500/20 text-blue-400 border border-blue-500/30",
                             )}
                           >
                             {isUnpaid ? <AlertTriangle className="size-5" /> :
@@ -510,43 +521,156 @@ function CitizenPortal() {
                              <Clock className="size-5" />}
                           </div>
 
-                          <div>
+                          <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono-tab text-xs font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                              <span className="font-mono-tab text-xs font-bold text-white bg-white/10 px-2.5 py-0.5 rounded-md border border-white/10">
                                 {c.novNumber || c.id}
                               </span>
-                              <span className="text-xs text-white/50">• {c.plateNumber}</span>
+                              <span className="font-mono-tab text-xs font-semibold text-white/70">
+                                Plate: <span className="font-bold text-white">{c.plateNumber}</span>
+                              </span>
                               <span
                                 className={cn(
-                                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                                  isUnpaid ? "bg-red-500/20 text-red-400 border border-red-500/30" :
-                                  isSettled ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
-                                  "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+                                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
+                                  isUnpaid ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                                  isSettled ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                                  "bg-blue-500/20 text-blue-400 border-blue-500/30",
                                 )}
                               >
                                 {c.status === "unpaid" ? "NOTICE ISSUED / UNPAID" :
                                  c.status === "settled" ? "CLEARED & SETTLED" : "UNDER ADJUDICATION"}
                               </span>
+                              {isMultiOffense ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">
+                                  <AlertTriangle className="size-3" /> {parsedOffenses.length} OFFENSES ON 1 TICKET
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 border border-blue-500/30 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">
+                                  SINGLE INFRACTION
+                                </span>
+                              )}
                             </div>
 
-                            <h3 className="text-lg font-bold text-white mt-1.5">{c.violation}</h3>
-                            <p className="text-xs text-white/60 font-mono-tab">{c.ordinanceCode || "MMDA Regulation 16-002"}</p>
+                            <h3 className="text-lg font-bold text-white">
+                              {isMultiOffense
+                                ? `Multi-Violation Traffic Apprehension (${parsedOffenses.length} Offenses)`
+                                : parsedOffenses[0]?.name || c.violation}
+                            </h3>
+                            <p className="text-xs text-white/60 font-mono-tab flex items-center gap-2">
+                              <span>Issued: {new Date(c.date).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</span>
+                              <span>•</span>
+                              <span>{c.ordinanceCode || "QC Traffic Ordinance SP-2938 / MMDA NCAP"}</span>
+                            </p>
                           </div>
                         </div>
 
                         {/* Amount & Due Date Box */}
-                        <div className="flex flex-row lg:flex-col items-end justify-between lg:justify-center border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0">
-                          <span className="font-mono-tab text-2xl font-black text-white">{formatPeso(c.amount + (c.surcharge || 0))}</span>
+                        <div className="flex flex-row lg:flex-col items-end justify-between lg:justify-start border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0 shrink-0">
+                          <div className="text-right">
+                            <span className="font-mono-tab text-[10px] uppercase text-white/50 block">Total Assessed Fine</span>
+                            <span className="font-mono-tab text-2xl sm:text-3xl font-black text-white tracking-tight">
+                              {formatPeso(totalLiability)}
+                            </span>
+                          </div>
                           {isUnpaid && (
-                            <span className="text-[11px] font-semibold text-orange-400 flex items-center gap-1 mt-0.5">
+                            <span className="text-[11px] font-semibold text-orange-400 flex items-center gap-1 mt-1">
                               <Clock className="size-3" /> Due: {new Date(c.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
                             </span>
                           )}
                           {isSettled && (
-                            <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1 mt-1">
                               <FileCheck2 className="size-3" /> Clearance Issued
                             </span>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Itemized Charged Violations & Statutory Fines Breakdown */}
+                      <div className="rounded-xl border border-white/10 bg-black/50 overflow-hidden shadow-inner">
+                        <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-4 py-2.5 text-xs">
+                          <span className="font-mono-tab font-bold uppercase tracking-wider text-white/70 flex items-center gap-2">
+                            <Scale className="size-3.5 text-blue-400" />
+                            Charged Violation(s) & Statutory Fine Breakdown
+                          </span>
+                          <span className="font-mono-tab text-[11px] text-white/40">
+                            {parsedOffenses.length} Offense{parsedOffenses.length > 1 ? "s" : ""} on 1 Ticket
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-white/5 p-2">
+                          {parsedOffenses.map((item, idx) => {
+                            const catTone =
+                              item.category === "Franchise & Colorum" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+                              item.category === "Registration & Licensing" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" :
+                              item.category === "Moving Violation" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" :
+                              item.category === "Obstruction & Parking" ? "bg-rose-500/20 text-rose-300 border-rose-500/30" :
+                              "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+                            return (
+                              <div
+                                key={idx}
+                                className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg hover:bg-white/[0.02] transition-colors"
+                              >
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <div className="grid size-6 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-mono-tab font-bold text-white/80">
+                                    {idx + 1}
+                                  </div>
+                                  <div className="space-y-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-bold text-sm text-white">{item.name}</span>
+                                      {item.category && (
+                                        <span className={cn("rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border", catTone)}>
+                                          {item.category}
+                                        </span>
+                                      )}
+                                      {item.code && (
+                                        <span className="font-mono-tab text-[10px] text-white/50 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                          {item.code}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {item.ordinance && (
+                                      <p className="text-[11px] text-blue-400/90 font-mono-tab">
+                                        Statutory Basis: {item.ordinance}
+                                      </p>
+                                    )}
+                                    {item.description && (
+                                      <p className="text-[11px] text-white/60 line-clamp-1">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between sm:justify-end gap-3 pl-9 sm:pl-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-white/5 shrink-0">
+                                  <span className="text-[10px] font-mono-tab uppercase text-white/40 sm:hidden">Penalty Fine:</span>
+                                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-right shadow-sm">
+                                    <span className="font-mono-tab text-sm font-black text-emerald-400">
+                                      {formatPeso(item.amount)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Financial Ledger Subtotal Bar */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border-t border-white/10 bg-black/70 p-3 text-xs">
+                          <div>
+                            <span className="text-[10px] font-mono-tab uppercase text-white/40 block">Statutory Fine Subtotal</span>
+                            <span className="font-mono-tab font-bold text-white">{formatPeso(baseSubtotal)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-mono-tab uppercase text-white/40 block">Late Surcharge / Admin Fee</span>
+                            <span className={cn("font-mono-tab font-bold", surcharge > 0 ? "text-orange-400" : "text-emerald-400")}>
+                              {formatPeso(surcharge)}
+                            </span>
+                          </div>
+                          <div className="col-span-2 sm:col-span-1 text-left sm:text-right border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
+                            <span className="text-[10px] font-mono-tab uppercase text-white/40 block">Total Assessed Due</span>
+                            <span className="font-mono-tab text-base font-black text-white">{formatPeso(totalLiability)}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -1139,6 +1263,33 @@ function CitizenPortal() {
                         )}
                       </div>
 
+                      {appealCitationId && (() => {
+                        const target = currentCitizen?.citations?.find((c) => c.id === appealCitationId || c.novNumber === appealCitationId);
+                        if (!target) return null;
+                        const parsed = parseCitationOffenses(target.violation, target.amount);
+                        return (
+                          <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-xs space-y-2">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-1 font-mono-tab">
+                              <span className="text-[10px] uppercase font-bold text-white/60">
+                                Charges Under Appeal ({parsed.length})
+                              </span>
+                              <span className="text-blue-400 font-bold">{formatPeso(target.amount)}</span>
+                            </div>
+                            <div className="divide-y divide-white/5 space-y-1">
+                              {parsed.map((item, idx) => (
+                                <div key={idx} className="pt-1 flex items-center justify-between text-xs">
+                                  <span className="text-white font-medium flex items-center gap-1.5">
+                                    <span className="text-[10px] text-white/40 font-mono-tab">#{idx + 1}</span>
+                                    <span>{item.name}</span>
+                                  </span>
+                                  <span className="font-mono-tab font-bold text-white/80">{formatPeso(item.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex flex-col gap-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-subtle">Statutory Ground for Appeal</label>
                         <select
@@ -1599,51 +1750,124 @@ function CitizenPortal() {
                     );
                   })()}
 
-                  {/* Violation Breakdown Table */}
+                  {/* Official Statutory Violation & Penalty Schedule Slip */}
                   {(() => {
                     const parsed = parseCitationOffenses(selectedNov.violation, selectedNov.amount);
+                    const baseSub = parsed.reduce((s, i) => s + (i.amount || 0), 0);
+                    const surchargeAmt = selectedNov.surcharge || 0;
+                    const totalDueAmt = selectedNov.amount + surchargeAmt;
+
                     return (
-                      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs space-y-3">
-                        {parsed.length > 1 && (
-                          <div className="border-b border-white/10 pb-3">
-                            <span className="font-mono-tab text-[10px] uppercase font-bold text-white/50 block mb-2">
-                              Offenses Charged ({parsed.length} Violations on Notice)
-                            </span>
-                            <div className="flex flex-col divide-y divide-white/10 rounded-xl border border-white/10 bg-black/40 px-3 py-1">
-                              {parsed.map((item, idx) => (
-                                <div key={idx} className="py-2 flex items-center justify-between text-xs">
-                                  <span className="font-semibold text-white flex items-center gap-2">
-                                    <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-white/70">
+                      <div className="mt-6 rounded-2xl border border-white/10 bg-black/60 overflow-hidden shadow-2xl">
+                        {/* Slip Header */}
+                        <div className="border-b border-white/10 bg-white/[0.03] p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Scale className="size-4 text-blue-400" />
+                              <span className="font-mono-tab text-xs font-bold uppercase tracking-wider text-white">
+                                Official Statutory Adjudication & Fine Schedule
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-white/50 mt-0.5">
+                              Enforced under QC Traffic Management Code & MMDA No Contact Apprehension Policy
+                            </p>
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 font-mono-tab text-[10px] font-bold text-white/80 border border-white/10 self-start sm:self-auto">
+                            {parsed.length} Infraction{parsed.length > 1 ? "s" : ""} Assessed
+                          </span>
+                        </div>
+
+                        {/* Itemized Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="border-b border-white/10 bg-white/[0.01] font-mono-tab text-[10px] uppercase text-white/40">
+                              <tr>
+                                <th className="px-4 py-2.5 w-10">#</th>
+                                <th className="px-4 py-2.5">Charged Offense & Statutory Classification</th>
+                                <th className="px-4 py-2.5 hidden sm:table-cell">Legal Ordinance Basis</th>
+                                <th className="px-4 py-2.5 text-right">Statutory Fine</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {parsed.map((item, idx) => {
+                                const catTone =
+                                  item.category === "Franchise & Colorum" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+                                  item.category === "Registration & Licensing" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" :
+                                  item.category === "Moving Violation" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" :
+                                  item.category === "Obstruction & Parking" ? "bg-rose-500/20 text-rose-300 border-rose-500/30" :
+                                  "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+                                return (
+                                  <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
+                                    <td className="px-4 py-3 font-mono-tab text-white/50 align-top">
                                       {idx + 1}
-                                    </span>
-                                    {item.name}
-                                  </span>
-                                  <span className="font-mono-tab text-xs font-bold text-emerald-400">
-                                    {formatPeso(item.amount)}
-                                  </span>
-                                </div>
-                              ))}
+                                    </td>
+                                    <td className="px-4 py-3 align-top">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="font-bold text-white text-sm">{item.name}</span>
+                                        {item.category && (
+                                          <span className={cn("rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border", catTone)}>
+                                            {item.category}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {item.description && (
+                                        <p className="text-[11px] text-white/60 mt-1 leading-relaxed">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                      <p className="text-[10px] text-blue-400 font-mono-tab mt-1 sm:hidden">
+                                        {item.ordinance}
+                                      </p>
+                                    </td>
+                                    <td className="px-4 py-3 align-top hidden sm:table-cell font-mono-tab text-[11px] text-blue-300/90">
+                                      <div>{item.ordinance || selectedNov.ordinanceCode}</div>
+                                      {item.code && (
+                                        <div className="text-[10px] text-white/40 mt-0.5">Code: {item.code}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 align-top text-right font-mono-tab font-black text-emerald-400 text-sm whitespace-nowrap">
+                                      {formatPeso(item.amount)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Financial Reconciliation Ledger */}
+                        <div className="border-t border-white/10 bg-black/80 p-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                            <div>
+                              <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Base Fines Subtotal</span>
+                              <span className="font-mono-tab text-white font-bold text-sm">{formatPeso(baseSub)}</span>
+                            </div>
+                            <div>
+                              <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Late Surcharge</span>
+                              <span className={cn("font-mono-tab font-bold text-sm", surchargeAmt > 0 ? "text-orange-400" : "text-emerald-400")}>
+                                {formatPeso(surchargeAmt)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Total Assessed Due</span>
+                              <span className="font-mono-tab text-xl font-black text-white">{formatPeso(totalDueAmt)}</span>
+                            </div>
+                            <div>
+                              <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Settlement Deadline</span>
+                              <span className="font-mono-tab text-orange-400 font-bold text-sm">
+                                {new Date(selectedNov.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
+                              </span>
                             </div>
                           </div>
-                        )}
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          <div>
-                            <span className="text-white/40 block">Fine Base</span>
-                            <span className="font-mono-tab text-white font-bold">{formatPeso(selectedNov.amount)}</span>
-                          </div>
-                          <div>
-                            <span className="text-white/40 block">Late Surcharge</span>
-                            <span className="font-mono-tab text-emerald-400 font-bold">₱0.00</span>
-                          </div>
-                          <div>
-                            <span className="text-white/40 block">Total Due</span>
-                            <span className="font-mono-tab text-lg font-black text-white">{formatPeso(selectedNov.amount)}</span>
-                          </div>
-                          <div>
-                            <span className="text-white/40 block">Settlement Deadline</span>
-                            <span className="font-mono-tab text-orange-400 font-bold">
-                              {new Date(selectedNov.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
+                          <div className="mt-4 pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-white/50">
+                            <span className="flex items-center gap-1.5">
+                              <ShieldAlert className="size-3.5 text-amber-400 shrink-0" />
+                              Unsettled citations beyond 10 days will be tagged on the LTO LTMS database, preventing annual registration renewal.
+                            </span>
+                            <span className="font-mono-tab text-white/60 shrink-0">
+                              Adjudication Unit: Culiat Traffic Operations Center
                             </span>
                           </div>
                         </div>
@@ -1715,6 +1939,21 @@ function CitizenPortal() {
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Under MMDA NCAP rules, if you were not the driver at the time of apprehension, you may transfer liability by submitting the driver's verified credentials.
                 </p>
+
+                {selectedNov && (() => {
+                  const parsed = parseCitationOffenses(selectedNov.violation, selectedNov.amount);
+                  return (
+                    <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between font-mono-tab">
+                        <span className="text-white/60">Citation: <strong className="text-white">{selectedNov.novNumber}</strong></span>
+                        <span className="text-white/60">Plate: <strong className="text-white">{selectedNov.plateNumber}</strong></span>
+                      </div>
+                      <div className="text-[11px] text-white/70">
+                        Transferring liability for: <span className="font-semibold text-white">{parsed.map((p) => p.name).join(" & ")}</span> ({formatPeso(selectedNov.amount)})
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <label className="flex flex-col gap-1.5">
                   <span className="font-mono-tab text-[10px] uppercase text-subtle">Driver Full Name *</span>
@@ -1794,12 +2033,54 @@ function CitizenPortal() {
                     <span className="text-xs text-emerald-400 font-semibold mt-1">LTO LTMS REGISTRATION ALARM CLEARED</span>
                   </div>
 
-                  <div className="mt-6 space-y-2 text-xs text-white/80 border-t border-white/10 pt-4">
-                    <p><strong>Issued To:</strong> {currentCitizen.fullName}</p>
-                    <p><strong>Vehicle Plate:</strong> {clearedCitation.plateNumber}</p>
-                    <p><strong>Resolved NOV:</strong> {clearedCitation.novNumber || clearedCitation.id}</p>
-                    <p><strong>Violation:</strong> {clearedCitation.violation}</p>
-                    <p><strong>Date Cleared:</strong> {new Date().toLocaleDateString()}</p>
+                  <div className="mt-5 space-y-3 text-xs text-white/80 border-t border-white/10 pt-4">
+                    <div className="grid grid-cols-2 gap-3 text-xs bg-white/5 p-3 rounded-xl border border-white/10">
+                      <div>
+                        <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Issued To</span>
+                        <span className="font-bold text-white">{currentCitizen.fullName}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Vehicle Plate</span>
+                        <span className="font-bold text-white font-mono-tab">{clearedCitation.plateNumber}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Cleared Notice</span>
+                        <span className="font-mono-tab text-white/90">{clearedCitation.novNumber || clearedCitation.id}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Date Adjudicated</span>
+                        <span className="text-white/90">{new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}</span>
+                      </div>
+                    </div>
+
+                    {/* Itemized Cleared Violations */}
+                    <div className="space-y-1.5">
+                      <span className="font-mono-tab text-[10px] uppercase font-bold text-white/50 block">
+                        Itemized Cleared Violations & Penalties
+                      </span>
+                      <div className="divide-y divide-white/10 rounded-xl border border-white/10 bg-black/50 p-2.5">
+                        {parseCitationOffenses(clearedCitation.violation, clearedCitation.amount).map((item, idx) => (
+                          <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                            <span className="font-semibold text-white flex items-center gap-2">
+                              <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                              <span>{item.name}</span>
+                              {item.code && (
+                                <span className="font-mono-tab text-[9px] text-white/40 bg-white/5 px-1 rounded">
+                                  {item.code}
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-mono-tab text-xs font-bold text-emerald-400">
+                              {formatPeso(item.amount)} [PAID]
+                            </span>
+                          </div>
+                        ))}
+                        <div className="pt-2 flex items-center justify-between text-xs font-bold border-t border-white/10">
+                          <span className="text-white/70">Total Liability Cleared</span>
+                          <span className="font-mono-tab text-emerald-400">{formatPeso(clearedCitation.amount)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-8 flex justify-end gap-3 border-t border-white/10 pt-4">
@@ -1836,10 +2117,65 @@ function CitizenPortal() {
               </div>
 
               <form onSubmit={handleQuickSettleSubmit} className="mt-4 flex flex-col gap-4">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">
-                  <p className="text-[10px] font-mono-tab uppercase text-white/50">Citation Reference</p>
-                  <p className="text-base font-bold text-white mt-0.5">{selectedCitationId || "CIT-00135"}</p>
-                </div>
+                {(() => {
+                  const targetCitation = currentCitizen?.citations?.find(
+                    (c) => c.id === selectedCitationId || c.novNumber === selectedCitationId
+                  );
+                  const targetParsed = targetCitation
+                    ? parseCitationOffenses(targetCitation.violation, targetCitation.amount)
+                    : [];
+                  const targetTotal = targetCitation
+                    ? targetCitation.amount + (targetCitation.surcharge || 0)
+                    : 0;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-mono-tab uppercase text-white/50">Notice of Violation</p>
+                          <p className="text-sm font-bold text-white font-mono-tab mt-0.5">
+                            {targetCitation?.novNumber || selectedCitationId || "CIT-00135"}
+                          </p>
+                        </div>
+                        {targetCitation?.plateNumber && (
+                          <div className="text-right">
+                            <p className="text-[10px] font-mono-tab uppercase text-white/50">Plate Number</p>
+                            <p className="text-sm font-bold text-white font-mono-tab mt-0.5">
+                              {targetCitation.plateNumber}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Itemized breakdown in Settle modal */}
+                      <div className="rounded-xl border border-white/10 bg-black/60 p-3 space-y-2">
+                        <div className="flex items-center justify-between text-[10px] font-mono-tab uppercase text-white/50 border-b border-white/10 pb-1.5">
+                          <span>Charged Offense Breakdown ({targetParsed.length})</span>
+                          <span>Assessed Fine</span>
+                        </div>
+                        <div className="divide-y divide-white/5 space-y-1">
+                          {targetParsed.map((off, idx) => (
+                            <div key={idx} className="flex items-center justify-between pt-1 text-xs">
+                              <span className="font-semibold text-white flex items-center gap-1.5">
+                                <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-white/60">
+                                  {idx + 1}
+                                </span>
+                                {off.name}
+                              </span>
+                              <span className="font-mono-tab font-bold text-emerald-400">
+                                {formatPeso(off.amount)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="border-t border-white/10 pt-2 flex items-center justify-between font-mono-tab text-xs font-bold">
+                          <span className="text-white/70">Total Amount to Pay</span>
+                          <span className="text-sm font-black text-white">{formatPeso(targetTotal)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-white/50">Select Payment Gateway</span>

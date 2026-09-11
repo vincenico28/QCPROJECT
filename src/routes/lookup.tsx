@@ -346,25 +346,40 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
                   </span>
                 )}
               </div>
-              {parsed.length > 1 ? (
-                <div className="mt-2 flex flex-col divide-y divide-border/40 rounded-xl border border-border/50 bg-black/20 p-2.5">
-                  {parsed.map((item, idx) => (
-                    <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-foreground flex items-center gap-2">
+              <div className="mt-2 flex flex-col divide-y divide-border/40 rounded-xl border border-border/50 bg-black/20 p-2.5">
+                {parsed.map((item, idx) => (
+                  <div key={idx} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-muted-foreground">
                           {idx + 1}
                         </span>
-                        {item.name}
-                      </span>
-                      <span className="font-mono-tab text-xs font-bold text-foreground">
+                        <span className="font-semibold text-foreground text-sm">{item.name}</span>
+                        {item.category && (
+                          <span className="rounded bg-primary/10 border border-primary/20 px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-primary">
+                            {item.category}
+                          </span>
+                        )}
+                        {item.code && (
+                          <span className="font-mono-tab text-[9px] text-muted-foreground bg-white/5 px-1 py-0.5 rounded">
+                            {item.code}
+                          </span>
+                        )}
+                      </div>
+                      {item.ordinance && (
+                        <p className="text-[10px] text-primary/80 font-mono-tab pl-6">
+                          {item.ordinance}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end pl-6 sm:pl-0">
+                      <span className="font-mono-tab text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded">
                         {formatPeso(item.amount)}
                       </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm font-semibold text-foreground">{parsed[0]?.name || citation.offense}</p>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })()}
