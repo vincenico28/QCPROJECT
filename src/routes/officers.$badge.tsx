@@ -32,6 +32,8 @@ import {
   Send,
   Target,
   Sparkles,
+  Printer,
+  X,
 } from "lucide-react";
 import { soundEffects } from "@/lib/sound-effects";
 import {
@@ -49,6 +51,7 @@ import {
   formatPeso,
   timeAgo,
   type Officer,
+  type Citation,
 } from "@/lib/data/traffic";
 import { useDispatches, DISPATCH_STATUS_LABEL } from "@/lib/data/dispatch";
 import { useOfficerShifts } from "@/lib/data/officer-shifts";
@@ -93,6 +96,7 @@ export function OfficerDetailPage() {
 
   const [citationSearch, setCitationSearch] = useState("");
   const [citationStatusFilter, setCitationStatusFilter] = useState<string>("all");
+  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [credentialModalOpen, setCredentialModalOpen] = useState(false);
   const [radioModalOpen, setRadioModalOpen] = useState(false);
   const [nightVision, setNightVision] = useState(false);
@@ -791,6 +795,7 @@ export function OfficerDetailPage() {
                     <th className="px-5 py-3 font-medium">Offense</th>
                     <th className="px-5 py-3 text-right font-medium">Fine</th>
                     <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 text-right font-medium">Evidence & Slip</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -826,6 +831,14 @@ export function OfficerDetailPage() {
                         >
                           {c.status}
                         </span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => setSelectedCitation(c)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-primary transition-colors"
+                        >
+                          <Eye className="size-3" /> View Evidence
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1044,6 +1057,118 @@ export function OfficerDetailPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Citation Evidence & Slip Modal */}
+      {selectedCitation && (
+        <Dialog.Root open={!!selectedCitation} onOpenChange={(open) => !open && setSelectedCitation(null)}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-panel p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div>
+                  <span className="font-mono-tab text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Enforcement Officer Ticket
+                  </span>
+                  <Dialog.Title className="text-base font-bold text-foreground">
+                    {selectedCitation.citation_number}
+                  </Dialog.Title>
+                </div>
+                <Dialog.Close asChild>
+                  <button className="rounded-lg p-1 text-muted-foreground hover:bg-panel-elevated hover:text-foreground">
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              {/* Photo Evidence Frame */}
+              <div className="mt-4 rounded-xl border border-border bg-black overflow-hidden relative shadow-inner">
+                <img
+                  src={selectedCitation.evidence_url || "/assets/violation-1.jpg"}
+                  alt={`Evidence capture for ${selectedCitation.plate_number}`}
+                  className="h-44 w-full object-cover"
+                />
+                <div className="absolute inset-x-3 top-3 flex items-center justify-between pointer-events-none">
+                  <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 border border-red-500/40 flex items-center gap-1">
+                    ● OFFICER CAPTURE · {selectedCitation.citation_number}
+                  </span>
+                  <span className="rounded bg-black/70 px-2 py-0.5 font-mono-tab text-[9px] text-emerald-400 border border-emerald-500/30 font-bold">
+                    {selectedCitation.evidence_url?.includes("supabase.co") ? "Supabase Storage CDN" : "Optical Sensor Frame"}
+                  </span>
+                </div>
+                <div className="absolute inset-x-3 bottom-2 rounded-lg border border-emerald-400/80 bg-black/80 p-2 backdrop-blur-sm pointer-events-none flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                  <span className="font-bold">ANPR OCR: {selectedCitation.plate_number}</span>
+                  <span className="font-bold">VERIFIED EVIDENCE</span>
+                </div>
+              </div>
+
+              {/* Breakdown */}
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-panel-elevated/40 p-3">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px]">Offense</span>
+                    <strong className="text-foreground">{selectedCitation.offense}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px]">Vehicle Model</span>
+                    <span className="font-mono-tab text-foreground">{selectedCitation.vehicle_model || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px]">Apprehending Officer</span>
+                    <span className="text-foreground">{selectedCitation.officer_name || officer?.full_name}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px]">Issued At</span>
+                    <span className="font-mono-tab text-foreground">
+                      {new Date(selectedCitation.issued_at).toLocaleString("en-PH")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-border bg-panel-elevated/60 p-3.5">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px]">Statutory Fine</span>
+                    <span className="font-mono-tab text-lg font-black text-foreground">
+                      {formatPeso(Number(selectedCitation.amount))}
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 font-mono-tab text-xs font-bold uppercase",
+                      selectedCitation.status === "paid"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    )}
+                  >
+                    {selectedCitation.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated"
+                >
+                  <Printer className="size-3.5" />
+                  Print Slip
+                </button>
+                {selectedCitation.evidence_url && (
+                  <a
+                    href={selectedCitation.evidence_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated text-primary"
+                  >
+                    <ExternalLink className="size-3.5" />
+                    Open Full Photo
+                  </a>
+                )}
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
     </div>
   );
 }

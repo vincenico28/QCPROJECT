@@ -18,6 +18,7 @@ import {
 import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { fineFor } from "@/lib/data/review";
+import { uploadEvidenceToSupabase } from "@/lib/storage";
 
 export const Route = createFileRoute("/officer/issue")({
   head: () => ({
@@ -51,6 +52,7 @@ function IssuePage() {
   const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
   const [evidenceSizeKb, setEvidenceSizeKb] = useState<number | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
 
   const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,9 +106,25 @@ function IssuePage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plate) return;
+
+    let finalEvidenceUrl = evidenceUrl;
+    if (evidenceUrl && evidenceUrl.startsWith("data:")) {
+      setIsUploading(true);
+      try {
+        finalEvidenceUrl = await uploadEvidenceToSupabase(evidenceUrl, {
+          plateNumber: plate,
+          category: offense,
+          folder: "officer_apprehensions",
+        });
+      } catch (err) {
+        console.warn("Storage upload fallback:", err);
+      } finally {
+        setIsUploading(false);
+      }
+    }
 
     createCitation.mutate(
       {
@@ -116,7 +134,7 @@ function IssuePage() {
         offense,
         amount,
         officer_name: user?.email ?? "Enforcement Officer",
-        evidence_url: evidenceUrl,
+        evidence_url: finalEvidenceUrl,
         location: "Quezon City Road Apprehension",
       },
       {
@@ -302,11 +320,13 @@ function IssuePage() {
 
         <button
           type="submit"
-          disabled={createCitation.isPending || !plate}
+          disabled={createCitation.isPending || isUploading || !plate}
           className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 font-bold text-xs uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all disabled:opacity-50"
         >
-          {createCitation.isPending && <Loader2 className="size-4 animate-spin" />}
-          Issue Digital Citation ({formatPeso(amount).replace("PHP", "₱")})
+          {(createCitation.isPending || isUploading) && <Loader2 className="size-4 animate-spin" />}
+          {isUploading
+            ? "Uploading Evidence..."
+            : `Issue Digital Citation (${formatPeso(amount).replace("PHP", "₱")})`}
         </button>
       </form>
     </div>
