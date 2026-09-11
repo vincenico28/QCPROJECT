@@ -57,6 +57,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
+import { parseCitationOffenses } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -1599,28 +1600,56 @@ function CitizenPortal() {
                   })()}
 
                   {/* Violation Breakdown Table */}
-                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div>
-                        <span className="text-white/40 block">Fine Base</span>
-                        <span className="font-mono-tab text-white font-bold">{formatPeso(selectedNov.amount)}</span>
+                  {(() => {
+                    const parsed = parseCitationOffenses(selectedNov.violation, selectedNov.amount);
+                    return (
+                      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs space-y-3">
+                        {parsed.length > 1 && (
+                          <div className="border-b border-white/10 pb-3">
+                            <span className="font-mono-tab text-[10px] uppercase font-bold text-white/50 block mb-2">
+                              Offenses Charged ({parsed.length} Violations on Notice)
+                            </span>
+                            <div className="flex flex-col divide-y divide-white/10 rounded-xl border border-white/10 bg-black/40 px-3 py-1">
+                              {parsed.map((item, idx) => (
+                                <div key={idx} className="py-2 flex items-center justify-between text-xs">
+                                  <span className="font-semibold text-white flex items-center gap-2">
+                                    <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-white/70">
+                                      {idx + 1}
+                                    </span>
+                                    {item.name}
+                                  </span>
+                                  <span className="font-mono-tab text-xs font-bold text-emerald-400">
+                                    {formatPeso(item.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div>
+                            <span className="text-white/40 block">Fine Base</span>
+                            <span className="font-mono-tab text-white font-bold">{formatPeso(selectedNov.amount)}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block">Late Surcharge</span>
+                            <span className="font-mono-tab text-emerald-400 font-bold">₱0.00</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block">Total Due</span>
+                            <span className="font-mono-tab text-lg font-black text-white">{formatPeso(selectedNov.amount)}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block">Settlement Deadline</span>
+                            <span className="font-mono-tab text-orange-400 font-bold">
+                              {new Date(selectedNov.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-white/40 block">Late Surcharge</span>
-                        <span className="font-mono-tab text-emerald-400 font-bold">₱0.00</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block">Total Due</span>
-                        <span className="font-mono-tab text-lg font-black text-white">{formatPeso(selectedNov.amount)}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block">Settlement Deadline</span>
-                        <span className="font-mono-tab text-orange-400 font-bold">
-                          {new Date(selectedNov.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Actions in Evidence Inspector */}
                   <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">

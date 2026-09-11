@@ -26,6 +26,7 @@ import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
 import { parseEvidenceUrls } from "@/lib/storage";
+import { parseCitationOffenses } from "@/lib/data/review";
 
 export const Route = createFileRoute("/lookup")({
   head: () => ({
@@ -331,19 +332,42 @@ function CitationCard({ citation }: { citation: PublicCitation }) {
 
       {/* Offense & Location Detail */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-background/50 p-4">
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-              Charged Offense
-            </span>
-            {citation.ordinanceCode && (
-              <span className="font-mono-tab text-[10px] text-primary">
-                {citation.ordinanceCode}
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm font-semibold text-foreground">{citation.offense}</p>
-        </div>
+        {(() => {
+          const parsed = parseCitationOffenses(citation.offense, citation.amount);
+          return (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                  Charged Offense{parsed.length > 1 ? `s (${parsed.length} on Notice)` : ""}
+                </span>
+                {citation.ordinanceCode && (
+                  <span className="font-mono-tab text-[10px] text-primary">
+                    {citation.ordinanceCode}
+                  </span>
+                )}
+              </div>
+              {parsed.length > 1 ? (
+                <div className="mt-2 flex flex-col divide-y divide-border/40 rounded-xl border border-border/50 bg-black/20 p-2.5">
+                  {parsed.map((item, idx) => (
+                    <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-foreground flex items-center gap-2">
+                        <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-muted-foreground">
+                          {idx + 1}
+                        </span>
+                        {item.name}
+                      </span>
+                      <span className="font-mono-tab text-xs font-bold text-foreground">
+                        {formatPeso(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-sm font-semibold text-foreground">{parsed[0]?.name || citation.offense}</p>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border/40 text-xs">
           <div className="flex items-center gap-2 text-subtle">

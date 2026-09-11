@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useCitations, formatPeso, timeAgo, type Citation, useUpdateCitationStatus, useCreateCitation, useVehicleLookup } from "@/lib/data/traffic";
-import { fineFor } from "@/lib/data/review";
+import { fineFor, formatOffenseItems, parseCitationOffenses, splitOffenses } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -369,18 +369,20 @@ function CitationsPage() {
 
   const handleCreateDirectCitation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formPlate) return;
+    const validViolationItems = formViolationItems
+      .map((item) => ({
+        name: item.isCustom ? item.customText.trim() : item.offense.trim(),
+        amount: Number(item.amount) || 1000,
+        isCustom: item.isCustom,
+      }))
+      .filter((item) => item.name.length > 0);
 
-    const offenseNames = formViolationItems
-      .map((item) => (item.isCustom ? item.customText.trim() : item.offense.trim()))
-      .filter(Boolean);
-
-    if (offenseNames.length === 0) {
+    if (validViolationItems.length === 0) {
       toast.error("Please enter or select at least one violation classification");
       return;
     }
 
-    const combinedOffense = offenseNames.join(", ");
+    const combinedOffense = formatOffenseItems(validViolationItems);
     const finalVehicle = formVehicle.trim() || lookedUpVehicle?.makeModel || null;
     const cleanPlate = formPlate.toUpperCase().trim();
 
@@ -419,7 +421,7 @@ function CitationsPage() {
       {
         onSuccess: (newC) => {
           toast.success(`Citation ${newC.citation_number} issued successfully`, {
-            description: `Plate: ${newC.plate_number} · ${offenseNames.length} violation(s) · Amount: ${formatPeso(newC.amount)}`,
+            description: `Plate: ${newC.plate_number} · ${validViolationItems.length} violation(s) · Amount: ${formatPeso(newC.amount)}`,
           });
           setCreateModalOpen(false);
           setFormPlate("");
@@ -1188,41 +1190,47 @@ function CitationsPage() {
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Vehicle Model</span>
                     <p className="font-medium text-foreground mt-0.5">{selectedCitation.vehicle_model || "Registered Vehicle"}</p>
                   </div>
-                  <div className="col-span-2 rounded-xl border border-border/60 bg-background/50 p-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-subtle font-mono-tab text-[10px] uppercase font-bold">
-                        Charged Violation(s)
-                      </span>
-                      {selectedCitation.offense.includes(",") && (
-                        <span className="rounded bg-primary/20 border border-primary/30 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
-                          {selectedCitation.offense.split(",").length} Offenses on 1 Ticket
-                        </span>
-                      )}
-                    </div>
-                    {selectedCitation.offense.includes(",") ? (
-                      <div className="flex flex-col divide-y divide-border/30">
-                        {selectedCitation.offense.split(",").map((off, idx) => {
-                          const cleanOff = off.trim();
-                          const estFine = fineFor(cleanOff);
-                          return (
-                            <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
-                              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-muted-foreground">
-                                  {idx + 1}
+                  {(() => {
+                    const parsedOffenses = parseCitationOffenses(selectedCitation.offense, selectedCitation.amount);
+                    return (
+                      <div className="col-span-2 rounded-xl border border-border/60 bg-background/50 p-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-subtle font-mono-tab text-[10px] uppercase font-bold">
+                            Charged Violation(s)
+                          </span>
+                          {parsedOffenses.length > 1 && (
+                            <span className="rounded bg-primary/20 border border-primary/30 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-primary">
+                              {parsedOffenses.length} Offenses on 1 Ticket
+                            </span>
+                          )}
+                        </div>
+                        {parsedOffenses.length > 1 ? (
+                          <div className="flex flex-col divide-y divide-border/30">
+                            {parsedOffenses.map((item, idx) => (
+                              <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                  <span className="grid size-4 place-items-center rounded-full bg-white/10 text-[9px] font-mono-tab text-muted-foreground">
+                                    {idx + 1}
+                                  </span>
+                                  {item.name}
                                 </span>
-                                {cleanOff}
-                              </span>
-                              <span className="font-mono-tab text-[11px] text-muted-foreground">
-                                {estFine ? formatPeso(estFine) : "Statutory Fine"}
-                              </span>
-                            </div>
-                          );
-                        })}
+                                <span className="font-mono-tab text-xs font-bold text-foreground">
+                                  {formatPeso(item.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-foreground text-sm">{parsedOffenses[0]?.name || selectedCitation.offense}</p>
+                            <span className="font-mono-tab text-xs font-bold text-foreground">
+                              {formatPeso(parsedOffenses[0]?.amount || selectedCitation.amount)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <p className="font-semibold text-foreground text-sm">{selectedCitation.offense}</p>
-                    )}
-                  </div>
+                    );
+                  })()}
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Total Assessed Fine</span>
                     <p className="font-mono-tab text-base font-black text-foreground mt-0.5">{formatPeso(selectedCitation.amount)}</p>
@@ -1475,23 +1483,26 @@ function CitationRow({
       <td className="px-5 py-3.5 font-mono-tab font-semibold text-foreground">{c.plate_number}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.vehicle_model ?? "—"}</td>
       <td className="px-5 py-3.5 text-xs">
-        {c.offense.includes(",") ? (
-          <div className="flex flex-col gap-0.5 max-w-xs">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="rounded bg-primary/20 border border-primary/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary whitespace-nowrap">
-                {c.offense.split(",").length} Violations
-              </span>
-              <span className="font-semibold text-foreground truncate">
-                {c.offense.split(",")[0].trim()}
+        {(() => {
+          const parsed = parseCitationOffenses(c.offense, c.amount);
+          return parsed.length > 1 ? (
+            <div className="flex flex-col gap-0.5 max-w-xs">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="rounded bg-primary/20 border border-primary/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary whitespace-nowrap">
+                  {parsed.length} Violations
+                </span>
+                <span className="font-semibold text-foreground truncate">
+                  {parsed[0].name}
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground truncate" title={c.offense}>
+                +{parsed.slice(1).map((s) => s.name).join(", ")}
               </span>
             </div>
-            <span className="text-[10px] text-muted-foreground truncate" title={c.offense}>
-              +{c.offense.split(",").slice(1).map((s) => s.trim()).join(", ")}
-            </span>
-          </div>
-        ) : (
-          <span className="font-semibold text-foreground">{c.offense}</span>
-        )}
+          ) : (
+            <span className="font-semibold text-foreground">{parsed[0]?.name || c.offense}</span>
+          );
+        })()}
       </td>
       <td className="px-5 py-3.5 font-mono-tab font-bold text-foreground">{formatPeso(Number(c.amount))}</td>
       <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.officer_name ?? "AI Camera Grid"}</td>

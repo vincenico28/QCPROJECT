@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
-import { fineFor } from "@/lib/data/review";
+import { fineFor, formatOffenseItems } from "@/lib/data/review";
 import { uploadMultipleEvidenceToSupabase, serializeEvidenceUrls } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
@@ -219,16 +219,20 @@ function IssuePage() {
     e.preventDefault();
     if (!plate) return;
 
-    const offenseNames = violationItems
-      .map((item) => (item.isCustom ? item.customText.trim() : item.offense.trim()))
-      .filter(Boolean);
+    const validViolationItems = violationItems
+      .map((item) => ({
+        name: item.isCustom ? item.customText.trim() : item.offense.trim(),
+        amount: Number(item.amount) || 1000,
+        isCustom: item.isCustom,
+      }))
+      .filter((item) => item.name.length > 0);
 
-    if (offenseNames.length === 0) {
+    if (validViolationItems.length === 0) {
       toast.error("Please enter or select at least one violation classification");
       return;
     }
 
-    const combinedOffense = offenseNames.join(", ");
+    const combinedOffense = formatOffenseItems(validViolationItems);
 
     let finalEvidenceUrl: string | null = null;
     if (evidenceItems.length > 0) {
@@ -265,7 +269,7 @@ function IssuePage() {
       {
         onSuccess: (data) => {
           toast.success(`Citation #${data.citation_number} issued for ${plate}`, {
-            description: `${offenseNames.length} violation(s) charged · ${evidenceItems.length} evidence photo(s) · Total: ${formatPeso(totalAmount)}`,
+            description: `${validViolationItems.length} violation(s) charged · ${evidenceItems.length} evidence photo(s) · Total: ${formatPeso(totalAmount)}`,
           });
           setLastIssuedNumber(data.citation_number);
           setPlate("");
