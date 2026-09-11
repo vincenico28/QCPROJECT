@@ -53,6 +53,7 @@ import {
   FileCheck2,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   RefreshCw,
 } from "lucide-react";
 import { formatPeso } from "@/lib/data/traffic";
@@ -115,6 +116,7 @@ function CitizenPortal() {
   const [inspectNovModalOpen, setInspectNovModalOpen] = useState(false);
   const [selectedNov, setSelectedNov] = useState<CitizenCitation | null>(null);
   const [activeFrameMode, setActiveFrameMode] = useState<"wide" | "plate" | "telemetry">("wide");
+  const [activeEvidenceFrameIndex, setActiveEvidenceFrameIndex] = useState(0);
 
   // Nominate Driver Modal State
   const [nominateModalOpen, setNominateModalOpen] = useState(false);
@@ -589,6 +591,7 @@ function CitizenPortal() {
                             onClick={() => {
                               setSelectedNov(c);
                               setActiveFrameMode("wide");
+                              setActiveEvidenceFrameIndex(0);
                               setInspectNovModalOpen(true);
                             }}
                             className="inline-flex items-center gap-2 rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-2 text-xs font-bold text-blue-400 hover:bg-blue-600 hover:text-white transition-all"
@@ -1348,7 +1351,12 @@ function CitizenPortal() {
 
                   {/* Photographic Evidence Viewfinder & Optical Sequence */}
                   {(() => {
-                    const evidenceUrl = selectedNov.evidenceFrames?.[0]?.url || "/assets/violation-1.jpg";
+                    const frames = selectedNov.evidenceFrames && selectedNov.evidenceFrames.length > 0
+                      ? selectedNov.evidenceFrames
+                      : [{ url: "/assets/violation-1.jpg", label: `Optical Sentinel Capture: ${selectedNov.violation}`, timestamp: new Date(selectedNov.date).toLocaleTimeString() }];
+                    const safeIndex = Math.min(activeEvidenceFrameIndex, frames.length - 1);
+                    const currentFrame = frames[safeIndex] || frames[0];
+                    const evidenceUrl = currentFrame.url || "/assets/violation-1.jpg";
                     const isSupabaseStorage = evidenceUrl.includes("supabase.co") || evidenceUrl.startsWith("http");
 
                     return (
@@ -1357,6 +1365,11 @@ function CitizenPortal() {
                           <h3 className="text-xs font-bold uppercase tracking-wider text-white/60 flex items-center gap-2">
                             <Camera className="size-4 text-blue-400" />
                             Official Optical Evidence Capture (ANPR Verified)
+                            {frames.length > 1 && (
+                              <span className="rounded bg-blue-500/20 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-blue-300">
+                                Frame {safeIndex + 1} of {frames.length}
+                              </span>
+                            )}
                           </h3>
                           <div className="flex items-center gap-2">
                             {isSupabaseStorage ? (
@@ -1384,7 +1397,7 @@ function CitizenPortal() {
                           <div className="relative h-64 sm:h-80 w-full overflow-hidden flex items-center justify-center bg-zinc-950">
                             <img
                               src={evidenceUrl}
-                              alt={`Optical evidence for ${selectedNov.novNumber}`}
+                              alt={`Optical evidence for ${selectedNov.novNumber} - Frame ${safeIndex + 1}`}
                               className={cn(
                                 "size-full object-cover transition-transform duration-300",
                                 activeFrameMode === "plate" ? "scale-150 object-center" : "",
@@ -1405,7 +1418,7 @@ function CitizenPortal() {
                                   </span>
                                 </div>
                                 <span className="font-mono-tab text-[11px] text-white/70 drop-shadow">
-                                  {new Date(selectedNov.date).toLocaleDateString()} {new Date(selectedNov.date).toLocaleTimeString()}
+                                  {new Date(selectedNov.date).toLocaleDateString()} {currentFrame.timestamp || new Date(selectedNov.date).toLocaleTimeString()}
                                 </span>
                               </div>
 
@@ -1436,7 +1449,7 @@ function CitizenPortal() {
                                     </span>
                                   </div>
                                   <p className="text-[10px] text-white/70 mt-0.5">
-                                    Violation: <strong className="text-white">{selectedNov.violation}</strong>
+                                    {currentFrame.label || `Violation: ${selectedNov.violation}`}
                                   </p>
                                 </div>
 
@@ -1446,83 +1459,141 @@ function CitizenPortal() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Previous / Next Arrow Controls if Multiple Frames */}
+                            {frames.length > 1 && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveEvidenceFrameIndex((prev) => (prev > 0 ? prev - 1 : frames.length - 1));
+                                  }}
+                                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/70 p-2 text-white/80 hover:bg-black hover:text-white border border-white/20 transition-all backdrop-blur-sm"
+                                  title="Previous Frame"
+                                >
+                                  <ChevronLeft className="size-5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveEvidenceFrameIndex((prev) => (prev < frames.length - 1 ? prev + 1 : 0));
+                                  }}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/70 p-2 text-white/80 hover:bg-black hover:text-white border border-white/20 transition-all backdrop-blur-sm"
+                                  title="Next Frame"
+                                >
+                                  <ChevronRight className="size-5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
 
-                        {/* 3-Frame Multi-Angle Inspection Sequence */}
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          {/* Frame 1: Approach / Wide View */}
-                          <button
-                            type="button"
-                            onClick={() => setActiveFrameMode("wide")}
-                            className={cn(
-                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
-                              activeFrameMode === "wide"
-                                ? "border-blue-500 bg-blue-500/15 ring-1 ring-blue-500/50"
-                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
-                            )}
-                          >
-                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
-                              <img src={evidenceUrl} alt="Frame 01 Approach" className="size-full object-cover" />
-                              <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1.5 py-0.5 font-mono-tab text-[9px] text-blue-400 font-bold">
-                                WIDE ANGLE
-                              </span>
+                        {/* Multi-Frame Selection Strip if Multiple Frames */}
+                        {frames.length > 1 ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[11px] text-white/60">
+                              <span>Select Evidence Frame to Inspect:</span>
+                              <span className="font-mono-tab text-white/80">Frame {safeIndex + 1} of {frames.length}</span>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono-tab font-bold text-blue-400">FRAME 01 • APPROACH</span>
-                              {activeFrameMode === "wide" && <span className="size-1.5 rounded-full bg-blue-400" />}
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                              {frames.map((frame, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveEvidenceFrameIndex(idx);
+                                    setActiveFrameMode("wide");
+                                  }}
+                                  className={cn(
+                                    "relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border-2 transition-all text-left",
+                                    safeIndex === idx
+                                      ? "border-blue-500 ring-2 ring-blue-500/50 shadow-lg"
+                                      : "border-white/10 opacity-70 hover:opacity-100 hover:border-white/30"
+                                  )}
+                                >
+                                  <img src={frame.url} alt={`Evidence Frame ${idx + 1}`} className="size-full object-cover" />
+                                  <span className="absolute bottom-1 right-1 rounded bg-black/85 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-white">
+                                    #{idx + 1}
+                                  </span>
+                                </button>
+                              ))}
                             </div>
-                            <p className="text-[10px] text-white/70 line-clamp-1">Primary photographic capture of vehicle approaching intersection.</p>
-                          </button>
+                          </div>
+                        ) : (
+                          /* 3-Mode Optical Inspection Sequence for Single Frame */
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <button
+                              type="button"
+                              onClick={() => setActiveFrameMode("wide")}
+                              className={cn(
+                                "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                                activeFrameMode === "wide"
+                                  ? "border-blue-500 bg-blue-500/15 ring-1 ring-blue-500/50"
+                                  : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                              )}
+                            >
+                              <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                                <img src={evidenceUrl} alt="Frame 01 Approach" className="size-full object-cover" />
+                                <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1.5 py-0.5 font-mono-tab text-[9px] text-blue-400 font-bold">
+                                  WIDE ANGLE
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono-tab font-bold text-blue-400">FRAME 01 • APPROACH</span>
+                                {activeFrameMode === "wide" && <span className="size-1.5 rounded-full bg-blue-400" />}
+                              </div>
+                              <p className="text-[10px] text-white/70 line-clamp-1">Primary photographic capture of vehicle approaching intersection.</p>
+                            </button>
 
-                          {/* Frame 2: Infraction Trigger Point */}
-                          <button
-                            type="button"
-                            onClick={() => setActiveFrameMode("telemetry")}
-                            className={cn(
-                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
-                              activeFrameMode === "telemetry"
-                                ? "border-red-500 bg-red-500/15 ring-1 ring-red-500/50"
-                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
-                            )}
-                          >
-                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
-                              <img src={evidenceUrl} alt="Frame 02 Infraction" className="size-full object-cover contrast-125" />
-                              <span className="absolute bottom-1 right-1 rounded bg-red-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-red-400 font-bold border border-red-500/40">
-                                TRIGGER POINT
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono-tab font-bold text-red-400">FRAME 02 • INFRACTION</span>
-                              {activeFrameMode === "telemetry" && <span className="size-1.5 rounded-full bg-red-400" />}
-                            </div>
-                            <p className="text-[10px] text-white/70 line-clamp-1">Stop line crossing / active lane sensor trigger verified.</p>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveFrameMode("telemetry")}
+                              className={cn(
+                                "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                                activeFrameMode === "telemetry"
+                                  ? "border-red-500 bg-red-500/15 ring-1 ring-red-500/50"
+                                  : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                              )}
+                            >
+                              <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                                <img src={evidenceUrl} alt="Frame 02 Infraction" className="size-full object-cover contrast-125" />
+                                <span className="absolute bottom-1 right-1 rounded bg-red-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-red-400 font-bold border border-red-500/40">
+                                  TRIGGER POINT
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono-tab font-bold text-red-400">FRAME 02 • INFRACTION</span>
+                                {activeFrameMode === "telemetry" && <span className="size-1.5 rounded-full bg-red-400" />}
+                              </div>
+                              <p className="text-[10px] text-white/70 line-clamp-1">Stop line crossing / active lane sensor trigger verified.</p>
+                            </button>
 
-                          {/* Frame 3: Plate OCR Magnification */}
-                          <button
-                            type="button"
-                            onClick={() => setActiveFrameMode("plate")}
-                            className={cn(
-                              "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
-                              activeFrameMode === "plate"
-                                ? "border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500/50"
-                                : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
-                            )}
-                          >
-                            <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
-                              <img src={evidenceUrl} alt="Frame 03 ANPR Plate Crop" className="size-full object-cover scale-150" />
-                              <span className="absolute bottom-1 right-1 rounded bg-emerald-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-emerald-400 font-bold border border-emerald-500/40">
-                                99.4% OCR
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono-tab font-bold text-emerald-400">FRAME 03 • ANPR CROP</span>
-                              {activeFrameMode === "plate" && <span className="size-1.5 rounded-full bg-emerald-400" />}
-                            </div>
-                            <p className="text-[10px] text-white/70 line-clamp-1">Automated plate recognition crop matching {selectedNov.plateNumber}.</p>
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => setActiveFrameMode("plate")}
+                              className={cn(
+                                "text-left flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all",
+                                activeFrameMode === "plate"
+                                  ? "border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500/50"
+                                  : "border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20"
+                              )}
+                            >
+                              <div className="relative h-24 w-full overflow-hidden rounded-lg bg-zinc-900">
+                                <img src={evidenceUrl} alt="Frame 03 ANPR Plate Crop" className="size-full object-cover scale-150" />
+                                <span className="absolute bottom-1 right-1 rounded bg-emerald-950/90 px-1.5 py-0.5 font-mono-tab text-[9px] text-emerald-400 font-bold border border-emerald-500/40">
+                                  99.4% OCR
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono-tab font-bold text-emerald-400">FRAME 03 • ANPR CROP</span>
+                                {activeFrameMode === "plate" && <span className="size-1.5 rounded-full bg-emerald-400" />}
+                              </div>
+                              <p className="text-[10px] text-white/70 line-clamp-1">Automated plate recognition crop matching {selectedNov.plateNumber}.</p>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}

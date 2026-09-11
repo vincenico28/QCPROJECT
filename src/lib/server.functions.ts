@@ -126,7 +126,13 @@ export const serverSaveViolation = createServerFn({ method: "POST" })
     }
     const violationType = data.violation_type || data.violationType || "Traffic Infraction";
     const cameraCode = data.camera_code || data.cameraCode || "QC-CAM-1001";
-    const evidenceUrl = data.evidence_url || data.evidenceUrl || "/assets/violation-1.jpg";
+    const rawEvidence = data.evidence_url || data.evidenceUrl || "/assets/violation-1.jpg";
+    const { ensureEvidenceUploadedToSupabase } = await import("@/lib/storage");
+    const evidenceUrl = await ensureEvidenceUploadedToSupabase(rawEvidence, {
+      plateNumber: plate,
+      category: violationType,
+      folder: "violations",
+    });
     const aiDetected = data.ai_detected ?? data.aiDetected ?? false;
     const rawConf = data.confidence ?? 95;
     const confidence = rawConf > 1 ? rawConf : rawConf * 100;
@@ -224,7 +230,15 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     const vehicleModel = data.vehicle_model || data.vehicleModel || null;
     const officerName = data.officer_name || data.officerName || "QC Enforcer";
     const status = data.status || "unpaid";
-    const evidenceUrl = data.evidence_url || data.evidenceUrl || null;
+    const rawEvidence = data.evidence_url || data.evidenceUrl || null;
+    const { ensureEvidenceUploadedToSupabase } = await import("@/lib/storage");
+    const evidenceUrl = rawEvidence
+      ? await ensureEvidenceUploadedToSupabase(rawEvidence, {
+          plateNumber: plate,
+          category: data.offense,
+          folder: "citations",
+        })
+      : null;
 
     // 1. DEDUPLICATION: If a citation already exists for this violation, return it idempotently
     if (violationId) {
@@ -1341,8 +1355,18 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
         };
       });
 
+      const { parseEvidenceUrls } = await import("@/lib/storage");
+
       const citations = (cmdCitations || []).map((cmd: any) => {
         const isPaid = cmd.status === "paid" || cmd.status === "settled";
+        const rawEvidence = cmd.evidence_url || cmd.violations?.evidence_url;
+        const frames = parseEvidenceUrls(rawEvidence);
+        const evidenceFrames = frames.map((frameUrl, idx) => ({
+          url: frameUrl,
+          label: frames.length > 1 ? `Optical Capture Frame #${idx + 1}` : `Optical Sentinel Capture: ${cmd.offense}`,
+          timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
+        }));
+
         return {
           id: cmd.id,
           novNumber: cmd.citation_number,
@@ -1356,13 +1380,7 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           surcharge: 0,
           status: isPaid ? ("settled" as const) : ("unpaid" as const),
           ltoAlarmStatus: isPaid ? ("CLEARED" as const) : ("LTO_ALARM_ACTIVE" as const),
-          evidenceFrames: [
-            {
-              url: cmd.evidence_url || cmd.violations?.evidence_url || "/assets/violation-1.jpg",
-              label: `Optical Sentinel Capture: ${cmd.offense}`,
-              timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
-            },
-          ],
+          evidenceFrames,
         };
       });
 

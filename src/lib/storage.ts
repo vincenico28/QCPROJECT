@@ -4,6 +4,10 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   const [header, base64] = dataUrl.split(",");
   const mimeMatch = header.match(/:(.*?);/);
   const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  if (typeof Buffer !== "undefined") {
+    const buffer = Buffer.from(base64, "base64");
+    return new Blob([buffer], { type: mime });
+  }
   const binary = atob(base64);
   const array = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -60,13 +64,11 @@ export async function uploadEvidenceToSupabase(
       .upload(filePath, blob, {
         contentType: mimeType,
         cacheControl: "31536000",
-        upsert: true,
+        upsert: false,
       });
 
     if (uploadError) {
-      console.warn("[Supabase Storage] Upload error to 'evidence' bucket:", uploadError.message);
-      // If bucket is not created or RLS rejected, return the dataURL/original
-      if (typeof evidence === "string") return evidence;
+      console.error("[Supabase Storage] Upload error to 'evidence' bucket:", uploadError.message);
       return "/assets/violation-1.jpg";
     }
 
@@ -80,7 +82,6 @@ export async function uploadEvidenceToSupabase(
     console.error("[Supabase Storage] Unexpected error in uploadEvidenceToSupabase:", err);
   }
 
-  if (typeof evidence === "string") return evidence;
   return "/assets/violation-1.jpg";
 }
 
@@ -150,5 +151,33 @@ export function parseEvidenceUrls(raw: string | null | undefined): string[] {
 export function getPrimaryEvidenceUrl(raw: string | null | undefined): string {
   const list = parseEvidenceUrls(raw);
   return list[0] || "/assets/violation-1.jpg";
+}
+
+/**
+ * Takes any evidence string (single URL, base64 data URL, or JSON array string of URLs)
+ * and guarantees that any base64 data URLs are uploaded to Supabase Storage,
+ * returning the final serialized string of public CDN URLs.
+ */
+export async function ensureEvidenceUploadedToSupabase(
+  rawEvidence: string | null | undefined,
+  options: UploadEvidenceOptions = {}
+): Promise<string> {
+  if (!rawEvidence || rawEvidence.trim().length === 0) {
+    return "/assets/violation-1.jpg";
+  }
+
+  const urls = parseEvidenceUrls(rawEvidence);
+  const resolvedUrls: string[] = [];
+
+  for (const url of urls) {
+    if (url.startsWith("data:image/") || url.startsWith("data:application/")) {
+      const uploaded = await uploadEvidenceToSupabase(url, options);
+      resolvedUrls.push(uploaded);
+    } else {
+      resolvedUrls.push(url);
+    }
+  }
+
+  return serializeEvidenceUrls(resolvedUrls);
 }
 
