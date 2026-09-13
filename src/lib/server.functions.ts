@@ -97,6 +97,32 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
     return null;
   });
 
+export const serverFetchCitationById = createServerFn({ method: "GET" })
+  .validator((identifier: unknown) => String(identifier || "").trim())
+  .handler(async ({ data: identifier }) => {
+    if (!identifier) return null;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("citations")
+        .select("*, violations(evidence_url, location, camera_code)")
+        .or(`citation_number.eq.${identifier},id.eq.${identifier}`)
+        .maybeSingle();
+
+      if (!error && data) {
+        const row = data as any;
+        return {
+          ...row,
+          evidence_url: row.evidence_url || row.violations?.evidence_url || "/assets/violation-1.jpg",
+          location: row.violations?.location || row.location || "Quezon City Road Corridor",
+        };
+      }
+    } catch (err) {
+      console.error("[Supabase Error: Fetch Citation by ID]", err);
+    }
+    return null;
+  });
+
 const violationInsertSchema = z.object({
   plate_number: z.string().trim().optional(),
   plateNumber: z.string().trim().optional(),
@@ -392,7 +418,7 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("citations")
       .update({ status: data.status })
-      .eq("citation_number", data.citationNumber);
+      .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`);
 
     if (error) {
       console.error("[Supabase Error: Update Citation Status]", error);
@@ -406,7 +432,7 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
         const { data: citRow } = await supabaseAdmin
           .from("citations")
           .select("plate_number")
-          .eq("citation_number", data.citationNumber)
+          .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`)
           .maybeSingle();
 
         if (citRow?.plate_number) {
@@ -767,14 +793,14 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       });
 
     if (insertErr) {
-      console.error("[Supabase Error: Payment Insert]", insertErr);
-      // We log but don't strictly fail the user if the payment log fails for some reason
+      console.warn("[Supabase Warning: Payment Insert (Check RLS)]", insertErr.message);
+      // We log warning but don't strictly fail the user if the payment log fails for some reason
     }
 
     const { error } = await supabaseAdmin
       .from("citations")
       .update({ status: "paid" })
-      .eq("citation_number", data.citationNumber);
+      .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`);
 
     if (error) {
       console.error("[Supabase Error: Payment Checkout]", error);
@@ -1178,7 +1204,7 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
     await supabaseAdmin
       .from("citations")
       .update({ status: "paid" })
-      .eq("citation_number", data.citationId);
+      .or(`citation_number.eq.${data.citationId},id.eq.${data.citationId}`);
 
     return { success: true };
   });

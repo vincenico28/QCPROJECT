@@ -6,6 +6,7 @@ import {
   serverSaveViolation,
   serverUpdateViolationStatus,
   serverFetchCitations,
+  serverFetchCitationById,
   serverSaveCitation,
   serverUpdateCitationStatus,
   serverFetchOfficers,
@@ -228,6 +229,12 @@ export function useCitation(citationNumber: string) {
   return useQuery({
     queryKey: ["citation", citationNumber],
     queryFn: async () => {
+      try {
+        const direct = await serverFetchCitationById({ data: citationNumber });
+        if (direct) return direct as Citation;
+      } catch {
+        // fallback
+      }
       try {
         const rows = await serverFetchCitations({ data: 100 });
         const found = rows?.find((c: any) => c.citation_number === citationNumber || c.id === citationNumber);
