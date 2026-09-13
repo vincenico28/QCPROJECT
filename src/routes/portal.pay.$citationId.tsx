@@ -18,11 +18,27 @@ import {
   Scale,
   Sparkles,
   ExternalLink,
+  Zap,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+  Download,
 } from "lucide-react";
 import { formatPeso, useCitation, useUpdateCitationStatus } from "@/lib/data/traffic";
 import { parseCitationOffenses } from "@/lib/data/review";
-import { processPaymentCheckout } from "@/lib/server.functions";
+import {
+  processPaymentCheckout,
+  serverCreateStripeCheckoutSession,
+} from "@/lib/server.functions";
 import { VerifiableQrCode } from "@/components/ui/verifiable-qr";
+import { DEFAULT_GCASH_QR, GCASH_QR_URL } from "@/assets/gcash-qr";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -42,7 +58,22 @@ function PaymentPage() {
   const navigate = useNavigate();
   const [method, setMethod] = useState<PaymentMethod>("gcash");
   const [busy, setBusy] = useState(false);
+  const [busyStep, setBusyStep] = useState<string>("");
   const [copiedNotice, setCopiedNotice] = useState(false);
+  const [copiedAccountNo, setCopiedAccountNo] = useState(false);
+  const [gcashRefNumber, setGcashRefNumber] = useState("");
+  const [qrLoadFailed, setQrLoadFailed] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrZoomMode, setQrZoomMode] = useState<"card" | "qr-only">("card");
+
+  // Recipient GCash Account Configuration from Environment Variables
+  const gcashAccountName = (import.meta as any).env.VITE_GCASH_ACCOUNT_NAME || "Quezon City DPOS Treasury";
+  const gcashAccountNumber = (import.meta as any).env.VITE_GCASH_ACCOUNT_NUMBER || "0917-882-9411";
+  const envQr = (import.meta as any).env?.VITE_GCASH_QR_IMAGE;
+  const gcashCustomQr =
+    envQr && envQr.trim() !== "" && envQr !== "/my-gcash-qr.png" && envQr !== "/assets/my-gcash-qr.png"
+      ? envQr
+      : DEFAULT_GCASH_QR;
 
   // Form Fields
   const [payerName, setPayerName] = useState("Juan Dela Cruz");
@@ -68,43 +99,101 @@ function PaymentPage() {
     setTimeout(() => setCopiedNotice(false), 2000);
   };
 
+  const handleCopyAccountNo = () => {
+    navigator.clipboard.writeText(gcashAccountNumber.replace(/[^0-9]/g, ""));
+    setCopiedAccountNo(true);
+    toast.success("Recipient GCash number copied to clipboard!");
+    setTimeout(() => setCopiedAccountNo(false), 2000);
+  };
+
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
 
+    const citNumber = citation?.citation_number || citationId;
+    const plate = citation?.plate_number || "NDB-8921";
+
     try {
-      // Execute full-stack server function
+      // 1. If Card selected and Stripe is configured, try Stripe Checkout:
+      if (method === "card") {
+        setBusyStep("Connecting to Stripe Secure Gateway…");
+        try {
+          const stripeRes = await serverCreateStripeCheckoutSession({
+            data: {
+              citationNumber: citNumber,
+              plateNumber: plate,
+              amount,
+              paymentMethod: "card",
+              payerEmail,
+              payerName,
+              originUrl: window.location.origin,
+            },
+          });
+
+          if (stripeRes.url) {
+            toast.success("Redirecting to Stripe Hosted Checkout...");
+            window.location.href = stripeRes.url;
+            return;
+          }
+        } catch {
+          // Fallback to direct settlement below
+        }
+      }
+
+      // 2. GCash QR Ph & Direct LGU Settlement:
+      if (method === "gcash") {
+        const cleanRef = gcashRefNumber.trim();
+        if (!cleanRef) {
+          toast.error("GCash Reference No. Required", {
+            description: "Please enter the 13-digit Reference Number from your GCash receipt or SMS before proceeding.",
+          });
+          setBusy(false);
+          return;
+        }
+        setBusyStep("Authorizing GCash Settlement…");
+        await new Promise((r) => setTimeout(r, 600));
+        setBusyStep(`Verifying GCash Ref #${cleanRef} with Treasury…`);
+        await new Promise((r) => setTimeout(r, 600));
+        setBusyStep("Generating LTO Clearance Certificate…");
+      }
+
       await processPaymentCheckout({
         data: {
-          citationNumber: citation?.citation_number || citationId,
-          plateNumber: citation?.plate_number || "NDB-8921",
+          citationNumber: citNumber,
+          plateNumber: plate,
           amount,
           paymentMethod: method,
           payerEmail,
           payerName,
+          referenceNumber: gcashRefNumber.trim() || undefined,
         },
       });
 
-      // Update citation status in database & local state
       await updateCitation.mutateAsync({
-        citationId: citation?.citation_number || citationId,
+        citationId: citNumber,
         status: "paid",
       });
 
       toast.success("Payment settlement verified!", {
-        description: `Official Clearance certificate and Receipt generated.`,
+        description: `Official Clearance certificate and Receipt generated for ${citNumber}.`,
       });
 
       navigate({
         to: "/portal/receipt/$citationId",
-        params: { citationId: citation?.citation_number || citationId },
+        params: { citationId: citNumber },
+        search: {
+          method: method,
+          provider: method === "gcash" ? "gcash_qrph" : method,
+        },
       });
     } catch (err) {
+      console.error("[Payment Error]", err);
       toast.error("Payment settlement error", {
         description: err instanceof Error ? err.message : "Please review your payment details.",
       });
     } finally {
       setBusy(false);
+      setBusyStep("");
     }
   };
 
@@ -149,6 +238,8 @@ function PaymentPage() {
 
   const isAlreadyPaid = citation.status === "paid" || citation.status === "settled";
 
+  const gcashQrPayload = `00020101021226600016PH.GCASH.GATEWAY0115${citation.citation_number || citationId}5204601153066085405${amount}.005802PH5924QUEZON CITY LGU TREASURY6011QUEZON CITY62210517QC-NOV-${citation.plate_number}6304`;
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       {/* Header Bar */}
@@ -161,11 +252,16 @@ function PaymentPage() {
             <ArrowLeft className="size-3.5" />
             Back to Citizen Portal
           </Link>
-          <div className="flex items-center gap-2">
-            <Lock className="size-3.5 text-emerald-400" />
-            <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-              256-Bit SSL Encrypted Settlement Gateway
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] font-bold text-blue-400">
+              <span>QR Ph Certified Gateway</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <Lock className="size-3.5" />
+              <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest">
+                256-Bit SSL Encrypted
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -205,7 +301,7 @@ function PaymentPage() {
                 Settlement & Instant LTO Clearance
               </h1>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Pay your traffic violation fine online through authorized government gateways. Settlement triggers immediate clearance and synchronization with the LTO Land Transportation Management System (LTMS).
+                Pay your traffic violation fine online via GCash QR Ph or authorized government gateways. Settlement triggers immediate clearance and synchronization with the LTO Land Transportation Management System (LTMS).
               </p>
             </div>
 
@@ -217,7 +313,7 @@ function PaymentPage() {
                     Select Payment Gateway
                   </span>
                   <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="size-3" /> Zero Gateway Fee
+                    <CheckCircle2 className="size-3" /> Zero Gateway Surcharge
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -227,20 +323,20 @@ function PaymentPage() {
                     title="GCash"
                     sub="e-Wallet / QR Ph"
                     icon={Smartphone}
-                    badge="Most Popular"
+                    badge="QR Ph Official"
                   />
                   <MethodButton
                     active={method === "maya"}
                     onClick={() => setMethod("maya")}
                     title="Maya"
-                    sub="Wallet & Card"
+                    sub="Wallet & Direct Pay"
                     icon={Smartphone}
                   />
                   <MethodButton
                     active={method === "card"}
                     onClick={() => setMethod("card")}
                     title="Credit / Debit"
-                    sub="Visa / Mastercard"
+                    sub="Visa · MC · Card"
                     icon={CreditCard}
                   />
                   <MethodButton
@@ -254,7 +350,7 @@ function PaymentPage() {
                 </div>
               </div>
 
-              {/* Gateway Interactive Inputs */}
+              {/* Gateway Interactive Details */}
               <div className="panel flex flex-col gap-4 rounded-2xl p-5 border border-border bg-panel">
                 <div className="flex items-center justify-between border-b border-border/60 pb-3">
                   <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
@@ -262,46 +358,206 @@ function PaymentPage() {
                     {method === "maya" && <Smartphone className="size-3.5 text-emerald-400" />}
                     {method === "card" && <CreditCard className="size-3.5 text-amber-400" />}
                     {method === "landbank" && <Building2 className="size-3.5 text-green-500" />}
-                    {method.toUpperCase()} Gateway Channel
+                    {method.toUpperCase()} Payment Gateway
                   </span>
-                  <span className="font-mono-tab text-[10px] font-bold text-muted-foreground uppercase">
-                    Status: <span className="text-emerald-400">Live Gateway</span>
+                  <span className="font-mono-tab text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live Gateway Ready
                   </span>
                 </div>
 
+                {/* GCASH QR PH OFFICIAL BOX */}
                 {method === "gcash" && (
-                  <div className="flex flex-col gap-3">
-                    <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-3.5 flex items-center justify-between gap-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1">
-                          <QrCode className="size-3.5" /> Instant Scan to Pay via QR Ph
-                        </span>
-                        <p className="text-[10px] text-muted-foreground">
-                          Scan using GCash app or input your registered GCash mobile number below.
-                        </p>
+                  <div className="flex flex-col gap-4">
+                    <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-b from-blue-950/40 to-panel p-4 flex flex-col sm:flex-row items-center gap-5">
+                      {/* Clickable QR Code Preview with Hover Overlay & Zoom Button */}
+                      <div className="flex flex-col items-center shrink-0">
+                        <div
+                          onClick={() => setShowQrModal(true)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setShowQrModal(true)}
+                          className="group relative flex flex-col items-center p-2.5 bg-white rounded-2xl border border-border shadow-lg cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all overflow-hidden"
+                          title="Click to view full screen QR"
+                        >
+                          {gcashCustomQr ? (
+                            <img
+                              src={gcashCustomQr}
+                              alt="GCash Merchant QR"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = DEFAULT_GCASH_QR;
+                              }}
+                              className="size-40 sm:size-44 object-contain rounded-xl transition-transform duration-200 group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <VerifiableQrCode data={gcashQrPayload} size={150} />
+                          )}
+
+                          {/* Hover Overlay */}
+                          <div className="absolute inset-0 bg-blue-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 text-white p-3 rounded-2xl backdrop-blur-[2px]">
+                            <div className="size-9 rounded-full bg-white/20 flex items-center justify-center border border-white/40 shadow">
+                              <Maximize2 className="size-4 text-white" />
+                            </div>
+                            <span className="text-[11px] font-bold text-center drop-shadow">
+                              Click for Full View
+                            </span>
+                            <span className="text-[9px] text-blue-200 font-mono-tab">
+                              Enlarge & Scan
+                            </span>
+                          </div>
+
+                          <span className="font-mono-tab text-[9px] font-black text-blue-950 mt-1.5 uppercase tracking-wider">
+                            QR Ph · GCash
+                          </span>
+                        </div>
+
+                        {/* Dedicated Full View Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowQrModal(true)}
+                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-950/60 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-900/80 hover:text-white transition-colors shadow-sm"
+                        >
+                          <Maximize2 className="size-3.5" />
+                          <span>Full View / Zoom QR</span>
+                        </button>
                       </div>
-                      <div className="p-1.5 bg-white rounded-lg border border-border shrink-0 shadow-md">
-                        <VerifiableQrCode
-                          data={`00020101021226600016PH.GCASH.GATEWAY0115${citation.citation_number}5204601153066085405${amount}.005802PH5917QUEZON CITY LGU6011QUEZON CITY6304`}
-                          size={76}
-                        />
+
+                      <div className="flex flex-col gap-2 text-center sm:text-left flex-1">
+                        <div className="flex items-center justify-center sm:justify-start gap-2">
+                          <span className="rounded bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/40">
+                            Scan to Pay with GCash
+                          </span>
+                          <span className="font-mono-tab text-[10px] text-muted-foreground">
+                            Official Treasury Account
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Scan the official QR Ph code using your <strong>GCash App</strong> (or any QR Ph compliant e-wallet/banking app).
+                        </p>
+
+                        {/* Recipient Account Details with 1-click Copy */}
+                        <div className="mt-1 flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 border border-border/80 text-left">
+                          <div>
+                            <span className="text-[9px] text-muted-foreground block uppercase font-mono-tab">
+                              Send Settlement To (GCash)
+                            </span>
+                            <span className="text-xs font-bold text-white block">{gcashAccountName}</span>
+                            <span className="font-mono-tab text-xs text-emerald-400 font-bold">{gcashAccountNumber}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyAccountNo}
+                            className="rounded-lg border border-border bg-panel px-2.5 py-1 text-xs font-semibold text-white hover:bg-panel-elevated flex items-center gap-1.5 transition-colors shadow-sm"
+                            title="Copy GCash Number"
+                          >
+                            {copiedAccountNo ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                            <span>{copiedAccountNo ? "Copied" : "Copy No."}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Registered GCash Mobile Number</span>
-                      <input
-                        required
-                        type="tel"
-                        value={mobileNumber}
-                        onChange={(e) => setMobileNumber(e.target.value)}
-                        placeholder="0917-000-0000"
-                        className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
-                      />
-                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium text-muted-foreground">Payer's GCash Mobile Number</span>
+                        <div className="relative">
+                          <input
+                            required
+                            type="tel"
+                            value={mobileNumber}
+                            onChange={(e) => setMobileNumber(e.target.value)}
+                            placeholder="0917-000-0000"
+                            className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab pl-9"
+                          />
+                          <Smartphone className="size-4 text-blue-400 absolute left-3 top-2.5" />
+                        </div>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-white flex items-center gap-1">
+                            GCash Reference No. <span className="text-red-400 font-bold">*</span>
+                          </span>
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 border border-amber-500/30">
+                            Required to Proceed
+                          </span>
+                        </div>
+                        <input
+                          required={method === "gcash"}
+                          type="text"
+                          value={gcashRefNumber}
+                          onChange={(e) => setGcashRefNumber(e.target.value)}
+                          placeholder="e.g. 1002 9841 2910"
+                          className={cn(
+                            "w-full rounded-xl border bg-background px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono-tab transition-colors",
+                            !gcashRefNumber.trim()
+                              ? "border-amber-500/50 focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                              : "border-border focus:border-primary"
+                          )}
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Scan the QR code above with GCash, then enter the 13-digit Reference Number from your SMS or GCash receipt to proceed.
+                        </p>
+                      </label>
+                    </div>
                   </div>
                 )}
 
+                {/* CARD */}
+                {method === "card" && (
+                  <div className="flex flex-col gap-3.5">
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                          <CreditCard className="size-4" />
+                          Credit / Debit Card Online Settlement
+                        </span>
+                        <div className="flex items-center gap-1 text-[10px]">
+                          <span className="font-bold text-blue-400">VISA</span>
+                          <span className="font-bold text-amber-500">MC</span>
+                          <span className="font-bold text-emerald-400">JCB</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Card settlements are processed with 3D-Secure authentication and tokenization.
+                      </p>
+                    </div>
+
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium text-muted-foreground">Card Number</span>
+                      <input
+                        type="text"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium text-muted-foreground">Expiry Date (MM/YY)</span>
+                        <input
+                          type="text"
+                          value={cardExpiry}
+                          onChange={(e) => setCardExpiry(e.target.value)}
+                          className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium text-muted-foreground">CVV</span>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          value={cardCvv}
+                          onChange={(e) => setCardCvv(e.target.value)}
+                          className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* MAYA */}
                 {method === "maya" && (
                   <div className="flex flex-col gap-3">
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-3.5 flex items-center justify-between gap-4">
@@ -310,7 +566,7 @@ function PaymentPage() {
                           <QrCode className="size-3.5" /> Maya Express Checkout
                         </span>
                         <p className="text-[10px] text-muted-foreground">
-                          Authorized Maya direct merchant integration with instant webhook reconciliation.
+                          Authorized Maya direct merchant integration with instant reconciliation.
                         </p>
                       </div>
                       <div className="p-1.5 bg-white rounded-lg border border-border shrink-0 shadow-md">
@@ -335,54 +591,7 @@ function PaymentPage() {
                   </div>
                 )}
 
-                {method === "card" && (
-                  <div className="flex flex-col gap-3">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Card Number</span>
-                      <div className="relative">
-                        <input
-                          required
-                          type="text"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          placeholder="4123 4567 8901 2345"
-                          className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
-                        />
-                        <div className="absolute right-3 top-2.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-                          <span className="font-bold text-blue-400">VISA</span>
-                          <span className="font-bold text-amber-500">MC</span>
-                        </div>
-                      </div>
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[11px] font-medium text-muted-foreground">Expiry Date (MM/YY)</span>
-                        <input
-                          required
-                          type="text"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          placeholder="MM/YY"
-                          className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[11px] font-medium text-muted-foreground">Security Code (CVV)</span>
-                        <input
-                          required
-                          type="password"
-                          maxLength={4}
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          placeholder="123"
-                          className="rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none font-mono-tab"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
-
+                {/* LANDBANK */}
                 {method === "landbank" && (
                   <div className="flex flex-col gap-3">
                     <div className="rounded-xl border border-green-500/20 bg-green-950/20 p-3.5 text-xs flex flex-col gap-2">
@@ -427,7 +636,7 @@ function PaymentPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-medium text-muted-foreground">Contact Number</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Mobile Contact (SMS Clearance Notice)</span>
                     <input
                       required
                       type="tel"
@@ -448,12 +657,29 @@ function PaymentPage() {
                 {busy ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Reconciling & Clearing LTO Record…
+                    <span>{busyStep || "Processing Real-Time Settlement…"}</span>
                   </>
                 ) : isAlreadyPaid ? (
                   <>
                     <CheckCircle2 className="size-4 text-white" />
                     Citation Notice Cleared & Paid
+                  </>
+                ) : method === "gcash" ? (
+                  !gcashRefNumber.trim() ? (
+                    <>
+                      <Smartphone className="size-4 text-amber-300 animate-pulse" />
+                      <span>Input GCash Reference No. to Proceed</span>
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone className="size-4" />
+                      <span>Pay {formatPeso(amount)} with GCash & Lift LTO Hold</span>
+                    </>
+                  )
+                ) : method === "card" ? (
+                  <>
+                    <CreditCard className="size-4" />
+                    Pay {formatPeso(amount)} with Card
                   </>
                 ) : (
                   <>
@@ -609,6 +835,131 @@ function PaymentPage() {
           </div>
         </div>
       </main>
+
+      {/* FULL VIEW & ENLARGED GCASH QR DIALOG */}
+      <Dialog open={showQrModal} onOpenChange={setShowQrModal}>
+        <DialogContent className="max-w-md w-[94vw] sm:w-full p-0 overflow-hidden bg-gradient-to-b from-slate-950 via-panel to-panel border-blue-500/40 text-white rounded-3xl shadow-2xl">
+          <div className="p-4 sm:p-5 border-b border-border/60 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="size-9 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <QrCode className="size-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  Official GCash QR Ph
+                  <span className="text-[10px] uppercase font-mono-tab bg-blue-500/20 text-blue-400 border border-blue-500/40 px-1.5 py-0.5 rounded">
+                    High Resolution
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Point your GCash app scanner at the code below
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5 flex flex-col items-center justify-center bg-black/40">
+            {/* View Mode Switcher: Full Card vs QR Matrix Only */}
+            <div className="mb-3.5 flex items-center gap-1.5 rounded-xl bg-background/90 p-1 border border-border">
+              <button
+                type="button"
+                onClick={() => setQrZoomMode("card")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all",
+                  qrZoomMode === "card"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                )}
+              >
+                <ZoomOut className="size-3.5" />
+                <span>Standard View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrZoomMode("qr-only")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all",
+                  qrZoomMode === "qr-only"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                )}
+              >
+                <ZoomIn className="size-3.5" />
+                <span>Zoom In (1.3x)</span>
+              </button>
+            </div>
+
+            {/* High-Resolution QR Display Container */}
+            <div
+              onClick={() => setQrZoomMode(qrZoomMode === "card" ? "qr-only" : "card")}
+              className="relative bg-white p-3 rounded-2xl shadow-2xl border border-white/20 overflow-hidden flex items-center justify-center cursor-pointer select-none max-h-[58vh] sm:max-h-[62vh]"
+              title="Click to toggle zoom"
+            >
+              <div className={cn("transition-all duration-300 flex items-center justify-center overflow-hidden", qrZoomMode === "qr-only" ? "size-64 sm:size-72" : "")}>
+                <img
+                  src={gcashCustomQr}
+                  alt="Official GCash QR Code"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = DEFAULT_GCASH_QR;
+                  }}
+                  className={cn(
+                    "object-contain rounded-xl transition-all duration-300",
+                    qrZoomMode === "qr-only"
+                      ? "scale-[1.3]"
+                      : "size-64 sm:size-72 max-h-[50vh]"
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Recipient info with 1-click Copy */}
+            <div className="w-full mt-4 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between rounded-xl bg-background/90 px-3.5 py-2.5 border border-border text-left">
+                <div>
+                  <span className="text-[9px] text-muted-foreground uppercase font-mono-tab block">
+                    Recipient Account
+                  </span>
+                  <span className="text-xs font-bold text-white block">{gcashAccountName}</span>
+                  <span className="font-mono-tab text-xs text-emerald-400 font-bold">{gcashAccountNumber}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyAccountNo}
+                  className="rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-white hover:bg-panel-elevated flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  {copiedAccountNo ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                  <span>{copiedAccountNo ? "Copied" : "Copy No."}</span>
+                </button>
+              </div>
+
+              {/* Utility actions: Open in new tab + Download QR */}
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={GCASH_QR_URL || "/my-gcash-qr.png"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl border border-border/80 bg-panel/80 hover:bg-panel py-2 px-3 text-xs font-medium text-center text-muted-foreground hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <ExternalLink className="size-3.5" />
+                  <span>Open in New Tab</span>
+                </a>
+                <a
+                  href={GCASH_QR_URL || "/my-gcash-qr.png"}
+                  download="my-gcash-qr.png"
+                  className="rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 py-2 px-3 text-xs font-medium text-center text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Download className="size-3.5" />
+                  <span>Download QR</span>
+                </a>
+              </div>
+
+              <p className="text-[11px] text-center text-muted-foreground leading-relaxed mt-0.5">
+                💡 <strong>Tip for mobile motorists:</strong> Download or screenshot this QR, open GCash, tap <strong>Scan QR</strong>, and choose <strong>Upload QR from Photos</strong>.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

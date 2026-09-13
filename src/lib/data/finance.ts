@@ -18,6 +18,11 @@ export type PaymentQueueItem = {
   status: "pending_verification" | "verified" | "rejected" | string;
   submittedDate: string;
   timestamp: string;
+  offense?: string | null;
+  vehicleModel?: string | null;
+  officerName?: string | null;
+  citationIssuedAt?: string | null;
+  citationStatus?: string | null;
 };
 
 export type RefundQueueItem = {
@@ -64,6 +69,11 @@ export function useFinanceQueue() {
         status: row.status,
         submittedDate: row.submitted_date || row.created_at,
         timestamp: row.submitted_date || row.created_at,
+        offense: row.offense,
+        vehicleModel: row.vehicle_model,
+        officerName: row.officer_name,
+        citationIssuedAt: row.citation_issued_at,
+        citationStatus: row.citation_status,
       }));
 
       const refunds: RefundQueueItem[] = r.map((row: any) => ({
@@ -119,8 +129,20 @@ export function useFinanceQueue() {
 export function useVerifyPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ paymentId, citationId }: { paymentId: string, citationId: string }) => {
-      await serverVerifyPayment({ data: { paymentId, citationId } });
+    mutationFn: async ({
+      paymentId,
+      citationId,
+      referenceNumber,
+      cashierNotes,
+    }: {
+      paymentId: string;
+      citationId: string;
+      referenceNumber: string;
+      cashierNotes?: string;
+    }) => {
+      await serverVerifyPayment({
+        data: { paymentId, citationId, referenceNumber, cashierNotes },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });

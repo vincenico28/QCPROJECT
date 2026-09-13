@@ -429,10 +429,14 @@ export function useSettleCitizenCitation() {
       });
 
       try {
-        await supabase
-          .from("citations")
-          .update({ status: "paid" })
-          .or(`id.eq.${citationId},citation_number.eq.${citationId}`);
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(citationId?.trim() || "");
+        let qCit = supabase.from("citations").update({ status: "paid" });
+        if (isUUID) {
+          qCit = qCit.or(`id.eq.${citationId},citation_number.eq.${citationId}`);
+        } else {
+          qCit = qCit.eq("citation_number", citationId);
+        }
+        await qCit;
 
         await supabase.from("audit_logs").insert({
           actor_name: "Citizen Online Settlement",

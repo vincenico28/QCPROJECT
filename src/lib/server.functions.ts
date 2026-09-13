@@ -13,6 +13,25 @@ function generateUUID() {
   });
 }
 
+// Helper to verify if an identifier is a standard UUID string
+function isUUID(val: unknown): boolean {
+  if (typeof val !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
+/**
+ * Builds a safe filter for citations query without triggering
+ * "invalid input syntax for type uuid" error in PostgreSQL when querying by human-readable citation_number.
+ */
+function applyCitationIdentifierFilter<T>(query: T, identifier: string): T {
+  const clean = identifier?.trim() || "";
+  if (!clean) return query;
+  if (isUUID(clean)) {
+    return (query as any).or(`citation_number.eq.${clean},id.eq.${clean}`);
+  }
+  return (query as any).eq("citation_number", clean);
+}
+
 // -------------------------------------------------------------
 // 1. VIOLATIONS
 // -------------------------------------------------------------
@@ -103,11 +122,11 @@ export const serverFetchCitationById = createServerFn({ method: "GET" })
     if (!identifier) return null;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const { data, error } = await supabaseAdmin
+      let q = supabaseAdmin
         .from("citations")
-        .select("*, violations(evidence_url, location, camera_code)")
-        .or(`citation_number.eq.${identifier},id.eq.${identifier}`)
-        .maybeSingle();
+        .select("*, violations(evidence_url, location, camera_code)");
+      q = applyCitationIdentifierFilter(q, identifier);
+      const { data, error } = await q.maybeSingle();
 
       if (!error && data) {
         const row = data as any;
@@ -415,10 +434,11 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => citationUpdateStatusSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
+    let updateQ = supabaseAdmin
       .from("citations")
-      .update({ status: data.status })
-      .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`);
+      .update({ status: data.status });
+    updateQ = applyCitationIdentifierFilter(updateQ, data.citationNumber);
+    const { error } = await updateQ;
 
     if (error) {
       console.error("[Supabase Error: Update Citation Status]", error);
@@ -429,11 +449,11 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
     // If not, clear the LTO alarm tags!
     if (data.status === "paid" || data.status === "settled" || data.status === "waived") {
       try {
-        const { data: citRow } = await supabaseAdmin
+        let citQ = supabaseAdmin
           .from("citations")
-          .select("plate_number")
-          .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`)
-          .maybeSingle();
+          .select("plate_number");
+        citQ = applyCitationIdentifierFilter(citQ, data.citationNumber);
+        const { data: citRow } = await citQ.maybeSingle();
 
         if (citRow?.plate_number) {
           const compact = citRow.plate_number.replace(/[\s-]/g, "").toUpperCase();
@@ -751,14 +771,28 @@ export const serverUpdateDispatchStatus = createServerFn({ method: "POST" })
 // -------------------------------------------------------------
 // 6. ONLINE PAYMENT SETTLEMENT
 // -------------------------------------------------------------
-const paymentCheckoutSchema = z.object({
-  citationNumber: z.string().trim().min(4),
-  plateNumber: z.string().trim().min(3),
-  amount: z.number().positive(),
-  paymentMethod: z.enum(["gcash", "maya", "landbank", "card", "otc"]),
-  payerEmail: z.string().email(),
-  payerName: z.string().min(2),
-});
+const paymentCheckoutSchema = z
+  .object({
+    citationNumber: z.string().trim().min(4),
+    plateNumber: z.string().trim().min(3),
+    amount: z.number().positive(),
+    paymentMethod: z.enum(["gcash", "maya", "landbank", "card", "otc"]),
+    payerEmail: z.string().email(),
+    payerName: z.string().min(2),
+    referenceNumber: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.paymentMethod === "gcash") {
+        return !!data.referenceNumber && data.referenceNumber.trim().length >= 4;
+      }
+      return true;
+    },
+    {
+      message: "GCash Reference Number is required before proceeding with settlement.",
+      path: ["referenceNumber"],
+    }
+  );
 
 export type PaymentReceiptResult = {
   receiptNumber: string;
@@ -776,7 +810,7 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<PaymentReceiptResult> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const receiptNumber = `OR-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+    const receiptNumber = data.referenceNumber?.trim() || `OR-2026-${Math.floor(100000 + Math.random() * 900000)}`;
     const paidAt = new Date().toISOString();
 
     const { error: insertErr } = await supabaseAdmin
@@ -797,10 +831,11 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       // We log warning but don't strictly fail the user if the payment log fails for some reason
     }
 
-    const { error } = await supabaseAdmin
+    let updateCitQ = supabaseAdmin
       .from("citations")
-      .update({ status: "paid" })
-      .or(`citation_number.eq.${data.citationNumber},id.eq.${data.citationNumber}`);
+      .update({ status: "paid" });
+    updateCitQ = applyCitationIdentifierFilter(updateCitQ, data.citationNumber);
+    const { error } = await updateCitQ;
 
     if (error) {
       console.error("[Supabase Error: Payment Checkout]", error);
@@ -867,6 +902,323 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       qrVerificationUrl: `https://culiat-traffic.qc.gov.ph/portal/receipt/${data.citationNumber}`,
     };
   });
+
+// Shared helper to clear vehicle LTO alarms if no unpaid citations remain
+async function clearVehicleLtoAlarms(plateNumber: string, currentCitationNumber?: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  try {
+    const compact = plateNumber.replace(/[\s-]/g, "").toUpperCase();
+    let query = supabaseAdmin
+      .from("citations")
+      .select("id, status, plate_number");
+
+    if (currentCitationNumber) {
+      query = query.neq("citation_number", currentCitationNumber).neq("id", currentCitationNumber);
+    }
+
+    const { data: allCitations } = await query;
+
+    const remainingUnpaid = (allCitations || []).filter(
+      (c: any) =>
+        c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+        (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+    );
+
+    if (remainingUnpaid.length === 0) {
+      const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+      const matchingVeh = (allVehs || []).find(
+        (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+      );
+      if (matchingVeh) {
+        await supabaseAdmin
+          .from("vehicles")
+          .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+          .eq("plate_number", matchingVeh.plate_number);
+      }
+
+      const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+      const matchingCv = (allCv || []).filter(
+        (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+      );
+      for (const cv of matchingCv) {
+        await supabaseAdmin
+          .from("citizen_vehicles")
+          .update({ lto_alarm_status: "CLEARED" })
+          .eq("id", cv.id);
+      }
+    }
+  } catch (err) {
+    console.warn("[clearVehicleLtoAlarms]", err);
+  }
+}
+
+// -------------------------------------------------------------
+// 6B. STRIPE & GCASH CHECKOUT GATEWAY
+// -------------------------------------------------------------
+const stripeCheckoutSessionSchema = z.object({
+  citationNumber: z.string().trim().min(4),
+  plateNumber: z.string().trim().min(3),
+  amount: z.number().positive(),
+  paymentMethod: z.enum(["gcash", "card", "all"]).default("gcash"),
+  payerEmail: z.string().email(),
+  payerName: z.string().min(2),
+  originUrl: z.string().optional(),
+});
+
+export const serverCreateStripeCheckoutSession = createServerFn({ method: "POST" })
+  .validator((data: unknown) => stripeCheckoutSessionSchema.parse(data))
+  .handler(async ({ data }) => {
+    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+    const isConfigured = !!stripeKey && !stripeKey.startsWith("sk_test_placeholder") && stripeKey.length > 10;
+
+    const origin = (data.originUrl || process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+
+    if (!isConfigured) {
+      console.log("[Stripe Checkout] STRIPE_SECRET_KEY is not configured in .env. Running in Simulated Test Mode.");
+      const simSessionId = `sim_stripe_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      return {
+        url: null,
+        sessionId: simSessionId,
+        simulated: true,
+        redirectUrl: `${origin}/portal/receipt/${encodeURIComponent(data.citationNumber)}?session_id=${simSessionId}&provider=stripe_simulated&method=${data.paymentMethod}`,
+      };
+    }
+
+    try {
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey);
+
+      // In Stripe Philippines accounts, GCash is enabled for PHP currency transactions.
+      let paymentMethodTypes: ("card" | "gcash")[] = ["card"];
+      if (data.paymentMethod === "gcash") {
+        paymentMethodTypes = ["gcash", "card"];
+      } else if (data.paymentMethod === "card") {
+        paymentMethodTypes = ["card"];
+      } else {
+        paymentMethodTypes = ["gcash", "card"];
+      }
+
+      let session;
+      try {
+        session = await stripe.checkout.sessions.create({
+          payment_method_types: paymentMethodTypes,
+          line_items: [
+            {
+              price_data: {
+                currency: "php",
+                product_data: {
+                  name: `Notice of Violation: ${data.citationNumber}`,
+                  description: `Quezon City Traffic Settlement · Plate ${data.plateNumber} · QC DPOS`,
+                },
+                unit_amount: Math.round(data.amount * 100), // in centavos
+              },
+              quantity: 1,
+            },
+          ],
+          mode: "payment",
+          customer_email: data.payerEmail,
+          client_reference_id: data.citationNumber,
+          metadata: {
+            citationNumber: data.citationNumber,
+            plateNumber: data.plateNumber,
+            payerName: data.payerName,
+            paymentMethod: data.paymentMethod,
+          },
+          success_url: `${origin}/portal/receipt/${encodeURIComponent(data.citationNumber)}?session_id={CHECKOUT_SESSION_ID}&provider=stripe`,
+          cancel_url: `${origin}/portal/pay/${encodeURIComponent(data.citationNumber)}?canceled=true`,
+        });
+      } catch (pmError: any) {
+        // If Stripe account doesn't support 'gcash' (e.g. non-PH Stripe account), fallback to universal checkout
+        if (pmError?.message && (pmError.message.includes("gcash") || pmError.message.includes("payment_method_types"))) {
+          console.warn("[Stripe Warning] 'gcash' is not enabled on this Stripe account country. Falling back to universal methods.", pmError.message);
+          session = await stripe.checkout.sessions.create({
+            line_items: [
+              {
+                price_data: {
+                  currency: "php",
+                  product_data: {
+                    name: `Notice of Violation: ${data.citationNumber}`,
+                    description: `Quezon City Traffic Settlement · Plate ${data.plateNumber} · QC DPOS`,
+                  },
+                  unit_amount: Math.round(data.amount * 100),
+                },
+                quantity: 1,
+              },
+            ],
+            mode: "payment",
+            customer_email: data.payerEmail,
+            client_reference_id: data.citationNumber,
+            metadata: {
+              citationNumber: data.citationNumber,
+              plateNumber: data.plateNumber,
+              payerName: data.payerName,
+              paymentMethod: data.paymentMethod,
+            },
+            success_url: `${origin}/portal/receipt/${encodeURIComponent(data.citationNumber)}?session_id={CHECKOUT_SESSION_ID}&provider=stripe`,
+            cancel_url: `${origin}/portal/pay/${encodeURIComponent(data.citationNumber)}?canceled=true`,
+          });
+        } else {
+          throw pmError;
+        }
+      }
+
+      return {
+        url: session.url,
+        sessionId: session.id,
+        simulated: false,
+        redirectUrl: session.url,
+      };
+    } catch (err: any) {
+      console.error("[Stripe Session Creation Error]", err);
+      throw new Error(`Stripe Error: ${err?.message || "Failed to initialize payment gateway."}`);
+    }
+  });
+
+const stripeVerifySessionSchema = z.object({
+  sessionId: z.string().trim().min(5),
+  citationNumber: z.string().trim().min(4),
+});
+
+export const serverVerifyStripeSession = createServerFn({ method: "POST" })
+  .validator((data: unknown) => stripeVerifySessionSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1. Simulation Check
+    if (data.sessionId.startsWith("sim_stripe_")) {
+      const receiptNumber = `OR-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+      const paidAt = new Date().toISOString();
+
+      let citSelQ = supabaseAdmin
+        .from("citations")
+        .select("*");
+      citSelQ = applyCitationIdentifierFilter(citSelQ, data.citationNumber);
+      const { data: cit } = await citSelQ.maybeSingle();
+
+      const plateNumber = cit?.plate_number || "QC-PLATE";
+      const amount = cit?.amount || 2000;
+
+      let citUpdQ = supabaseAdmin
+        .from("citations")
+        .update({ status: "paid" });
+      citUpdQ = applyCitationIdentifierFilter(citUpdQ, data.citationNumber);
+      await citUpdQ;
+
+      const { error: insErr } = await supabaseAdmin.from("payments").insert({
+        citation_id: data.citationNumber,
+        plate_number: plateNumber,
+        payer_name: "Verified Motorist (Stripe Test Simulator)",
+        amount,
+        method: "gcash",
+        reference_number: receiptNumber,
+        status: "verified",
+        submitted_date: paidAt,
+      });
+
+      if (insErr) {
+        console.warn("[Stripe Verify Payment Insert Warn]", insErr.message);
+      }
+
+      await clearVehicleLtoAlarms(plateNumber, data.citationNumber);
+
+      return {
+        verified: true,
+        simulated: true,
+        receiptNumber,
+        paymentMethod: "GCash (Stripe Test Mode)",
+        amount,
+        paidAt,
+        plateNumber,
+        citationNumber: data.citationNumber,
+      };
+    }
+
+    // 2. Real Stripe API Verification
+    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+    if (!stripeKey) {
+      throw new Error("Stripe is not configured. Missing STRIPE_SECRET_KEY.");
+    }
+
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(stripeKey);
+
+    const session = await stripe.checkout.sessions.retrieve(data.sessionId, {
+      expand: ["payment_intent"],
+    });
+
+    if (session.payment_status !== "paid") {
+      return {
+        verified: false,
+        status: session.payment_status,
+        message: "Payment is pending or has not been confirmed by Stripe.",
+      };
+    }
+
+    const receiptNumber = `OR-STRIPE-${session.id.slice(-8).toUpperCase()}`;
+    const paidAt = new Date().toISOString();
+    const citNumber = session.client_reference_id || session.metadata?.citationNumber || data.citationNumber;
+    const plateNumber = session.metadata?.plateNumber || "QC-MOTORIST";
+    const amount = (session.amount_total || 0) / 100;
+    const rawMethod = session.payment_method_types?.[0] || "gcash";
+    const paymentMethod = rawMethod === "gcash" ? "GCash (via Stripe)" : `${rawMethod.toUpperCase()} (via Stripe)`;
+    const payerName = session.metadata?.payerName || session.customer_details?.name || "Verified Motorist";
+
+    let stripeUpdQ = supabaseAdmin
+      .from("citations")
+      .update({ status: "paid" });
+    stripeUpdQ = applyCitationIdentifierFilter(stripeUpdQ, citNumber);
+    await stripeUpdQ;
+
+    const { data: existingPay } = await supabaseAdmin
+      .from("payments")
+      .select("id")
+      .eq("reference_number", receiptNumber)
+      .maybeSingle();
+
+    if (!existingPay) {
+      const { error: insErr } = await supabaseAdmin.from("payments").insert({
+        citation_id: citNumber,
+        plate_number: plateNumber,
+        payer_name: payerName,
+        amount,
+        method: rawMethod,
+        reference_number: receiptNumber,
+        status: "verified",
+        submitted_date: paidAt,
+      });
+
+      if (insErr) {
+        console.warn("[Stripe Verify Payment Insert Warn]", insErr.message);
+      }
+
+      try {
+        await supabaseAdmin.from("audit_logs").insert({
+          actor_name: payerName,
+          actor_role: "citizen",
+          action: "STRIPE_PAYMENT_VERIFIED",
+          target_resource: `Citation: ${citNumber} (Session: ${session.id})`,
+          details: `Amount: PHP ${amount}, Channel: ${paymentMethod}, Intent: ${typeof session.payment_intent === "object" ? session.payment_intent?.id : session.payment_intent || "N/A"}`,
+        });
+      } catch (logErr) {
+        console.warn(logErr);
+      }
+    }
+
+    await clearVehicleLtoAlarms(plateNumber, citNumber);
+
+    return {
+      verified: true,
+      simulated: false,
+      receiptNumber,
+      paymentMethod,
+      amount,
+      paidAt,
+      plateNumber,
+      citationNumber: citNumber,
+      stripePaymentIntentId: typeof session.payment_intent === "object" ? session.payment_intent?.id : session.payment_intent,
+    };
+  });
+
 
 // -------------------------------------------------------------
 // 7. LTO LTMS VEHICLE LOOKUP
@@ -1168,13 +1520,33 @@ export const serverFetchFinanceQueue = createServerFn({ method: "GET" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const [paymentsReq, refundsReq] = await Promise.all([
+      const [paymentsReq, refundsReq, citationsReq] = await Promise.all([
         supabaseAdmin.from("payments").select("*").order("created_at", { ascending: false }),
-        supabaseAdmin.from("refunds").select("*").order("created_at", { ascending: false })
+        supabaseAdmin.from("refunds").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("citations").select("id, citation_number, offense, amount, plate_number, vehicle_model, officer_name, issued_at, status"),
       ]);
+
+      const citMap = new Map<string, any>();
+      (citationsReq.data || []).forEach((c: any) => {
+        if (c.citation_number) citMap.set(c.citation_number, c);
+        if (c.id) citMap.set(c.id, c);
+      });
+
+      const enrichedPayments = (paymentsReq.data || []).map((p: any) => {
+        const cit = citMap.get(p.citation_id) || {};
+        return {
+          ...p,
+          offense: cit.offense || null,
+          vehicle_model: cit.vehicle_model || null,
+          officer_name: cit.officer_name || null,
+          citation_issued_at: cit.issued_at || null,
+          citation_status: cit.status || null,
+        };
+      });
+
       return {
-        pendingPayments: paymentsReq.data || [],
-        pendingRefunds: refundsReq.data || []
+        pendingPayments: enrichedPayments,
+        pendingRefunds: refundsReq.data || [],
       };
     } catch (err) {
       console.error("[Supabase Error: Fetch Finance Queue]", err);
@@ -1185,6 +1557,8 @@ export const serverFetchFinanceQueue = createServerFn({ method: "GET" })
 const verifyPaymentSchema = z.object({
   paymentId: z.string(),
   citationId: z.string(),
+  referenceNumber: z.string().trim().min(3, "GCash Reference Number is required for verification"),
+  cashierNotes: z.string().optional(),
 });
 
 export const serverVerifyPayment = createServerFn({ method: "POST" })
@@ -1192,19 +1566,83 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
-    // 1. Update Payment status
+    // 1. Update Payment status and verified reference number
+    const updatePayload: any = {
+      status: "verified",
+      reference_number: data.referenceNumber.trim(),
+    };
     const { error: payErr } = await supabaseAdmin
       .from("payments")
-      .update({ status: "verified" })
+      .update(updatePayload)
       .eq("id", data.paymentId);
     if (payErr) throw new Error(`Database Error: ${payErr.message}`);
 
-    // 2. Update Citation status
-    // Note: citation_id in the mock was actually citation_number (e.g. NOV-2026-QC-00129)
-    await supabaseAdmin
+    // 2. Update Citation status to paid
+    let verifyUpdQ = supabaseAdmin
       .from("citations")
-      .update({ status: "paid" })
-      .or(`citation_number.eq.${data.citationId},id.eq.${data.citationId}`);
+      .update({ status: "paid" });
+    verifyUpdQ = applyCitationIdentifierFilter(verifyUpdQ, data.citationId);
+    await verifyUpdQ;
+
+    // 3. Clear vehicle LTO alarms if no unpaid citations remain
+    try {
+      let citQuery = supabaseAdmin.from("citations").select("plate_number");
+      citQuery = applyCitationIdentifierFilter(citQuery, data.citationId);
+      const { data: citRow } = await citQuery.maybeSingle();
+
+      if (citRow?.plate_number) {
+        const compact = citRow.plate_number.replace(/[\s-]/g, "").toUpperCase();
+        const { data: allCitations } = await supabaseAdmin
+          .from("citations")
+          .select("id, status, plate_number")
+          .neq("citation_number", data.citationId);
+
+        const remainingUnpaid = (allCitations || []).filter(
+          (c: any) =>
+            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+        );
+
+        if (remainingUnpaid.length === 0) {
+          const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+          const matchingVeh = (allVehs || []).find(
+            (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+          );
+          if (matchingVeh) {
+            await supabaseAdmin
+              .from("vehicles")
+              .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+              .eq("plate_number", matchingVeh.plate_number);
+          }
+
+          const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+          const matchingCv = (allCv || []).filter(
+            (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+          );
+          for (const cv of matchingCv) {
+            await supabaseAdmin
+              .from("citizen_vehicles")
+              .update({ lto_alarm_status: "CLEARED" })
+              .eq("id", cv.id);
+          }
+        }
+      }
+    } catch (clearErr) {
+      console.warn("[Finance] Error checking remaining citations for vehicle clearance:", clearErr);
+    }
+
+    // 4. Immutable Audit Trail
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: "QC Treasury Cashier",
+        actor_role: "finance",
+        action: "PAYMENT_VERIFIED_AND_SETTLED",
+        target_resource: `Citation: ${data.citationId}`,
+        details: `Verified GCash Ref: ${data.referenceNumber}${data.cashierNotes ? ` · Notes: ${data.cashierNotes}` : ""}`,
+      });
+    } catch (auditErr) {
+      console.warn(auditErr);
+    }
 
     return { success: true };
   });
