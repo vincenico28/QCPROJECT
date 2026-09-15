@@ -5,10 +5,21 @@ import {
   serverFetchDispatches,
   serverSaveDispatch,
   serverUpdateDispatchStatus,
+  serverRequestDispatchSupport,
 } from "@/lib/server.functions";
 
 export type DispatchStatus = "queued" | "en_route" | "on_scene" | "resolved" | "cancelled";
 export type DispatchPriority = "low" | "medium" | "high" | "critical";
+
+export type SupportUnitType = "wrecker" | "medic" | "fire" | "police_backup";
+export type SupportUnitStatus = "inbound" | "on_scene";
+
+export type ActiveSupportUnit = {
+  type: SupportUnitType;
+  status: SupportUnitStatus;
+  eta: string;
+  label: string;
+};
 
 export type Dispatch = {
   id: string;
@@ -33,6 +44,95 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
   resolved: "Resolved",
   cancelled: "Cancelled",
 };
+
+export type DispatchEtaResult = {
+  etaMinutes: number;
+  distanceKm: number;
+  label: string;
+  subLabel: string;
+  stage: "queued" | "en_route" | "on_scene" | "resolved" | "cancelled";
+};
+
+export function calculateDispatchEta(dispatch: Dispatch): DispatchEtaResult {
+  const now = Date.now();
+  const createdMs = new Date(dispatch.created_at).getTime();
+
+  if (dispatch.status === "queued") {
+    return {
+      etaMinutes: 8,
+      distanceKm: 2.1,
+      label: "Pending Unit Ack",
+      subLabel: "Est. 8 mins once rolling",
+      stage: "queued",
+    };
+  }
+
+  if (dispatch.status === "en_route") {
+    const ackMs = dispatch.acknowledged_at ? new Date(dispatch.acknowledged_at).getTime() : createdMs;
+    const elapsedEnRoute = Math.max(0, Math.floor((now - ackMs) / 60000));
+    const baseTravel = dispatch.priority === "critical" ? 6 : 9;
+    const remaining = Math.max(1, baseTravel - elapsedEnRoute);
+    const distance = Math.max(0.3, +(remaining * 0.28).toFixed(1));
+
+    return {
+      etaMinutes: remaining,
+      distanceKm: distance,
+      label: `ETA ~${remaining} min${remaining > 1 ? "s" : ""}`,
+      subLabel: `${distance} km away · Inbound`,
+      stage: "en_route",
+    };
+  }
+
+  if (dispatch.status === "on_scene") {
+    const ackMs = dispatch.acknowledged_at ? new Date(dispatch.acknowledged_at).getTime() : createdMs;
+    const onSceneElapsed = Math.max(1, Math.floor((now - ackMs) / 60000));
+
+    return {
+      etaMinutes: 0,
+      distanceKm: 0,
+      label: "On Scene",
+      subLabel: `Active ${onSceneElapsed}m at incident site`,
+      stage: "on_scene",
+    };
+  }
+
+  if (dispatch.status === "resolved") {
+    const resolvedMs = dispatch.resolved_at ? new Date(dispatch.resolved_at).getTime() : now;
+    const totalDuration = Math.max(1, Math.floor((resolvedMs - createdMs) / 60000));
+
+    return {
+      etaMinutes: 0,
+      distanceKm: 0,
+      label: "Resolved",
+      subLabel: `Cleared in ${totalDuration}m total`,
+      stage: "resolved",
+    };
+  }
+
+  return {
+    etaMinutes: 0,
+    distanceKm: 0,
+    label: "Cancelled",
+    subLabel: "Operation aborted",
+    stage: "cancelled",
+  };
+}
+
+export function parseSupportUnits(instructions: string | null): ActiveSupportUnit[] {
+  if (!instructions) return [];
+  const regex = /\[SUPPORT:(wrecker|medic|fire|police_backup):(inbound|on_scene):([^:]+):([^\]]+)\]/g;
+  const units: ActiveSupportUnit[] = [];
+  let match;
+  while ((match = regex.exec(instructions)) !== null) {
+    units.push({
+      type: match[1] as SupportUnitType,
+      status: match[2] as SupportUnitStatus,
+      eta: match[3],
+      label: match[4],
+    });
+  }
+  return units;
+}
 
 export let MOCK_DISPATCHES: Dispatch[] = [];
 
@@ -135,5 +235,30 @@ export function useUpdateDispatchStatus() {
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatches"] }),
+  });
+}
+
+export function useRequestDispatchSupport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      dispatchId: string;
+      supportType: SupportUnitType;
+      action?: "request" | "cancel" | "arrived";
+      notes?: string;
+    }) => {
+      return await serverRequestDispatchSupport({
+        data: {
+          dispatchId: input.dispatchId,
+          supportType: input.supportType,
+          action: input.action || "request",
+          notes: input.notes,
+        },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispatches"] });
+      qc.invalidateQueries({ queryKey: ["audit-logs"] });
+    },
   });
 }

@@ -29,9 +29,13 @@ import {
 import {
   useDispatches,
   useUpdateDispatchStatus,
+  useRequestDispatchSupport,
+  calculateDispatchEta,
+  parseSupportUnits,
   DISPATCH_STATUS_LABEL,
   type Dispatch,
   type DispatchStatus,
+  type SupportUnitType,
 } from "@/lib/data/dispatch";
 import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
 import { timeAgo } from "@/lib/data/traffic";
@@ -128,16 +132,55 @@ function DispatchBoard() {
     });
   };
 
-  const handleRequestSupport = (d: Dispatch, type: "wrecker" | "medic") => {
+  const requestSupport = useRequestDispatchSupport();
+
+  const handleRequestSupport = async (d: Dispatch, type: SupportUnitType) => {
     soundEffects.playDispatchTone();
-    if (type === "wrecker") {
-      toast.success(`MMDA Heavy Wrecker Dispatched to ${d.location}!`, {
-        description: `Incident #${d.reference} tow clearance scheduled. ETA: 8-12 mins.`,
+    try {
+      await requestSupport.mutateAsync({
+        dispatchId: d.id,
+        supportType: type,
+        action: "request",
       });
-    } else {
-      toast.error(`DRRMC 911 Medical Escort Dispatched to ${d.location}!`, {
-        description: `Incident #${d.reference} paramedic squad rolling with priority siren.`,
+      if (type === "wrecker") {
+        toast.success(`MMDA Heavy Wrecker Dispatched to ${d.location}!`, {
+          description: `Tow clearance unit rolling to #${d.reference}. Live tracking active.`,
+        });
+      } else if (type === "medic") {
+        toast.error(`DRRMC 911 Medical Escort Dispatched to ${d.location}!`, {
+          description: `Paramedic squad rolling with priority siren to #${d.reference}.`,
+        });
+      } else {
+        toast.info(`Tactical Backup Dispatched to ${d.location}!`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to dispatch support unit");
+    }
+  };
+
+  const handleCancelSupport = async (d: Dispatch, type: SupportUnitType) => {
+    try {
+      await requestSupport.mutateAsync({
+        dispatchId: d.id,
+        supportType: type,
+        action: "cancel",
       });
+      toast.info(`Support unit cancelled for #${d.reference}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to cancel support unit");
+    }
+  };
+
+  const handleArrivedSupport = async (d: Dispatch, type: SupportUnitType) => {
+    try {
+      await requestSupport.mutateAsync({
+        dispatchId: d.id,
+        supportType: type,
+        action: "arrived",
+      });
+      toast.success(`Support unit marked On Scene for #${d.reference}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update support unit");
     }
   };
 
@@ -230,6 +273,8 @@ function DispatchBoard() {
         {!isLoading &&
           filteredDispatches.map((d) => {
             const isLogOpen = !!expandedRadioLogs[d.id];
+            const etaInfo = calculateDispatchEta(d);
+            const supportUnits = parseSupportUnits(d.instructions);
 
             return (
               <article key={d.id} className="panel flex flex-col justify-between gap-4 rounded-3xl border border-border p-5 sm:p-6 shadow-xl relative">
@@ -247,6 +292,27 @@ function DispatchBoard() {
                         <MapPin className="size-3.5 shrink-0 text-primary" />
                         <span className="truncate">{d.location}</span>
                       </p>
+                      {/* Live Dynamic ETA Badge */}
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-mono-tab text-[10px] font-bold border",
+                            etaInfo.stage === "en_route"
+                              ? "bg-primary/20 text-primary border-primary/40 animate-pulse"
+                              : etaInfo.stage === "on_scene"
+                              ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                              : etaInfo.stage === "resolved"
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                          )}
+                        >
+                          <Clock className="size-3" />
+                          <span>{etaInfo.label}</span>
+                          <span className="opacity-75 font-normal text-[9px] hidden sm:inline">
+                            · {etaInfo.subLabel}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <span className="shrink-0 font-mono-tab text-[10px] text-subtle">
                       {timeAgo(d.created_at)}
@@ -296,23 +362,76 @@ function DispatchBoard() {
                     </div>
                   )}
 
+                  {/* Active Emergency Support Units */}
+                  {supportUnits.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {supportUnits.map((u) => (
+                        <div
+                          key={u.type}
+                          className={cn(
+                            "flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-[11px] font-medium border shadow-sm",
+                            u.type === "medic"
+                              ? "bg-red-950/40 text-red-300 border-red-500/40"
+                              : u.type === "wrecker"
+                              ? "bg-amber-950/40 text-amber-300 border-amber-500/40"
+                              : "bg-blue-950/40 text-blue-300 border-blue-500/40"
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {u.type === "medic" ? (
+                              <Ambulance className="size-3.5 text-red-400 animate-pulse" />
+                            ) : (
+                              <Truck className="size-3.5 text-amber-400 animate-pulse" />
+                            )}
+                            <span className="font-bold font-mono-tab">{u.label}</span>
+                            <span className="text-[10px] font-mono-tab opacity-80">
+                              ({u.status === "on_scene" ? "On Scene" : `ETA ${u.eta}`})
+                            </span>
+                          </span>
+                          <div className="flex items-center gap-1 ml-1">
+                            {u.status !== "on_scene" && (
+                              <button
+                                type="button"
+                                onClick={() => handleArrivedSupport(d, u.type)}
+                                className="text-[9px] font-mono-tab px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors"
+                                title="Mark Support Unit On Scene"
+                              >
+                                On Scene
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleCancelSupport(d, u.type)}
+                              className="text-[9px] font-mono-tab px-1.5 py-0.5 rounded bg-black/40 text-muted-foreground hover:text-red-400 transition-colors"
+                              title="Cancel Support Unit"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Tactical Support Triggers */}
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <button
                       onClick={() => handleRequestSupport(d, "wrecker")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
+                      disabled={requestSupport.isPending}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <Truck className="size-3 text-amber-400" /> Req. MMDA Tow
                     </button>
                     <button
                       onClick={() => handleRequestSupport(d, "medic")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
+                      disabled={requestSupport.isPending}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <Ambulance className="size-3 text-red-400" /> Req. 911 Medic
                     </button>
                     <button
                       onClick={() => toggleRadioLog(d.id)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors ml-auto"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 font-mono-tab text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors ml-auto cursor-pointer"
                     >
                       <MessageSquare className="size-3 text-primary" />
                       Field Logs {isLogOpen ? <ChevronUp className="size-2.5" /> : <ChevronDown className="size-2.5" />}

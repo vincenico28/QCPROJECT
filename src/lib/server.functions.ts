@@ -768,6 +768,86 @@ export const serverUpdateDispatchStatus = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+const dispatchSupportSchema = z.object({
+  dispatchId: z.string(),
+  supportType: z.enum(["wrecker", "medic", "fire", "police_backup"]),
+  action: z.enum(["request", "cancel", "arrived"]).default("request"),
+  notes: z.string().optional(),
+});
+
+export const serverRequestDispatchSupport = createServerFn({ method: "POST" })
+  .validator((data: unknown) => dispatchSupportSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = new Date().toISOString();
+
+    const { data: dispatch, error: fetchErr } = await supabaseAdmin
+      .from("dispatches")
+      .select("id, instructions, reference, location, officer_name")
+      .eq("id", data.dispatchId)
+      .maybeSingle();
+
+    if (fetchErr || !dispatch) {
+      throw new Error("Dispatch not found");
+    }
+
+    const supportLabels: Record<string, string> = {
+      wrecker: "MMDA Heavy Wrecker Tow Truck",
+      medic: "QC DRRMC 911 Emergency Ambulance",
+      fire: "BFP Bureau of Fire Rescue",
+      police_backup: "QCPD Station Tactical Backup",
+    };
+    const label = supportLabels[data.supportType] || data.supportType;
+
+    const instructions = dispatch.instructions || "";
+    const tagPrefix = `[SUPPORT:${data.supportType}:`;
+
+    // Strip previous tag for this supportType
+    const lines = instructions.split("\n").filter((line) => !line.trim().startsWith(tagPrefix));
+
+    if (data.action === "request") {
+      const eta = data.supportType === "medic" ? "6m" : data.supportType === "wrecker" ? "10m" : "8m";
+      lines.push(`${tagPrefix}inbound:${eta}:${label}]`);
+    } else if (data.action === "arrived") {
+      lines.push(`${tagPrefix}on_scene:0m:${label}]`);
+    } // if cancel, it's removed
+
+    const updatedInstructions = lines.join("\n").trim();
+
+    const { error: updErr } = await supabaseAdmin
+      .from("dispatches")
+      .update({
+        instructions: updatedInstructions,
+        updated_at: now,
+      })
+      .eq("id", data.dispatchId);
+
+    if (updErr) {
+      throw new Error(`Database Error: ${updErr.message}`);
+    }
+
+    // Audit log
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: dispatch.officer_name || "Central Dispatch Console",
+        actor_role: "dispatcher",
+        action: `SUPPORT_UNIT_${data.action.toUpperCase()}`,
+        target_resource: `Dispatch: ${dispatch.reference} (${dispatch.location})`,
+        details: `${label} - Action: ${data.action.toUpperCase()}${data.notes ? ` · Notes: ${data.notes}` : ""}`,
+      });
+    } catch (auditErr) {
+      console.warn(auditErr);
+    }
+
+    return {
+      success: true,
+      supportType: data.supportType,
+      action: data.action,
+      label,
+      updatedInstructions,
+    };
+  });
+
 // -------------------------------------------------------------
 // 6. ONLINE PAYMENT SETTLEMENT
 // -------------------------------------------------------------

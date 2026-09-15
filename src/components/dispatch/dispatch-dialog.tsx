@@ -13,6 +13,8 @@ import {
   UserCheck,
   Send,
   Sparkles,
+  Flame,
+  Truck,
 } from "lucide-react";
 import {
   Dialog,
@@ -72,12 +74,47 @@ const TACTICAL_PRESETS = [
   },
 ];
 
-const CORRIDOR_PRESETS = [
-  "Commonwealth Ave cor. Tandang Sora",
-  "Visayas Ave cor. Central Ave",
-  "Katipunan Flyover Northbound",
-  "Quirino Highway Inbound",
-  "Philcoa / QC Circle Bypass",
+const AI_HEATMAP_CORRIDORS = [
+  {
+    name: "Commonwealth Ave Corridor",
+    corridor: "Commonwealth Ave (Batasan to Litex)",
+    badge: "18 Lanes · Peak Density",
+    priority: "high" as DispatchPriority,
+    instructions:
+      "High-density violation probability detected on Commonwealth Ave. Patrol corridor, clear illegal loading at Litex Market, and intercept unauthorized vehicles in the exclusive busway.",
+  },
+  {
+    name: "Philcoa & Elliptical Circle",
+    corridor: "Philcoa / Elliptical Rd Bypass",
+    badge: "Rotary Hub · Chokepoint",
+    priority: "high" as DispatchPriority,
+    instructions:
+      "Rotary chokepoint detected at Philcoa PUV terminal. Establish visual deterrence, flush yellow box blockages, and ensure smooth transit to North Ave Connector.",
+  },
+  {
+    name: "Tandang Sora Crossing",
+    corridor: "Mindanao Ave x Tandang Sora",
+    badge: "Intersection · Conflict Hub",
+    priority: "medium" as DispatchPriority,
+    instructions:
+      "Intersection telemetry indicates elevated red light traversal and queue jumping. Position unit near St. James flyover to enforce lane discipline.",
+  },
+  {
+    name: "Katipunan & C-5 Beltway",
+    corridor: "Katipunan Ave (Ateneo / UP Gate)",
+    badge: "University Belt · Double Parking",
+    priority: "medium" as DispatchPriority,
+    instructions:
+      "University corridor experiencing curbside drop-off congestion. Maintain fluid flow along Miriam overpass and Aurora flyover merge.",
+  },
+  {
+    name: "Quirino Highway / Novaliches",
+    corridor: "Quirino Hwy (Novaliches Bayan)",
+    badge: "Freight Arterial · Heavy Stalls",
+    priority: "critical" as DispatchPriority,
+    instructions:
+      "Heavy commercial truck bottleneck detected. Monitor Mindanao Ave Ext merge, inspect heavy vehicle lane compliance, and prepare tow assist if breakdown occurs.",
+  },
 ];
 
 export function DispatchDialog({
@@ -118,6 +155,15 @@ export function DispatchDialog({
     setInstructions(preset.instructions);
     toast.info(`Tactical Preset Applied: ${preset.code}`, {
       description: preset.label,
+    });
+  }
+
+  function applyCorridor(corridor: (typeof AI_HEATMAP_CORRIDORS)[0]) {
+    setPriority(corridor.priority);
+    setLocation(corridor.corridor);
+    setInstructions(corridor.instructions);
+    toast.info(`AI Corridors Pre-filled: ${corridor.name}`, {
+      description: corridor.badge,
     });
   }
 
@@ -193,6 +239,38 @@ export function DispatchDialog({
         </DialogHeader>
 
         <form onSubmit={submit} className="mt-4 flex flex-col gap-4 text-xs">
+          {/* AI Heatmap Corridors */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-orange-400 flex items-center gap-1">
+                <Flame className="size-3 text-orange-500 animate-pulse" />
+                AI Heatmap Surge Corridors
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono-tab">Live Congestion Hotspots</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {AI_HEATMAP_CORRIDORS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => applyCorridor(c)}
+                  className="rounded-lg border border-orange-500/30 bg-orange-950/20 px-2.5 py-1 text-[11px] font-medium text-orange-300 hover:bg-orange-500/20 hover:border-orange-400 transition-colors flex items-center gap-1.5"
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      c.priority === "critical" ? "bg-red-400" : "bg-orange-400"
+                    )}
+                  />
+                  <span>{c.name.split("&")[0].trim()}</span>
+                  <span className="text-[9px] text-orange-400/80 font-mono-tab hidden sm:inline">
+                    ({c.badge.split("·")[0].trim()})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Tactical 1-Click Presets */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -250,18 +328,6 @@ export function DispatchDialog({
               placeholder="e.g. Commonwealth Ave cor. Tandang Sora"
               className={inputClass}
             />
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {CORRIDOR_PRESETS.map((corridor) => (
-                <button
-                  key={corridor}
-                  type="button"
-                  onClick={() => setLocation(corridor)}
-                  className="rounded bg-black/40 border border-white/5 px-2 py-0.5 text-[10px] font-mono-tab text-muted-foreground hover:text-white hover:border-white/20 transition-colors"
-                >
-                  {corridor.split("cor.")[0].trim()}
-                </button>
-              ))}
-            </div>
           </Field>
 
           {/* Link Violation */}
@@ -331,7 +397,7 @@ export function DispatchDialog({
             <button
               type="submit"
               disabled={create.isPending}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.01] disabled:opacity-60 w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.01] disabled:opacity-60 w-full sm:w-auto cursor-pointer"
             >
               {create.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
