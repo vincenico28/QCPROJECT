@@ -1483,12 +1483,30 @@ export const verifyVehicleRegistrationLTO = createServerFn({ method: "POST" })
 
     // 1. Check live database first
     try {
-      const { data: allVehicles } = await supabaseAdmin.from("vehicles").select("*");
+      const [allVehiclesRes, cvListRes, profListRes] = await Promise.all([
+        supabaseAdmin.from("vehicles").select("*"),
+        supabaseAdmin.from("citizen_vehicles").select("*"),
+        supabaseAdmin.from("citizen_profiles").select("*"),
+      ]);
+
+      const allVehicles = allVehiclesRes.data || [];
+      const cvList = cvListRes.data || [];
+      const profList = profListRes.data || [];
+
       const dbVehicle = (allVehicles || []).find(
         (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compactPlate
       );
+      const cvMatch = (cvList || []).find(
+        (v: any) => (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate
+      );
 
-      if (dbVehicle) {
+      const matchingProfile = cvMatch?.citizen_id
+        ? (profList || []).find((p: any) => p.id === cvMatch.citizen_id)
+        : null;
+
+      const citizenOwner = matchingProfile?.full_name;
+
+      if (dbVehicle || cvMatch) {
         // Count unpaid citations
         const { data: allCitations } = await supabaseAdmin.from("citations").select("id, status, plate_number");
         const unpaid = (allCitations || []).filter(
@@ -1498,17 +1516,22 @@ export const verifyVehicleRegistrationLTO = createServerFn({ method: "POST" })
         );
 
         const citationsCount = unpaid.length;
+        const plateNumber = dbVehicle?.plate_number || cvMatch?.plate_number || cleanPlate;
+        const makeModel = dbVehicle?.make_model || cvMatch?.make_model || "Registered Vehicle";
+        const owner = citizenOwner || dbVehicle?.registered_owner || "Verified Resident (QC Registry)";
+        const ltoAlarm = !!dbVehicle?.lto_alarm_tagged || cvMatch?.lto_alarm_status === "LTO_ALARM_ACTIVE" || citationsCount > 0;
+
         return {
-          plateNumber: dbVehicle.plate_number,
-          makeModel: dbVehicle.make_model || "Registered Vehicle",
+          plateNumber,
+          makeModel,
           year: 2024,
-          color: dbVehicle.color || "Silver",
-          chassisNumber: dbVehicle.chassis_number || `CHS-${compactPlate}-QC`,
+          color: dbVehicle?.color || "Silver",
+          chassisNumber: dbVehicle?.chassis_number || `CHS-${compactPlate}-QC`,
           engineNumber: `ENG-${compactPlate}-QC`,
-          registrationStatus: (dbVehicle.registration_status || "CURRENT") as any,
-          ltoAlarmTagged: !!dbVehicle.lto_alarm_tagged || citationsCount > 0,
+          registrationStatus: (dbVehicle?.registration_status || "CURRENT") as any,
+          ltoAlarmTagged: ltoAlarm,
           unsettledCitationsCount: citationsCount,
-          registeredOwner: dbVehicle.registered_owner || "Verified Resident (QC Registry)",
+          registeredOwner: owner,
         };
       }
     } catch (err) {
@@ -2594,22 +2617,25 @@ export const serverAddCitizenVehicle = createServerFn({ method: "POST" })
     try {
       const { data: profile } = await supabaseAdmin
         .from("citizen_profiles")
-        .select("full_name")
+        .select("full_name, phone")
         .eq("id", data.citizen_id)
         .maybeSingle();
 
-      const ownerName = profile?.full_name || "Verified Resident";
+      const ownerName = profile?.full_name || "Verified Citizen Motorist";
+      const contactNumber = profile?.phone || null;
 
       await supabaseAdmin.from("vehicles").upsert({
         plate_number: cleanPlate,
         make_model: data.make_model,
         registered_owner: ownerName,
+        contact_number: contactNumber,
         registration_status: "CURRENT",
         lto_alarm_tagged: alarmStatus !== "CLEARED",
         risk_level: alarmStatus !== "CLEARED" ? "Watch" : "Clean",
+        updated_at: new Date().toISOString(),
       }, { onConflict: "plate_number" });
-    } catch {
-      // main vehicles fallback
+    } catch (vehUpsertErr) {
+      console.warn("[serverAddCitizenVehicle] Sync to public.vehicles warning:", vehUpsertErr);
     }
 
     return row || {
@@ -2972,6 +2998,7 @@ export type RegisteredVehicleRecord = {
   owner: string;
   color?: string;
   chassis?: string;
+  vehicleType?: string;
   violations: number;
   citations: number;
   unpaid: number;
@@ -2981,56 +3008,70 @@ export type RegisteredVehicleRecord = {
   lastOffense: string;
   risk: "clean" | "watch" | "flagged" | "blocked";
   ltoAlarm: boolean;
+  isCitizenRegistered: boolean;
+  citizenId?: string;
+  citizenName?: string;
+  citizenEmail?: string;
+  citizenPhone?: string;
+  citizenAddress?: string;
+  citizenDriverLicense?: string;
+  citizenTokens?: number;
 };
 
 export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
   .handler(async (): Promise<RegisteredVehicleRecord[]> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const [vRes, cvRes, cRes, vioRes] = await Promise.all([
+      const [vRes, cvRes, profRes, cRes, vioRes] = await Promise.all([
         supabaseAdmin.from("vehicles").select("*").order("created_at", { ascending: false }),
         supabaseAdmin.from("citizen_vehicles").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("citizen_profiles").select("*"),
         supabaseAdmin.from("citations").select("*").order("issued_at", { ascending: false }),
         supabaseAdmin.from("violations").select("*").order("detected_at", { ascending: false }),
       ]);
 
       const dbVehicles = vRes.data || [];
       const citizenVehicles = cvRes.data || [];
+      const citizenProfiles = profRes.data || [];
       const citations = cRes.data || [];
       const violations = vioRes.data || [];
 
-      const map = new Map<string, RegisteredVehicleRecord>();
-
-      // Populate from citizen_vehicles first
-      for (const cv of citizenVehicles) {
-        const compact = (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
-        map.set(compact, {
-          plate: cv.plate_number,
-          model: cv.make_model,
-          owner: "Verified Citizen",
-          color: "Silver",
-          chassis: undefined,
-          violations: 0,
-          citations: 0,
-          unpaid: 0,
-          outstanding: 0,
-          totalBilled: 0,
-          lastSeen: cv.created_at || new Date().toISOString(),
-          lastOffense: "None (Clean Record)",
-          risk: cv.lto_alarm_status === "LTO_ALARM_ACTIVE" ? "flagged" : "clean",
-          ltoAlarm: cv.lto_alarm_status === "LTO_ALARM_ACTIVE",
-        });
+      // Map citizen profiles by id
+      const profileMap = new Map<string, any>();
+      for (const p of citizenProfiles) {
+        if (p.id) profileMap.set(p.id, p);
       }
 
-      // Populate from dbVehicles (overriding or enriching)
+      // Index citizen vehicles by compact plate
+      const citizenMap = new Map<string, any>();
+      for (const cv of citizenVehicles) {
+        const compact = (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        if (compact) {
+          const profile = cv.citizen_id ? profileMap.get(cv.citizen_id) : null;
+          citizenMap.set(compact, { ...cv, profile });
+        }
+      }
+
+      const map = new Map<string, RegisteredVehicleRecord>();
+
+      // 1. Process dbVehicles and cross-link citizen profile
       for (const v of dbVehicles) {
         const compact = (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        const cv = citizenMap.get(compact);
+        const isCitizen = !!cv;
+        const profile = cv?.profile;
+
+        const owner = isCitizen
+          ? (profile?.full_name || v.registered_owner || "Verified Citizen")
+          : (v.registered_owner || "Verified Motorist");
+
         map.set(compact, {
           plate: v.plate_number,
-          model: v.make_model,
-          owner: v.registered_owner || "Verified Motorist",
+          model: v.make_model || cv?.make_model || null,
+          owner,
           color: v.color || "Silver",
           chassis: v.chassis_number || undefined,
+          vehicleType: cv?.vehicle_type || "Private Vehicle",
           violations: 0,
           citations: 0,
           unpaid: 0,
@@ -3039,19 +3080,82 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
           lastSeen: v.created_at || new Date().toISOString(),
           lastOffense: "None (Clean Record)",
           risk: ((v.risk_level || "Clean").toLowerCase()) as "clean" | "watch" | "flagged" | "blocked",
-          ltoAlarm: !!v.lto_alarm_tagged,
+          ltoAlarm: !!v.lto_alarm_tagged || cv?.lto_alarm_status === "LTO_ALARM_ACTIVE",
+          isCitizenRegistered: isCitizen,
+          citizenId: cv?.citizen_id || undefined,
+          citizenName: profile?.full_name || undefined,
+          citizenEmail: profile?.email || undefined,
+          citizenPhone: profile?.phone || v.contact_number || undefined,
+          citizenAddress: profile?.address || undefined,
+          citizenDriverLicense: profile?.driver_license_number || undefined,
+          citizenTokens: typeof profile?.tokens === "number" ? profile.tokens : undefined,
         });
       }
 
-      // Aggregate violations
+      // 2. Ensure all citizen_vehicles are represented in the map and auto-synced into public.vehicles
+      for (const cv of citizenVehicles) {
+        const compact = (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        if (!map.has(compact)) {
+          const profile = cv.citizen_id ? profileMap.get(cv.citizen_id) : null;
+          const owner = profile?.full_name || "Verified Citizen Motorist";
+          const isAlarm = cv.lto_alarm_status === "LTO_ALARM_ACTIVE";
+
+          map.set(compact, {
+            plate: cv.plate_number,
+            model: cv.make_model,
+            owner,
+            color: "Silver",
+            chassis: undefined,
+            vehicleType: cv.vehicle_type || "Private Vehicle",
+            violations: 0,
+            citations: 0,
+            unpaid: 0,
+            outstanding: 0,
+            totalBilled: 0,
+            lastSeen: cv.created_at || new Date().toISOString(),
+            lastOffense: "None (Clean Record)",
+            risk: isAlarm ? "flagged" : "clean",
+            ltoAlarm: isAlarm,
+            isCitizenRegistered: true,
+            citizenId: cv.citizen_id || undefined,
+            citizenName: profile?.full_name || undefined,
+            citizenEmail: profile?.email || undefined,
+            citizenPhone: profile?.phone || undefined,
+            citizenAddress: profile?.address || undefined,
+            citizenDriverLicense: profile?.driver_license_number || undefined,
+            citizenTokens: typeof profile?.tokens === "number" ? profile.tokens : undefined,
+          });
+
+          // Auto-sync into public.vehicles in background
+          void (async () => {
+            try {
+              await supabaseAdmin.from("vehicles").upsert({
+                plate_number: (cv.plate_number || "").toUpperCase().trim(),
+                make_model: cv.make_model,
+                registered_owner: owner,
+                contact_number: profile?.phone || null,
+                registration_status: "CURRENT",
+                risk_level: isAlarm ? "Flagged" : "Clean",
+                lto_alarm_tagged: isAlarm,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "plate_number" });
+            } catch {}
+          })();
+        }
+      }
+
+      // 3. Aggregate violations
       for (const vio of violations) {
         const compact = (vio.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
         let row = map.get(compact);
         if (!row) {
+          const cv = citizenMap.get(compact);
+          const profile = cv?.profile;
           row = {
             plate: vio.plate_number,
-            model: null,
-            owner: "Unregistered Motorist",
+            model: cv?.make_model || null,
+            owner: profile?.full_name || "Unregistered Motorist",
+            vehicleType: cv?.vehicle_type,
             violations: 0,
             citations: 0,
             unpaid: 0,
@@ -3061,6 +3165,14 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
             lastOffense: vio.violation_type,
             risk: "clean",
             ltoAlarm: false,
+            isCitizenRegistered: !!cv,
+            citizenId: cv?.citizen_id || undefined,
+            citizenName: profile?.full_name || undefined,
+            citizenEmail: profile?.email || undefined,
+            citizenPhone: profile?.phone || undefined,
+            citizenAddress: profile?.address || undefined,
+            citizenDriverLicense: profile?.driver_license_number || undefined,
+            citizenTokens: typeof profile?.tokens === "number" ? profile.tokens : undefined,
           };
           map.set(compact, row);
         }
@@ -3071,15 +3183,18 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
         }
       }
 
-      // Aggregate citations
+      // 4. Aggregate citations
       for (const cit of citations) {
         const compact = (cit.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
         let row = map.get(compact);
         if (!row) {
+          const cv = citizenMap.get(compact);
+          const profile = cv?.profile;
           row = {
             plate: cit.plate_number,
-            model: cit.vehicle_model,
-            owner: "Unregistered Motorist",
+            model: cit.vehicle_model || cv?.make_model || null,
+            owner: profile?.full_name || "Unregistered Motorist",
+            vehicleType: cv?.vehicle_type,
             violations: 0,
             citations: 0,
             unpaid: 0,
@@ -3089,6 +3204,14 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
             lastOffense: cit.offense,
             risk: "clean",
             ltoAlarm: false,
+            isCitizenRegistered: !!cv,
+            citizenId: cv?.citizen_id || undefined,
+            citizenName: profile?.full_name || undefined,
+            citizenEmail: profile?.email || undefined,
+            citizenPhone: profile?.phone || undefined,
+            citizenAddress: profile?.address || undefined,
+            citizenDriverLicense: profile?.driver_license_number || undefined,
+            citizenTokens: typeof profile?.tokens === "number" ? profile.tokens : undefined,
           };
           map.set(compact, row);
         }
@@ -3124,6 +3247,7 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
 
       rows.sort(
         (a, b) =>
+          (b.isCitizenRegistered ? 1 : 0) - (a.isCitizenRegistered ? 1 : 0) ||
           b.outstanding - a.outstanding ||
           b.violations + b.citations - (a.violations + a.citations) ||
           new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()
@@ -3154,6 +3278,12 @@ export type VehicleLookupResult = {
   unpaidCitationsCount: number;
   outstandingAmount: number;
   citizenName?: string;
+  isCitizenRegistered?: boolean;
+  citizenId?: string;
+  citizenEmail?: string;
+  citizenPhone?: string;
+  citizenAddress?: string;
+  citizenDriverLicense?: string;
 };
 
 export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
@@ -3163,32 +3293,46 @@ export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
     const rawPlate = data.plateNumber.trim();
     const compactPlate = rawPlate.replace(/[\s-]/g, "").toUpperCase();
 
-    // 1. Check public.vehicles
+    // 1. Check live database tables (vehicles + citizen_vehicles + citizen_profiles)
     try {
-      const { data: vList } = await supabaseAdmin
-        .from("vehicles")
-        .select("*");
+      const [vListRes, cvListRes, profListRes, allCitsRes] = await Promise.all([
+        supabaseAdmin.from("vehicles").select("*"),
+        supabaseAdmin.from("citizen_vehicles").select("*"),
+        supabaseAdmin.from("citizen_profiles").select("*"),
+        supabaseAdmin.from("citations").select("*"),
+      ]);
+
+      const vList = vListRes.data || [];
+      const cvList = cvListRes.data || [];
+      const profList = profListRes.data || [];
+      const allCits = allCitsRes.data || [];
 
       const match = (vList || []).find((v: any) =>
         (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate ||
         (v.plate_number || "").toUpperCase() === rawPlate.toUpperCase()
       );
 
-      if (match) {
-        // Fetch citations for this plate
-        const { data: allCits } = await supabaseAdmin
-          .from("citations")
-          .select("*");
+      const cvMatch = (cvList || []).find((v: any) =>
+        (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate ||
+        (v.plate_number || "").toUpperCase() === rawPlate.toUpperCase()
+      );
 
-        const matchingCits = (allCits || []).filter((c: any) =>
-          (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate
-        );
-        const unpaidCits = matchingCits.filter((c: any) => c.status === "unpaid" || c.status === "overdue" || c.status === "pending");
-        const unpaidCount = unpaidCits.length;
-        const outstanding = unpaidCits.reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+      const matchingProfile = cvMatch?.citizen_id
+        ? (profList || []).find((p: any) => p.id === cvMatch.citizen_id)
+        : null;
 
-        let risk: "Clean" | "Watch" | "Flagged" | "Blocked" = (match.risk_level as any) || "Clean";
-        let alarm = !!match.lto_alarm_tagged;
+      const matchingCits = (allCits || []).filter((c: any) =>
+        (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate
+      );
+      const unpaidCits = matchingCits.filter((c: any) => c.status === "unpaid" || c.status === "overdue" || c.status === "pending");
+      const unpaidCount = unpaidCits.length;
+      const outstanding = unpaidCits.reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+
+      const isCitizen = !!cvMatch;
+
+      if (match || cvMatch) {
+        let risk: "Clean" | "Watch" | "Flagged" | "Blocked" = ((match?.risk_level || (cvMatch?.lto_alarm_status === "LTO_ALARM_ACTIVE" ? "Flagged" : "Clean")) as any) || "Clean";
+        let alarm = !!match?.lto_alarm_tagged || cvMatch?.lto_alarm_status === "LTO_ALARM_ACTIVE";
         if (outstanding >= 5000 || unpaidCount >= 3) {
           risk = "Blocked";
           alarm = true;
@@ -3197,70 +3341,38 @@ export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
           alarm = true;
         }
 
+        const ownerName = matchingProfile?.full_name || match?.registered_owner || "Verified Resident";
+        const ownerEmail = matchingProfile?.email || undefined;
+        const phone = matchingProfile?.phone || match?.contact_number || undefined;
+
         return {
           foundInDatabase: true,
-          plateNumber: match.plate_number,
-          makeModel: match.make_model || "Registered Vehicle",
-          registeredOwner: match.registered_owner || "Verified Motorist",
-          color: match.color || "Silver",
-          chassisNumber: match.chassis_number || undefined,
-          registrationStatus: (match.registration_status as any) || "CURRENT",
+          plateNumber: match?.plate_number || cvMatch?.plate_number || rawPlate,
+          makeModel: match?.make_model || cvMatch?.make_model || "Registered Vehicle",
+          registeredOwner: ownerName,
+          ownerEmail,
+          color: match?.color || "Silver",
+          vehicleType: cvMatch?.vehicle_type || "Private Vehicle",
+          chassisNumber: match?.chassis_number || undefined,
+          registrationStatus: (match?.registration_status as any) || "CURRENT",
           riskLevel: risk,
           ltoAlarmTagged: alarm,
           unpaidCitationsCount: unpaidCount,
           outstandingAmount: outstanding,
+          citizenName: matchingProfile?.full_name || (isCitizen ? ownerName : undefined),
+          isCitizenRegistered: isCitizen,
+          citizenId: cvMatch?.citizen_id || undefined,
+          citizenEmail: ownerEmail,
+          citizenPhone: phone,
+          citizenAddress: matchingProfile?.address || undefined,
+          citizenDriverLicense: matchingProfile?.driver_license_number || undefined,
         };
       }
     } catch (err) {
       console.warn("[Vehicle Lookup] DB Error:", err);
     }
 
-    // 2. Check citizen_vehicles
-    try {
-      const { data: cvList } = await supabaseAdmin
-        .from("citizen_vehicles")
-        .select("*");
-
-      const cvMatch = (cvList || []).find((v: any) =>
-        (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compactPlate ||
-        (v.plate_number || "").toUpperCase() === rawPlate.toUpperCase()
-      );
-
-      if (cvMatch) {
-        let ownerName = "Verified Resident";
-        let ownerEmail: string | undefined = undefined;
-        if (cvMatch.citizen_id) {
-          const { data: prof } = await supabaseAdmin
-            .from("citizen_profiles")
-            .select("full_name, email")
-            .eq("id", cvMatch.citizen_id)
-            .maybeSingle();
-          if (prof?.full_name) ownerName = prof.full_name;
-          if (prof?.email) ownerEmail = prof.email;
-        }
-
-        const alarm = cvMatch.lto_alarm_status !== "CLEARED";
-        return {
-          foundInDatabase: true,
-          plateNumber: cvMatch.plate_number,
-          makeModel: cvMatch.make_model,
-          registeredOwner: ownerName,
-          ownerEmail,
-          color: "Silver",
-          vehicleType: cvMatch.vehicle_type,
-          registrationStatus: "CURRENT",
-          riskLevel: alarm ? "Flagged" : "Clean",
-          ltoAlarmTagged: alarm,
-          unpaidCitationsCount: alarm ? 1 : 0,
-          outstandingAmount: 0,
-          citizenName: ownerName,
-        };
-      }
-    } catch (err) {
-      console.warn("[Vehicle Lookup] Citizen DB Error:", err);
-    }
-
-    // 3. Fallback to LTO verification
+    // 2. Fallback to LTO verification
     const lto = await verifyVehicleRegistrationLTO({ data: { plateNumber: rawPlate } });
     return {
       foundInDatabase: false,
@@ -3273,7 +3385,8 @@ export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
       riskLevel: lto.ltoAlarmTagged ? "Flagged" : "Clean",
       ltoAlarmTagged: lto.ltoAlarmTagged,
       unpaidCitationsCount: lto.unsettledCitationsCount,
-      outstandingAmount: lto.unsettledCitationsCount * 2000,
+      outstandingAmount: 0,
+      isCitizenRegistered: false,
     };
   });
 

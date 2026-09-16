@@ -13,6 +13,13 @@ import {
   Ban,
   CheckCircle2,
   User,
+  UserCheck,
+  Mail,
+  Phone,
+  Home,
+  Award,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { useViolations, useCitations, formatPeso, timeAgo } from "@/lib/data/traffic";
 import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
@@ -63,6 +70,39 @@ function VehicleDetailPage() {
     },
   });
 
+  const { data: citizenData } = useQuery({
+    queryKey: ["citizen-vehicle-link", plate],
+    queryFn: async () => {
+      try {
+        const compact = plate.replace(/[\s-]/g, "").toUpperCase();
+        const { data: cvList } = await supabase
+          .from("citizen_vehicles")
+          .select("*");
+
+        const cv = (cvList || []).find(
+          (c: any) => (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compact
+        );
+
+        if (!cv || !cv.citizen_id) return null;
+
+        const { data: profile } = await supabase
+          .from("citizen_profiles")
+          .select("*")
+          .eq("id", cv.citizen_id)
+          .maybeSingle();
+
+        return {
+          vehicle: cv,
+          profile,
+        };
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const isCitizen = !!citizenData?.profile;
+
   const own = useMemo(
     () => violations.filter((v) => v.plate_number.replace(/\s+/g, "").toUpperCase() === plate.replace(/\s+/g, "").toUpperCase()),
     [violations, plate],
@@ -92,8 +132,8 @@ function VehicleDetailPage() {
           ? "watch"
           : "clean";
 
-  const model = vehicleData?.make_model ?? (ownCitations.find((c) => c.vehicle_model)?.vehicle_model ?? null);
-  const owner = vehicleData?.registered_owner ?? null;
+  const model = vehicleData?.make_model ?? citizenData?.vehicle?.make_model ?? (ownCitations.find((c) => c.vehicle_model)?.vehicle_model ?? null);
+  const owner = citizenData?.profile?.full_name ?? vehicleData?.registered_owner ?? null;
 
   const timeline = useMemo(() => {
     const items = [
@@ -129,7 +169,7 @@ function VehicleDetailPage() {
     );
   }
 
-  if (totalRecords === 0 && !vehicleData) {
+  if (totalRecords === 0 && !vehicleData && !citizenData?.vehicle) {
     return (
       <div className="flex flex-col items-center gap-4 p-16 text-center">
         <p className="text-sm text-subtle">No enforcement record found for plate {plate}.</p>
@@ -168,9 +208,17 @@ function VehicleDetailPage() {
             <Car className="size-6" strokeWidth={1.8} />
           </div>
           <div>
-            <h1 className="font-mono-tab text-2xl font-semibold tracking-tight text-foreground">
-              {plate}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="font-mono-tab text-2xl font-semibold tracking-tight text-foreground">
+                {plate}
+              </h1>
+              {isCitizen && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 font-mono-tab text-[10px] font-bold uppercase tracking-wider text-emerald-400 shadow-sm shadow-emerald-500/20">
+                  <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                  Verified Citizen Motorist
+                </span>
+              )}
+            </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{model ?? "Vehicle model unknown"}</span>
               <span className="text-subtle">·</span>
@@ -223,6 +271,90 @@ function VehicleDetailPage() {
         />
         <Stat icon={CreditCard} label="Settled" value={formatPeso(paid)} tone="success" />
       </div>
+
+      {/* Citizen Portal Motorist Profile Panel */}
+      {isCitizen ? (
+        <div className="panel relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-panel via-panel to-emerald-950/20 p-6 shadow-xl">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="grid size-12 place-items-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0 shadow-inner">
+                <UserCheck className="size-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-emerald-400 flex items-center gap-1">
+                    <ShieldCheck className="size-3 text-emerald-400" />
+                    Citizen Portal Motorist Profile
+                  </span>
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-mono-tab font-semibold text-emerald-300 border border-emerald-500/30">
+                    Active QC Resident
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-foreground">
+                  {citizenData?.profile?.full_name}
+                </h2>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5 font-mono-tab">
+                    <Mail className="size-3 text-emerald-400 shrink-0" />
+                    {citizenData?.profile?.email}
+                  </span>
+                  {citizenData?.profile?.phone && (
+                    <span className="flex items-center gap-1.5 font-mono-tab">
+                      <Phone className="size-3 text-emerald-400 shrink-0" />
+                      {citizenData?.profile?.phone}
+                    </span>
+                  )}
+                  {citizenData?.profile?.driver_license_number && (
+                    <span className="flex items-center gap-1.5 font-mono-tab">
+                      <CreditCard className="size-3 text-emerald-400 shrink-0" />
+                      License: {citizenData?.profile?.driver_license_number}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5 font-mono-tab text-emerald-400/90 font-medium">
+                    <Award className="size-3 text-emerald-400 shrink-0" />
+                    {citizenData?.profile?.tokens ?? 0} Eco-Tokens
+                  </span>
+                </div>
+                {citizenData?.profile?.address && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-subtle">
+                    <Home className="size-3 text-subtle shrink-0" />
+                    <span>{citizenData?.profile?.address}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to="/citizen"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 shadow-sm"
+              >
+                <span>Citizen Portal</span>
+                <ExternalLink className="size-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="panel rounded-2xl border border-dashed border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid size-9 place-items-center rounded-lg bg-panel-elevated text-subtle shrink-0">
+              <User className="size-4" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground">
+                Unlinked to Citizen Portal Account
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                This vehicle has not yet been registered by a resident motorist in the QC Citizen Portal.
+              </p>
+            </div>
+          </div>
+          <span className="font-mono-tab text-[10px] uppercase tracking-wider text-subtle bg-panel-elevated px-2.5 py-1 rounded-md border border-border shrink-0">
+            Standard Registry Record
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* Timeline */}

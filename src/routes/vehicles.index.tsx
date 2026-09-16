@@ -41,6 +41,9 @@ type VehicleRow = {
   plate: string;
   model: string | null;
   owner?: string;
+  color?: string;
+  chassis?: string;
+  vehicleType?: string;
   violations: number;
   citations: number;
   unpaid: number;
@@ -50,9 +53,17 @@ type VehicleRow = {
   lastOffense: string;
   risk: "clean" | "watch" | "flagged" | "blocked";
   ltoAlarm?: boolean;
+  isCitizenRegistered?: boolean;
+  citizenId?: string;
+  citizenName?: string;
+  citizenEmail?: string;
+  citizenPhone?: string;
+  citizenAddress?: string;
+  citizenDriverLicense?: string;
+  citizenTokens?: number;
 };
 
-const RISKS = ["all", "clean", "watch", "flagged", "blocked"] as const;
+const RISKS = ["all", "citizen", "clean", "watch", "flagged", "blocked"] as const;
 type RiskFilter = (typeof RISKS)[number];
 
 function VehiclesPage() {
@@ -76,13 +87,19 @@ function VehiclesPage() {
 
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {
-      if (risk !== "all" && v.risk !== risk) return false;
+      if (risk === "citizen") {
+        if (!v.isCitizenRegistered) return false;
+      } else if (risk !== "all" && v.risk !== risk) {
+        return false;
+      }
       if (!q) return true;
       const n = q.toLowerCase();
       return (
         v.plate.toLowerCase().includes(n) ||
         (v.model ?? "").toLowerCase().includes(n) ||
         (v.owner ?? "").toLowerCase().includes(n) ||
+        (v.citizenName ?? "").toLowerCase().includes(n) ||
+        (v.citizenEmail ?? "").toLowerCase().includes(n) ||
         v.lastOffense.toLowerCase().includes(n)
       );
     });
@@ -91,6 +108,7 @@ function VehiclesPage() {
   const counts = useMemo(() => {
     return {
       all: vehicles.length,
+      citizen: vehicles.filter((v) => v.isCitizenRegistered).length,
       clean: vehicles.filter((v) => v.risk === "clean").length,
       watch: vehicles.filter((v) => v.risk === "watch").length,
       flagged: vehicles.filter((v) => v.risk === "flagged").length,
@@ -383,13 +401,20 @@ function VehiclesPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <MiniStat
           icon={Car}
           label="Vehicles Tracked"
           value={counts.all.toLocaleString()}
           tone="primary"
           sub="Indexed in QC grid"
+        />
+        <MiniStat
+          icon={UserCheck}
+          label="Citizen Motorists"
+          value={counts.citizen.toLocaleString()}
+          tone="success"
+          sub="Verified Citizen Portal accounts"
         />
         <MiniStat
           icon={AlertTriangle}
@@ -416,20 +441,37 @@ function VehiclesPage() {
 
       {/* Filter Toolbar */}
       <div className="panel flex flex-col gap-4 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-border bg-background p-1">
           {RISKS.map((s) => {
             const active = risk === s;
+            const isCitizen = s === "citizen";
             return (
               <button
                 key={s}
                 onClick={() => setRisk(s)}
                 className={cn(
-                  "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-xs font-bold uppercase tracking-wider transition-colors",
-                  active ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground"
+                  "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5",
+                  active
+                    ? isCitizen
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                      : "bg-primary text-primary-foreground shadow-sm"
+                    : isCitizen
+                    ? "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                    : "text-subtle hover:text-foreground"
                 )}
               >
-                {s}
-                <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-primary-foreground/90">
+                {isCitizen && <UserCheck className="size-3 shrink-0" />}
+                {isCitizen ? "Citizen Motorists" : s}
+                <span
+                  className={cn(
+                    "ml-1 rounded-full px-1.5 py-0.2 text-[9px]",
+                    active
+                      ? "bg-black/40 text-white"
+                      : isCitizen
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-panel-elevated text-subtle"
+                  )}
+                >
                   {counts[s]}
                 </span>
               </button>
@@ -442,7 +484,7 @@ function VehiclesPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search plate, vehicle model, offense…"
+            placeholder="Search plate, motorist, email, model…"
             className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none"
           />
         </label>
@@ -456,6 +498,7 @@ function VehiclesPage() {
               <tr className="border-b border-border bg-black/20">
                 {[
                   "License Plate",
+                  "Registered Motorist / Citizen Link",
                   "Make & Model",
                   "Violations",
                   "Citations",
@@ -476,9 +519,9 @@ function VehiclesPage() {
             <tbody className="divide-y divide-border">
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-sm text-subtle">
+                  <td colSpan={9} className="p-8 text-center text-sm text-subtle">
                     <Loader2 className="size-6 animate-spin text-primary inline-block mr-2" />
-                    Aggregating vehicle registry…
+                    Aggregating vehicle registry & motorist links…
                   </td>
                 </tr>
               )}
@@ -486,15 +529,56 @@ function VehiclesPage() {
                 filtered.map((v) => (
                   <tr key={v.plate} className="text-sm transition-colors hover:bg-panel-elevated/40">
                     <td className="px-5 py-4">
-                      <Link
-                        to="/vehicles/$plate"
-                        params={{ plate: v.plate }}
-                        className="font-mono-tab font-black text-foreground hover:text-primary transition-colors text-xs"
-                      >
-                        {v.plate}
-                      </Link>
+                      <div className="flex flex-col gap-1">
+                        <Link
+                          to="/vehicles/$plate"
+                          params={{ plate: v.plate }}
+                          className="font-mono-tab font-black text-foreground hover:text-primary transition-colors text-xs inline-flex items-center gap-1.5"
+                        >
+                          <span>{v.plate}</span>
+                        </Link>
+                        {v.isCitizenRegistered && (
+                          <span className="inline-flex w-fit items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[8.5px] font-mono-tab font-bold text-emerald-400">
+                            <CheckCircle2 className="size-2.5 text-emerald-400 shrink-0" />
+                            CITIZEN MOTORIST
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-5 py-4 text-xs text-muted-foreground">{v.model ?? "—"}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          {v.isCitizenRegistered ? (
+                            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                              <UserCheck className="size-2.5" />
+                            </span>
+                          ) : (
+                            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted/40 text-subtle">
+                              <Car className="size-2.5" />
+                            </span>
+                          )}
+                          <span className="text-xs font-semibold text-foreground">
+                            {v.citizenName || v.owner || "Unregistered Motorist"}
+                          </span>
+                        </div>
+                        {v.isCitizenRegistered ? (
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono-tab pl-5">
+                            <Mail className="size-2.5 text-emerald-400/80 shrink-0" />
+                            <span className="truncate max-w-[170px] text-emerald-400/90">{v.citizenEmail || "Verified Motorist Profile"}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-subtle font-mono-tab pl-5">
+                            Unlinked to Citizen Portal
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="text-xs font-medium text-foreground/90">{v.model ?? "—"}</div>
+                      {v.vehicleType && (
+                        <div className="text-[10px] text-subtle font-mono-tab">{v.vehicleType}</div>
+                      )}
+                    </td>
                     <td className="px-5 py-4 font-mono-tab text-xs font-bold text-foreground">{v.violations}</td>
                     <td className="px-5 py-4 font-mono-tab text-xs text-foreground">
                       {v.citations}
@@ -546,7 +630,7 @@ function VehiclesPage() {
                 ))}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-sm text-subtle">
+                  <td colSpan={9} className="p-8 text-center text-sm text-subtle">
                     No vehicles match your search or filter criteria.
                   </td>
                 </tr>
@@ -569,7 +653,7 @@ function MiniStat({
   icon: typeof Car;
   label: string;
   value: string;
-  tone: "primary" | "warning" | "danger";
+  tone: "primary" | "warning" | "danger" | "success";
   sub?: string;
 }) {
   const toneCls =
@@ -577,6 +661,8 @@ function MiniStat({
       ? "text-red-400 bg-red-500/10 border-red-500/30"
       : tone === "warning"
       ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+      : tone === "success"
+      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
       : "text-primary bg-primary/10 border-primary/30";
 
   return (
