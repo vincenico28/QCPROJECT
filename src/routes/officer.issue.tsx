@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -19,8 +19,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  UserCheck,
+  ShieldAlert,
 } from "lucide-react";
-import { useCreateCitation, formatPeso } from "@/lib/data/traffic";
+import { useCreateCitation, formatPeso, useVehicleLookup } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { fineFor, formatOffenseItems } from "@/lib/data/review";
 import { uploadMultipleEvidenceToSupabase, serializeEvidenceUrls } from "@/lib/storage";
@@ -109,6 +111,14 @@ function IssuePage() {
 
   const [plate, setPlate] = useState("");
   const [model, setModel] = useState("");
+  const { data: lookedUpVehicle, isLoading: isLookingUpPlate } = useVehicleLookup(plate);
+
+  // Auto-fill vehicle model when recognized in registry
+  useEffect(() => {
+    if (lookedUpVehicle?.makeModel && !model) {
+      setModel(lookedUpVehicle.makeModel);
+    }
+  }, [lookedUpVehicle, model]);
   const [violationItems, setViolationItems] = useState<CitationViolationItem[]>([
     {
       id: "item-1",
@@ -355,6 +365,94 @@ function IssuePage() {
             className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm font-mono-tab uppercase text-foreground focus:border-primary focus:outline-none"
           />
         </div>
+
+        {/* Live Vehicle & Citizen Motorist Lookup Banner */}
+        {plate.trim().length >= 2 && (
+          <div className="flex flex-col gap-2">
+            {isLookingUpPlate ? (
+              <div className="rounded-xl border border-border/60 bg-panel-elevated/50 p-2.5 flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                <span>Checking vehicle registry & citizen motorist link…</span>
+              </div>
+            ) : lookedUpVehicle ? (
+              <div className="flex flex-col gap-2">
+                {/* LTO Alarm / Hold Warning Banner */}
+                {(lookedUpVehicle.ltoAlarmTagged || lookedUpVehicle.riskLevel === "Flagged" || lookedUpVehicle.riskLevel === "Blocked") && (
+                  <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-3 flex items-start gap-2.5 text-xs animate-in fade-in">
+                    <ShieldAlert className="size-4 text-red-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-bold text-red-400">
+                        {lookedUpVehicle.riskLevel === "Blocked" ? "VEHICLE BLOCKED FOR APPREHENSION" : "ACTIVE LTO ALARM / HOLD"}
+                      </p>
+                      <p className="text-[11px] text-red-200/80 mt-0.5">
+                        This vehicle has {lookedUpVehicle.unpaidCitationsCount} outstanding notice(s) totaling {formatPeso(lookedUpVehicle.outstandingAmount)}. LTO registration renewal is held.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Citizen Motorist Profile Card */}
+                {lookedUpVehicle.isCitizenRegistered ? (
+                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 flex flex-col gap-2 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <UserCheck className="size-4 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-xs text-emerald-400">
+                          Verified Citizen Motorist Profile
+                        </span>
+                      </div>
+                      <span className="rounded bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-emerald-300 uppercase">
+                        QC Citizen
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-emerald-500/20">
+                      <div>
+                        <span className="text-[9px] font-mono-tab uppercase text-subtle">Motorist Name</span>
+                        <p className="font-bold text-foreground">{lookedUpVehicle.citizenName || lookedUpVehicle.registeredOwner}</p>
+                      </div>
+                      {lookedUpVehicle.citizenPhone && (
+                        <div>
+                          <span className="text-[9px] font-mono-tab uppercase text-subtle">Mobile Contact</span>
+                          <p className="font-mono-tab text-foreground">{lookedUpVehicle.citizenPhone}</p>
+                        </div>
+                      )}
+                      {lookedUpVehicle.citizenDriverLicense && (
+                        <div>
+                          <span className="text-[9px] font-mono-tab uppercase text-subtle">Driver's License</span>
+                          <p className="font-mono-tab text-foreground">{lookedUpVehicle.citizenDriverLicense}</p>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-[9px] font-mono-tab uppercase text-subtle">Vehicle Model</span>
+                        <p className="font-semibold text-foreground">{lookedUpVehicle.makeModel}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-border/80 bg-panel-elevated/60 p-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Car className="size-3.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="font-semibold text-foreground text-xs">
+                          {lookedUpVehicle.foundInDatabase ? lookedUpVehicle.registeredOwner : "Unregistered Vehicle"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {lookedUpVehicle.foundInDatabase
+                            ? `Standard Motorist · ${lookedUpVehicle.makeModel}`
+                            : "New record will be created in QC Vehicle Registry"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono-tab text-muted-foreground uppercase px-2 py-0.5 rounded bg-panel border border-border">
+                      {lookedUpVehicle.riskLevel || "Standard"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold uppercase tracking-wider text-subtle font-mono-tab">

@@ -11,9 +11,13 @@ import {
   CheckCircle2,
   Receipt,
   RotateCcw,
+  UserCheck,
+  Car,
+  ShieldAlert,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatPeso, timeAgo, useUpdateCitationStatus } from "@/lib/data/traffic";
+import { formatPeso, timeAgo, useUpdateCitationStatus, useVehicleLookup } from "@/lib/data/traffic";
 import { serverFetchCitations } from "@/lib/server.functions";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +34,7 @@ function ScannerPage() {
   const [loading, setLoading] = useState(false);
   const [manualInput, setManualInput] = useState("");
   const updateCitation = useUpdateCitationStatus();
+  const { data: lookedUpVehicle } = useVehicleLookup(citation?.plate_number ?? "");
 
   useEffect(() => {
     if (scanResult) return;
@@ -224,12 +229,74 @@ function ScannerPage() {
                   <p className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle">
                     Notice of Violation #{citation.citation_number}
                   </p>
-                  <p className="mt-1 font-mono-tab text-2xl font-black text-foreground">
-                    {citation.plate_number}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="font-mono-tab text-2xl font-black text-foreground">
+                      {citation.plate_number}
+                    </p>
+                    {lookedUpVehicle?.ltoAlarmTagged && (
+                      <span className="rounded bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-red-400 uppercase">
+                        LTO Hold
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <StatusPill status={citation.status} />
               </div>
+
+              {/* Citizen Motorist & Registry Summary */}
+              {lookedUpVehicle?.isCitizenRegistered ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <UserCheck className="size-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-emerald-400">
+                        Verified Citizen Motorist
+                      </span>
+                    </div>
+                    <Link
+                      to="/vehicles/$plate"
+                      params={{ plate: citation.plate_number }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:underline"
+                    >
+                      Registry <ExternalLink className="size-3" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-emerald-500/20">
+                    <div>
+                      <span className="text-[9px] font-mono-tab uppercase text-subtle">Motorist Name</span>
+                      <p className="font-bold text-foreground">{lookedUpVehicle.citizenName || lookedUpVehicle.registeredOwner}</p>
+                    </div>
+                    {lookedUpVehicle.citizenPhone && (
+                      <div>
+                        <span className="text-[9px] font-mono-tab uppercase text-subtle">Mobile Contact</span>
+                        <p className="font-mono-tab text-foreground">{lookedUpVehicle.citizenPhone}</p>
+                      </div>
+                    )}
+                    {lookedUpVehicle.makeModel && (
+                      <div className="col-span-2">
+                        <span className="text-[9px] font-mono-tab uppercase text-subtle">Registered Vehicle</span>
+                        <p className="font-semibold text-foreground">{lookedUpVehicle.makeModel}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : lookedUpVehicle ? (
+                <div className="rounded-xl border border-border bg-panel-elevated p-2.5 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Car className="size-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      Owner: <strong className="text-foreground">{lookedUpVehicle.registeredOwner || "Standard Motorist"}</strong>
+                    </span>
+                  </div>
+                  <Link
+                    to="/vehicles/$plate"
+                    params={{ plate: citation.plate_number }}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    Registry <ExternalLink className="size-3" />
+                  </Link>
+                </div>
+              ) : null}
 
               <div className="space-y-3 text-xs">
                 <div>

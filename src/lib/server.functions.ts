@@ -60,12 +60,19 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
   .handler(async ({ data: limit }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const { data, error } = await supabaseAdmin
-        .from("citations")
-        .select("*, violations(evidence_url, location, camera_code)")
-        .order("issued_at", { ascending: false })
-        .limit(limit);
-      if (!error && data) {
+      const [citsRes, cvRes, profRes, vehRes] = await Promise.all([
+        supabaseAdmin
+          .from("citations")
+          .select("*, violations(evidence_url, location, camera_code)")
+          .order("issued_at", { ascending: false })
+          .limit(limit),
+        supabaseAdmin.from("citizen_vehicles").select("*"),
+        supabaseAdmin.from("citizen_profiles").select("*"),
+        supabaseAdmin.from("vehicles").select("plate_number, registered_owner, risk_level, lto_alarm_tagged"),
+      ]);
+
+      const data = citsRes.data;
+      if (!citsRes.error && data) {
         // Group by violation_id to deduplicate any duplicate records
         const seenViolations = new Set<string>();
         const uniqueList: any[] = [];
@@ -101,14 +108,54 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
             .catch((e: any) => console.warn("[Deduplication] Could not purge duplicate rows:", e));
         }
 
+        // Build quick lookup maps for citizen motorist linkage
+        const profileById = new Map<string, any>();
+        for (const p of profRes.data || []) {
+          profileById.set(p.id, p);
+        }
+
+        const citizenByPlate = new Map<string, any>();
+        for (const cv of cvRes.data || []) {
+          const norm = (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+          const prof = cv.citizen_id ? profileById.get(cv.citizen_id) : null;
+          citizenByPlate.set(norm, { cv, prof });
+        }
+
+        const vehByPlate = new Map<string, any>();
+        for (const v of vehRes.data || []) {
+          const norm = (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+          vehByPlate.set(norm, v);
+        }
+
         // Re-sort by issued_at DESC for display
         uniqueList.sort((a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime());
 
-        return uniqueList.map((c: any) => ({
-          ...c,
-          evidence_url: c.evidence_url || c.violations?.evidence_url || "/assets/violation-1.jpg",
-          location: c.violations?.location || c.location || "Quezon City Road Corridor",
-        }));
+        return uniqueList.map((c: any) => {
+          const normPlate = (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+          const citizenMatch = citizenByPlate.get(normPlate);
+          const vehMatch = vehByPlate.get(normPlate);
+
+          const isCitizen = !!citizenMatch;
+          const citizenName = citizenMatch?.prof?.full_name || vehMatch?.registered_owner || undefined;
+          const citizenEmail = citizenMatch?.prof?.email || undefined;
+          const citizenPhone = citizenMatch?.prof?.phone || undefined;
+          const registeredOwner = citizenName || vehMatch?.registered_owner || undefined;
+          const ltoAlarm = !!vehMatch?.lto_alarm_tagged || citizenMatch?.cv?.lto_alarm_status === "LTO_ALARM_ACTIVE";
+          const risk = vehMatch?.risk_level || (ltoAlarm ? "Flagged" : "Clean");
+
+          return {
+            ...c,
+            isCitizenRegistered: isCitizen,
+            citizenName,
+            citizenEmail,
+            citizenPhone,
+            registeredOwner,
+            ltoAlarmTagged: ltoAlarm,
+            riskLevel: risk,
+            evidence_url: c.evidence_url || c.violations?.evidence_url || "/assets/violation-1.jpg",
+            location: c.violations?.location || c.location || "Quezon City Road Corridor",
+          };
+        });
       }
     } catch (err) {
       console.error("[Supabase Error: Fetch Citations]", err);
@@ -130,8 +177,41 @@ export const serverFetchCitationById = createServerFn({ method: "GET" })
 
       if (!error && data) {
         const row = data as any;
+        const normPlate = (row.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+
+        let citizenInfo: any = {};
+        try {
+          const [cvRes, profRes, vehRes] = await Promise.all([
+            supabaseAdmin.from("citizen_vehicles").select("*"),
+            supabaseAdmin.from("citizen_profiles").select("*"),
+            supabaseAdmin.from("vehicles").select("*"),
+          ]);
+          const cvMatch = (cvRes.data || []).find((cv: any) =>
+            (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === normPlate
+          );
+          const profMatch = cvMatch?.citizen_id
+            ? (profRes.data || []).find((p: any) => p.id === cvMatch.citizen_id)
+            : null;
+          const vehMatch = (vehRes.data || []).find((v: any) =>
+            (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === normPlate
+          );
+
+          citizenInfo = {
+            isCitizenRegistered: !!cvMatch,
+            citizenName: profMatch?.full_name || vehMatch?.registered_owner || undefined,
+            citizenEmail: profMatch?.email || undefined,
+            citizenPhone: profMatch?.phone || undefined,
+            registeredOwner: profMatch?.full_name || vehMatch?.registered_owner || undefined,
+            ltoAlarmTagged: !!vehMatch?.lto_alarm_tagged || cvMatch?.lto_alarm_status === "LTO_ALARM_ACTIVE",
+            riskLevel: vehMatch?.risk_level || (cvMatch?.lto_alarm_status === "LTO_ALARM_ACTIVE" ? "Flagged" : "Clean"),
+          };
+        } catch {
+          // fallback
+        }
+
         return {
           ...row,
+          ...citizenInfo,
           evidence_url: row.evidence_url || row.violations?.evidence_url || "/assets/violation-1.jpg",
           location: row.violations?.location || row.location || "Quezon City Road Corridor",
         };

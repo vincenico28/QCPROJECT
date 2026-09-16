@@ -135,7 +135,7 @@ export const STANDARD_OFFENSES = [
   "Number Coding",
 ];
 
-const STATUSES = ["all", "unpaid", "paid", "contested", "overdue"] as const;
+const STATUSES = ["all", "citizen", "unpaid", "paid", "contested", "overdue"] as const;
 type StatusFilter = (typeof STATUSES)[number];
 
 const OFFENSE_TYPES = [
@@ -291,7 +291,11 @@ function CitationsPage() {
 
   const filtered = useMemo(() => {
     return citations.filter((c) => {
-      if (status !== "all" && c.status !== status) return false;
+      if (status === "citizen") {
+        if (!c.isCitizenRegistered) return false;
+      } else if (status !== "all" && c.status !== status) {
+        return false;
+      }
       if (offenseFilter !== "All Offenses" && c.offense !== offenseFilter) return false;
       if (!q) return true;
       const n = q.toLowerCase();
@@ -300,7 +304,10 @@ function CitationsPage() {
         c.plate_number.toLowerCase().includes(n) ||
         c.offense.toLowerCase().includes(n) ||
         (c.vehicle_model ?? "").toLowerCase().includes(n) ||
-        (c.officer_name ?? "").toLowerCase().includes(n)
+        (c.officer_name ?? "").toLowerCase().includes(n) ||
+        (c.citizenName ?? "").toLowerCase().includes(n) ||
+        (c.citizenEmail ?? "").toLowerCase().includes(n) ||
+        (c.registeredOwner ?? "").toLowerCase().includes(n)
       );
     });
   }, [citations, status, offenseFilter, q]);
@@ -321,6 +328,7 @@ function CitationsPage() {
       collectionRate,
       counts: {
         all: citations.length,
+        citizen: citations.filter((c) => c.isCitizenRegistered).length,
         unpaid: citations.filter((c) => c.status === "unpaid").length,
         paid: paid.length,
         contested: citations.filter((c) => c.status === "contested").length,
@@ -1032,17 +1040,28 @@ function CitationsPage() {
           <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1">
             {STATUSES.map((s) => {
               const active = status === s;
+              const isCitizen = s === "citizen";
               return (
                 <button
                   key={s}
                   onClick={() => setStatus(s)}
                   className={cn(
-                    "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-[11px] font-bold uppercase tracking-wider transition-colors",
-                    active ? "bg-primary text-primary-foreground shadow-sm" : "text-subtle hover:text-foreground",
+                    "shrink-0 rounded-lg px-3 py-1.5 font-mono-tab text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5",
+                    active
+                      ? isCitizen
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-primary text-primary-foreground shadow-sm"
+                      : isCitizen
+                        ? "text-emerald-400 hover:text-emerald-300"
+                        : "text-subtle hover:text-foreground",
                   )}
                 >
-                  {s}
-                  <span className="ml-1.5 rounded-full bg-black/40 px-1.5 py-0.2 text-[9px] text-white/80">
+                  {isCitizen && <UserCheck className="size-3 shrink-0" />}
+                  {isCitizen ? "Citizen Motorists" : s}
+                  <span className={cn(
+                    "ml-1 rounded-full px-1.5 py-0.2 text-[9px]",
+                    active ? "bg-black/40 text-white" : "bg-white/10 text-muted-foreground"
+                  )}>
                     {stats.counts[s]}
                   </span>
                 </button>
@@ -1070,7 +1089,7 @@ function CitationsPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search NOV#, plate, vehicle, officer…"
+              placeholder="Search NOV#, plate, vehicle, motorist, officer…"
               className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none"
             />
           </label>
@@ -1184,11 +1203,75 @@ function CitationsPage() {
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">License Plate</span>
-                    <p className="font-mono-tab text-sm font-bold text-foreground mt-0.5">{selectedCitation.plate_number}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="font-mono-tab text-sm font-bold text-foreground">{selectedCitation.plate_number}</p>
+                      {selectedCitation.ltoAlarmTagged && (
+                        <span className="rounded bg-red-500/20 border border-red-500/30 px-1.5 py-0.2 font-mono-tab text-[9px] font-bold text-red-400 uppercase">
+                          LTO Hold
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <span className="text-subtle font-mono-tab text-[10px] uppercase">Vehicle Model</span>
                     <p className="font-medium text-foreground mt-0.5">{selectedCitation.vehicle_model || "Registered Vehicle"}</p>
+                  </div>
+
+                  {/* Citizen Motorist Linkage */}
+                  <div className="col-span-2">
+                    {selectedCitation.isCitizenRegistered ? (
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <UserCheck className="size-4 text-emerald-400" />
+                            <span className="text-xs font-bold text-emerald-400">
+                              Verified Citizen Motorist Profile
+                            </span>
+                          </div>
+                          <Link
+                            to="/vehicles/$plate"
+                            params={{ plate: selectedCitation.plate_number }}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:underline"
+                          >
+                            Vehicle Registry <ExternalLink className="size-3" />
+                          </Link>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 border-t border-emerald-500/20">
+                          <div>
+                            <span className="text-[9px] font-mono-tab uppercase text-subtle">Motorist Name</span>
+                            <p className="font-semibold text-foreground">{selectedCitation.citizenName || selectedCitation.registeredOwner || "Verified Resident"}</p>
+                          </div>
+                          {selectedCitation.citizenEmail && (
+                            <div>
+                              <span className="text-[9px] font-mono-tab uppercase text-subtle">Citizen Email</span>
+                              <p className="text-foreground truncate">{selectedCitation.citizenEmail}</p>
+                            </div>
+                          )}
+                          {selectedCitation.citizenPhone && (
+                            <div>
+                              <span className="text-[9px] font-mono-tab uppercase text-subtle">Mobile Contact</span>
+                              <p className="text-foreground font-mono-tab">{selectedCitation.citizenPhone}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-border/70 bg-panel/60 p-2.5 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <Car className="size-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-[11px] text-muted-foreground">
+                            Owner: <strong className="text-foreground">{selectedCitation.registeredOwner || "Unregistered Standard Motorist"}</strong>
+                          </span>
+                        </div>
+                        <Link
+                          to="/vehicles/$plate"
+                          params={{ plate: selectedCitation.plate_number }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          Registry <ExternalLink className="size-3" />
+                        </Link>
+                      </div>
+                    )}
                   </div>
                   {(() => {
                     const parsedOffenses = parseCitationOffenses(selectedCitation.offense, selectedCitation.amount);
@@ -1480,8 +1563,38 @@ function CitationRow({
           {c.citation_number}
         </button>
       </td>
-      <td className="px-5 py-3.5 font-mono-tab font-semibold text-foreground">{c.plate_number}</td>
-      <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.vehicle_model ?? "—"}</td>
+      <td className="px-5 py-3.5 font-mono-tab font-semibold text-foreground">
+        <div className="flex items-center gap-1.5">
+          <span>{c.plate_number}</span>
+          {c.ltoAlarmTagged && (
+            <span className="rounded bg-red-500/20 border border-red-500/30 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-red-400 uppercase">
+              Hold
+            </span>
+          )}
+        </div>
+        {c.isCitizenRegistered ? (
+          <div className="mt-0.5 flex items-center gap-1">
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 font-mono-tab text-[9px] font-bold text-emerald-400 uppercase">
+              <UserCheck className="size-2.5 shrink-0" />
+              Citizen
+            </span>
+          </div>
+        ) : (
+          c.registeredOwner && (
+            <div className="mt-0.5 text-[9px] text-muted-foreground/60 truncate max-w-[110px]">
+              {c.registeredOwner}
+            </div>
+          )
+        )}
+      </td>
+      <td className="px-5 py-3.5 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground">{c.vehicle_model ?? "—"}</p>
+        {c.citizenName && (
+          <p className="text-[10px] text-emerald-400/90 font-medium truncate max-w-[130px]" title={c.citizenName}>
+            {c.citizenName}
+          </p>
+        )}
+      </td>
       <td className="px-5 py-3.5 text-xs">
         {(() => {
           const parsed = parseCitationOffenses(c.offense, c.amount);

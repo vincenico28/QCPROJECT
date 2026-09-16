@@ -48,6 +48,14 @@ export type Citation = {
   officer_name: string | null;
   evidence_url?: string | null;
   issued_at: string;
+  isCitizenRegistered?: boolean;
+  citizenName?: string;
+  citizenEmail?: string;
+  citizenPhone?: string;
+  registeredOwner?: string;
+  location?: string;
+  ltoAlarmTagged?: boolean;
+  riskLevel?: "Clean" | "Watch" | "Flagged" | "Blocked";
 };
 
 export type Camera = {
