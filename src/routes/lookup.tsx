@@ -20,8 +20,17 @@ import {
   Eye,
   CreditCard,
   Scale,
+  Car,
+  UserCheck,
+  ShieldAlert,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
-import { lookupCitation, type PublicCitation } from "@/lib/citation-lookup.functions";
+import {
+  lookupCitation,
+  type PublicCitation,
+  type PublicVehicleLookupResult,
+} from "@/lib/citation-lookup.functions";
 import { formatPeso } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
 import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
@@ -35,13 +44,13 @@ export const Route = createFileRoute("/lookup")({
       {
         name: "description",
         content:
-          "Check the status, amount due, and photographic CCTV evidence of a Barangay Culiat, Quezon City traffic citation using your plate number and citation reference.",
+          "Check the status, amount due, photographic CCTV evidence, and LTO registration clearance of a Quezon City vehicle or citation.",
       },
       { property: "og:title", content: "Citation Lookup · Culiat Traffic Ops" },
       {
         property: "og:description",
         content:
-          "Official motorist self-service portal to verify Quezon City traffic citations, inspect camera evidence, settle online, or file a formal contest.",
+          "Official motorist self-service portal to verify Quezon City traffic citations, inspect camera evidence, settle online, or check LTO renewal clearance.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -56,6 +65,12 @@ const SAMPLE_LOOKUPS = [
     plate: "NDB-8921",
     ref: "NOV-2026-QC-00129",
     status: "unpaid",
+  },
+  {
+    label: "CAS 3901 · Fortuner (All Clear / Cleared LTO)",
+    plate: "CAS 3901",
+    ref: "",
+    status: "clean",
   },
   {
     label: "ABC 1234 · No Helmet (Pending)",
@@ -81,14 +96,15 @@ function LookupPage() {
   const [plate, setPlate] = useState("");
   const [reference, setReference] = useState("");
   const [notFound, setNotFound] = useState(false);
-  const [result, setResult] = useState<PublicCitation | null>(null);
+  const [result, setResult] = useState<PublicVehicleLookupResult | null>(null);
   const run = useServerFn(lookupCitation);
 
   const search = useMutation({
-    mutationFn: (input: { plate: string; reference: string }) => run({ data: input }),
-    onSuccess: (row) => {
-      setResult(row);
-      setNotFound(!row);
+    mutationFn: (input: { query?: string; plate?: string; reference?: string }) =>
+      run({ data: input }),
+    onSuccess: (res) => {
+      setResult(res);
+      setNotFound(!res);
     },
   });
 
@@ -97,7 +113,7 @@ function LookupPage() {
     setReference(r);
     setNotFound(false);
     setResult(null);
-    search.mutate({ plate: p.trim(), reference: r.trim() });
+    search.mutate({ query: p.trim(), plate: p.trim(), reference: r.trim() });
   };
 
   return (
@@ -132,11 +148,10 @@ function LookupPage() {
             <Search className="size-4" /> Official Motorist Verification
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Notice of Violation (NOV) Lookup
+            Notice of Violation (NOV) & Vehicle Lookup
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground leading-relaxed">
-            Enter your vehicle plate number and the citation reference printed on your ticket or SMS notice
-            to view the offense, CCTV photo evidence, settlement amount, and payment status.
+            Search by vehicle license plate or citation reference number to verify outstanding traffic notices, inspect CCTV camera evidence, settle online, and check your official LTO renewal clearance.
           </p>
         </div>
 
@@ -149,7 +164,7 @@ function LookupPage() {
           <div className="flex flex-wrap gap-2">
             {SAMPLE_LOOKUPS.map((sample) => (
               <button
-                key={sample.ref}
+                key={sample.label}
                 type="button"
                 onClick={() => handleTestPill(sample.plate, sample.ref)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-1.5 text-xs text-foreground hover:border-primary/50 hover:bg-panel-elevated transition-colors font-medium"
@@ -157,7 +172,7 @@ function LookupPage() {
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    sample.status === "paid"
+                    sample.status === "clean" || sample.status === "paid"
                       ? "bg-emerald-400"
                       : sample.status === "contested"
                       ? "bg-yellow-400"
@@ -173,38 +188,48 @@ function LookupPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            const cleanQ = (plate || reference).trim();
+            if (!cleanQ) return;
             setNotFound(false);
             setResult(null);
-            search.mutate({ plate: plate.trim(), reference: reference.trim() });
+            search.mutate({
+              query: cleanQ,
+              plate: plate.trim() || undefined,
+              reference: reference.trim() || undefined,
+            });
           }}
           className="panel grid gap-4 rounded-3xl border border-border p-6 shadow-xl sm:grid-cols-2"
         >
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-              Plate Number
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle flex items-center justify-between">
+              <span>License Plate Number or Citation Reference *</span>
+              <span className="text-[9px] text-primary">Plate-only lookup supported</span>
             </span>
             <input
               value={plate}
               onChange={(e) => setPlate(e.target.value.toUpperCase())}
-              placeholder="e.g. NDB-8921 or ABC 1234"
+              placeholder="e.g. NDB 8921, CAS 3901, or NOV-2026-QC-00129"
               className={inputClass}
+              required
             />
           </label>
-          <label className="flex flex-col gap-1.5">
+
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
             <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-              Citation Reference / NOV Number
+              Specific Ticket Reference Number (Optional)
             </span>
             <input
               value={reference}
               onChange={(e) => setReference(e.target.value.toUpperCase())}
-              placeholder="e.g. NOV-2026-QC-00129 or QC-88218"
+              placeholder="e.g. NOV-2026-QC-00129 or QC-88218 (Optional: leave blank to search all citations)"
               className={inputClass}
             />
           </label>
+
           <div className="sm:col-span-2 flex items-center justify-between pt-2">
             <button
               type="submit"
-              disabled={search.isPending || plate.trim().length < 3 || reference.trim().length < 4}
+              disabled={search.isPending || (!plate.trim() && !reference.trim())}
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {search.isPending ? (
@@ -212,7 +237,7 @@ function LookupPage() {
               ) : (
                 <Search className="size-4" />
               )}
-              Verify Notice & Offense
+              Verify Vehicle & Citations
             </button>
 
             {(plate || reference) && (
@@ -235,23 +260,189 @@ function LookupPage() {
         {search.isError && (
           <div className="rounded-2xl border border-danger/30 bg-danger/10 p-5 text-sm text-danger flex items-center gap-3">
             <AlertTriangle className="size-5 shrink-0 text-danger" />
-            <p>Verification lookup failed. Please double-check the plate and reference format and try again.</p>
+            <p>Verification lookup failed. Please double-check your plate number or citation reference and try again.</p>
           </div>
         )}
 
         {notFound && (
           <div className="rounded-2xl border border-border bg-panel p-6 text-sm text-muted-foreground text-center">
-            <p className="font-semibold text-white">No citation record found.</p>
+            <p className="font-semibold text-white">No record found.</p>
             <p className="mt-1 text-xs text-subtle">
-              No active or historical violation matches plate <strong className="text-white font-mono-tab">{plate}</strong> and reference <strong className="text-white font-mono-tab">{reference}</strong>.
+              No registered vehicle or active violation matched search query <strong className="text-white font-mono-tab">{plate || reference}</strong>.
             </p>
             <p className="mt-3 text-xs text-subtle">
-              Please double check the reference code, or visit the QC LGU Department of Public Order and Safety (DPOS) window.
+              If this is a newly purchased vehicle, you can register it directly on the <Link to="/citizen" className="text-primary underline">Citizen Portal</Link> or visit the QC DPOS window.
             </p>
           </div>
         )}
 
-        {result && <CitationCard citation={result} />}
+        {/* Dynamic Verification & Multi-Citation Results */}
+        {result && (
+          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
+            {/* 1. Vehicle Identity & LTO Clearance Summary Banner */}
+            <div className="panel rounded-3xl border border-border bg-panel p-6 sm:p-8 shadow-2xl flex flex-col gap-5">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/60 pb-5">
+                <div>
+                  <span className="font-mono-tab text-[10px] uppercase tracking-widest text-subtle flex items-center gap-1.5">
+                    <Car className="size-3.5 text-primary" /> Verified Motor Vehicle Record
+                  </span>
+                  <div className="flex items-center gap-3 mt-1">
+                    <h2 className="font-mono-tab text-3xl font-black text-foreground">
+                      {result.plateNumber}
+                    </h2>
+                    {result.vehicleModel && (
+                      <span className="rounded-xl border border-border/80 bg-panel-elevated px-3 py-1 text-xs font-semibold text-foreground">
+                        {result.vehicleModel}
+                      </span>
+                    )}
+                  </div>
+                  {result.registeredOwner && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Registered Owner: <strong className="text-foreground">{result.registeredOwner}</strong>
+                    </p>
+                  )}
+                </div>
+
+                {/* LTO Clearance Badge */}
+                {result.unpaidCount === 0 ? (
+                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-right">
+                    <div className="flex items-center gap-2 justify-end text-emerald-400 font-bold text-sm">
+                      <CheckCircle2 className="size-4" />
+                      <span>CLEARED FOR LTO RENEWAL</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-300/80 mt-0.5">
+                      No active holds on record with QC Traffic Ops
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-right">
+                    <div className="flex items-center gap-2 justify-end text-red-400 font-bold text-sm">
+                      <ShieldAlert className="size-4" />
+                      <span>LTO REGISTRATION HOLD ACTIVE</span>
+                    </div>
+                    <p className="text-[11px] text-red-300/80 mt-0.5">
+                      {result.unpaidCount} unpaid citation{result.unpaidCount > 1 ? "s" : ""} · Total {formatPeso(result.totalOutstanding)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* LTO Status Explanation Card */}
+              {result.unpaidCount === 0 ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4 flex items-start gap-3">
+                  <ShieldCheck className="size-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p className="font-bold text-emerald-400">
+                      Official Quezon City LGU Clearance Status
+                    </p>
+                    <p className="text-white/80 mt-0.5">
+                      Vehicle <strong className="font-mono-tab text-emerald-300">{result.plateNumber}</strong> has zero outstanding traffic citations or NCAP violation holds in Quezon City. Your record is cleared for immediate annual registration renewal and motor vehicle inspection at any Land Transportation Office (LTO) branch.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-4 flex items-start gap-3">
+                  <AlertTriangle className="size-5 text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p className="font-bold text-red-400">
+                      Action Required: Settle Outstanding Notice(s) to Clear LTO Hold
+                    </p>
+                    <p className="text-white/80 mt-0.5">
+                      Under Quezon City Traffic Ordinance and unified MMDA NCAP guidelines, vehicles with overdue citations are tagged with active LTO LTMS renewal holds. Electronic settlement via GCash or Maya below automatically issues an official receipt and clears the hold.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Citizen Motorist Linkage / Claim Card */}
+              {result.isCitizenRegistered ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-panel-elevated p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+                      <UserCheck className="size-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">
+                        Verified Citizen Motorist Profile: {result.citizenName || result.registeredOwner}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        This vehicle is actively linked to the QC Citizen Portal with automatic push alerts.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/citizen"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors shrink-0"
+                  >
+                    Open Citizen Portal <ChevronRight className="size-3.5" />
+                  </Link>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-primary/20 text-primary shrink-0">
+                      <Sparkles className="size-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">
+                        Are you the registered owner of this vehicle?
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Claim and link this vehicle on the QC Citizen Portal to get instant SMS notifications, 5-day grace periods, and earn Eco-Tokens.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/citizen"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors shrink-0"
+                  >
+                    Claim Vehicle on Portal <ArrowRight className="size-3.5" />
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Citations List */}
+            {result.citations.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <FileText className="size-4 text-primary" />
+                    Assessed Notices of Violation ({result.citations.length})
+                  </h3>
+                  <span className="font-mono-tab text-xs text-muted-foreground">
+                    {result.unpaidCount > 0 ? `${result.unpaidCount} Pending Settlement` : "All Settled"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-6">
+                  {result.citations.map((c) => (
+                    <CitationCard key={c.id} citation={c} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-emerald-500/30 bg-panel p-8 text-center flex flex-col items-center gap-3 shadow-xl">
+                <div className="grid size-14 place-items-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-inner">
+                  <CheckCircle2 className="size-8" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Pristine Driving Record</h3>
+                <p className="max-w-md text-xs text-muted-foreground leading-relaxed">
+                  No active traffic citations, outstanding fines, or camera violations were found for plate <strong className="font-mono-tab text-foreground">{result.plateNumber}</strong> on Quezon City monitored road corridors.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Link
+                    to="/citizen"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <User className="size-3.5" />
+                    Connect Vehicle in Citizen Garage
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Informational Assurance Banner */}
         <div className="rounded-2xl border border-border/60 bg-panel/40 p-5 flex items-start gap-3">
@@ -259,7 +450,7 @@ function LookupPage() {
           <div className="text-xs text-subtle leading-relaxed">
             <p className="font-semibold text-foreground">Official LGU Privacy & Security Verification</p>
             <p className="mt-0.5">
-              Notice of Violation records are safeguarded under Republic Act 10173 (Data Privacy Act of 2012). Details are only rendered when the vehicle plate and exact issued reference match. All electronic settlements immediately issue an official electronic receipt and sync directly with the LTO Land Transportation Management System (LTMS).
+              Notice of Violation records are safeguarded under Republic Act 10173 (Data Privacy Act of 2012). Citations and vehicle clearance statuses are queried directly from the Quezon City DPOS Traffic Ledger. Electronic settlements immediately issue an official electronic receipt and sync with the LTO Land Transportation Management System (LTMS).
             </p>
           </div>
         </div>
@@ -548,4 +739,3 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 const inputClass =
   "w-full rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono-tab text-sm text-foreground placeholder:text-subtle focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20";
-
