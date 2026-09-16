@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { User, Loader2, Mail, Lock, Phone, MapPin, Car, ArrowRight, UserPlus, LogIn, CheckCircle2 } from "lucide-react";
+import { User, Loader2, Mail, Lock, Phone, MapPin, Car, ArrowRight, UserPlus, LogIn, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
 import { useCitizenAuth } from "@/lib/data/citizen";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 
 export function CitizenAuthScreen() {
-  const { login, signup } = useCitizenAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { login, signup, resetPassword } = useCitizenAuth();
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [busy, setBusy] = useState(false);
 
   // Sign In State
@@ -24,15 +24,25 @@ export function CitizenAuthScreen() {
   const [makeModel, setMakeModel] = useState("");
   const [vehicleType, setVehicleType] = useState("Sedan");
 
+  // Reset Password State
+  const [resetEmail, setResetEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signInEmail) return;
+    const cleanEmail = signInEmail.trim();
+    const cleanPassword = signInPassword.trim();
+    if (!cleanEmail || !cleanPassword) {
+      toast.error("Please enter both your email address and password.");
+      return;
+    }
     setBusy(true);
     try {
-      const citizen = await login(signInEmail);
+      const citizen = await login(cleanEmail, cleanPassword);
       toast.success(`Welcome back, ${citizen.fullName}!`);
     } catch (err: any) {
-      toast.error(err.message || "Failed to sign in");
+      toast.error(err.message || "Invalid password or email address.");
     } finally {
       setBusy(false);
     }
@@ -40,16 +50,22 @@ export function CitizenAuthScreen() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !signUpEmail) {
-      toast.error("Please fill in the required fields");
+    const cleanEmail = signUpEmail.trim();
+    const cleanPassword = signUpPassword.trim();
+    if (!fullName.trim() || !cleanEmail || !cleanPassword) {
+      toast.error("Please fill in all required fields including password.");
+      return;
+    }
+    if (cleanPassword.length < 6) {
+      toast.error("Password must be at least 6 characters long.");
       return;
     }
     setBusy(true);
     try {
       const citizen = await signup({
-        fullName,
-        email: signUpEmail,
-        password: signUpPassword,
+        fullName: fullName.trim(),
+        email: cleanEmail,
+        password: cleanPassword,
         phone,
         address,
         plateNumber,
@@ -59,6 +75,36 @@ export function CitizenAuthScreen() {
       toast.success(`Account created! Welcome to Citizen Portal, ${citizen.fullName}.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to register account");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = resetEmail.trim();
+    const cleanPassword = newPassword.trim();
+    if (!cleanEmail || !cleanPassword) {
+      toast.error("Please enter your email and new password.");
+      return;
+    }
+    if (cleanPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long.");
+      return;
+    }
+    if (cleanPassword !== confirmNewPassword.trim()) {
+      toast.error("Passwords do not match. Please verify.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await resetPassword(cleanEmail, cleanPassword);
+      toast.success("Password updated successfully! You can now sign in.");
+      setSignInEmail(cleanEmail);
+      setSignInPassword("");
+      setMode("signin");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset password");
     } finally {
       setBusy(false);
     }
@@ -95,44 +141,62 @@ export function CitizenAuthScreen() {
             <User className="size-6" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {mode === "signin" ? "Sign in to Citizen Portal" : "Register Citizen Account"}
+            {mode === "signin"
+              ? "Sign in to Citizen Portal"
+              : mode === "signup"
+              ? "Register Citizen Account"
+              : "Reset Account Password"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "signin"
               ? "Access your registered vehicles, view citations, and file official disputes."
-              : "Create your verified motorist profile for Barangay Culiat, Quezon City."}
+              : mode === "signup"
+              ? "Create your verified motorist profile for Barangay Culiat, Quezon City."
+              : "Enter your registered email address and choose a new secure password."}
           </p>
         </div>
 
         {/* Mode Toggle Tabs */}
-        <div className="mb-6 flex rounded-xl border border-border bg-panel-elevated p-1">
-          <button
-            type="button"
-            onClick={() => setMode("signin")}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wider transition-all",
-              mode === "signin"
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <LogIn className="size-3.5" />
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("signup")}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wider transition-all",
-              mode === "signup"
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <UserPlus className="size-3.5" />
-            Register
-          </button>
-        </div>
+        {mode !== "reset" ? (
+          <div className="mb-6 flex rounded-xl border border-border bg-panel-elevated p-1">
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                mode === "signin"
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LogIn className="size-3.5" />
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("signup")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                mode === "signup"
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <UserPlus className="size-3.5" />
+              Register
+            </button>
+          </div>
+        ) : (
+          <div className="mb-6 flex items-center justify-start">
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-subtle hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-3.5" /> Back to Sign In
+            </button>
+          </div>
+        )}
 
         {/* SIGN IN FORM */}
         {mode === "signin" ? (
@@ -152,9 +216,21 @@ export function CitizenAuthScreen() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-                <Lock className="size-3 text-primary" /> Password
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                  <Lock className="size-3 text-primary" /> Password
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetEmail(signInEmail);
+                    setMode("reset");
+                  }}
+                  className="text-[11px] font-medium text-primary hover:underline"
+                >
+                  Forgot or need to set password?
+                </button>
+              </div>
               <input
                 type="password"
                 required
@@ -174,7 +250,7 @@ export function CitizenAuthScreen() {
               Sign In to Portal
             </button>
           </form>
-        ) : (
+        ) : mode === "signup" ? (
           /* SIGN UP FORM */
           <form onSubmit={handleSignUp} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -210,10 +286,12 @@ export function CitizenAuthScreen() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-                  Password
+                  Password * (Min. 6 chars)
                 </span>
                 <input
                   type="password"
+                  required
+                  minLength={6}
                   placeholder="••••••••"
                   value={signUpPassword}
                   onChange={(e) => setSignUpPassword(e.target.value)}
@@ -290,6 +368,67 @@ export function CitizenAuthScreen() {
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
               Create Citizen Account
+            </button>
+          </form>
+        ) : (
+          /* RESET PASSWORD FORM */
+          <form onSubmit={handleResetPassword} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b border-border pb-3">
+              <KeyRound className="size-4 text-primary" />
+              Update or Set Account Password
+            </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                <Mail className="size-3 text-primary" /> Registered Email Address
+              </span>
+              <input
+                type="email"
+                required
+                placeholder="your.email@example.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                <Lock className="size-3 text-primary" /> New Password (Min. 6 characters)
+              </span>
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                <Lock className="size-3 text-primary" /> Confirm New Password
+              </span>
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+              Save New Password
             </button>
           </form>
         )}

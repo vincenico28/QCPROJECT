@@ -6,10 +6,13 @@ import {
   serverUpdateCitationStatus,
   serverFetchCitizenProfile,
   serverSaveCitizenProfile,
+  serverCitizenLogin,
+  serverResetCitizenPassword,
   serverAddCitizenVehicle,
   serverRemoveCitizenVehicle,
   serverRedeemCitizenVoucher,
   serverSubmitDriverNomination,
+  serverRecordFailedPayment,
 } from "@/lib/server.functions";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -31,6 +34,15 @@ export type CitizenVehicle = {
   clearanceValid?: boolean;
 };
 
+export type CitizenPaymentDetails = {
+  status: "verified" | "failed" | "pending_verification" | "none";
+  referenceNumber?: string;
+  method?: string;
+  paidAt?: string;
+  receiptNumber?: string;
+  failureReason?: string;
+};
+
 export type CitizenCitation = {
   id: string;
   novNumber: string;
@@ -42,7 +54,7 @@ export type CitizenCitation = {
   dueDate: string;
   amount: number;
   surcharge: number;
-  status: "unpaid" | "settled" | "appealed";
+  status: "unpaid" | "settled" | "appealed" | "payment_failed" | "payment_pending";
   ltoAlarmStatus: "CLEARED" | "WARNING_DUE_SOON" | "LTO_ALARM_ACTIVE";
   evidenceFrames: EvidenceFrame[];
   nominatedDriver?: {
@@ -51,6 +63,7 @@ export type CitizenCitation = {
     submittedAt: string;
   };
   clearanceCertNumber?: string;
+  paymentDetails?: CitizenPaymentDetails;
 };
 
 export type CitizenVoucher = {
@@ -126,13 +139,13 @@ function saveCitizensToStorage(list: CitizenProfile[]) {
 }
 
 export function getStoredCitizenId(): string | null {
-  if (typeof window === "undefined") return inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
+  if (typeof window === "undefined") return inMemoryActiveId;
   try {
     const saved = localStorage.getItem("qc_active_citizen_id");
-    if (saved === "LOGGED_OUT") return null;
-    return saved || inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
+    if (!saved || saved === "LOGGED_OUT") return null;
+    return saved || inMemoryActiveId;
   } catch {
-    return inMemoryActiveId || DEFAULT_DEMO_CITIZEN_ID;
+    return inMemoryActiveId;
   }
 }
 
@@ -238,52 +251,47 @@ export function useCitizenAuth() {
   const citizen = allCitizens.find((c) => c.id === currentId) || null;
   const isAuthenticated = !!currentId && currentId !== "LOGGED_OUT";
 
-  const login = async (email: string) => {
+  const login = async (email: string, password: string) => {
     const cleanEmail = email.trim().toLowerCase();
-    try {
-      const remote = await serverFetchCitizenProfile({ data: { email: cleanEmail } });
-      if (remote) {
-        setStoredCitizenId(remote.id);
-        setCurrentId(remote.id);
-        await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
-        return remote as CitizenProfile;
-      }
-    } catch (err) {
-      console.warn("Remote login check error:", err);
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      throw new Error("Both email address and password are required.");
     }
 
-    const namePart = cleanEmail.split("@")[0].replace(".", " ");
-    const formattedName =
-      namePart
-        .split(" ")
-        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(" ") || "Registered Citizen";
-
-    const saved = await serverSaveCitizenProfile({
-      data: {
-        fullName: formattedName,
-        email: cleanEmail,
-        address: "Barangay Culiat, Quezon City",
-        tokens: 850,
-        driverLicenseNumber: `N02-${Math.floor(10 + Math.random() * 89)}-${Math.floor(100000 + Math.random() * 899999)}`,
-      },
+    // Authenticate credentials securely against password_hash
+    const authResult = await serverCitizenLogin({
+      data: { email: cleanEmail, password: cleanPassword },
     });
 
-    const citizenId = saved?.id || `CZT-${Math.floor(1000 + Math.random() * 9000)}`;
-    setStoredCitizenId(citizenId);
-    setCurrentId(citizenId);
+    if (!authResult?.id) {
+      throw new Error("Authentication failed. Please verify your credentials.");
+    }
+
+    setStoredCitizenId(authResult.id);
+    setCurrentId(authResult.id);
     await qc.invalidateQueries({ queryKey: ["citizen-profile"] });
 
-    const fresh = await serverFetchCitizenProfile({ data: { id: citizenId } });
+    const fresh = await serverFetchCitizenProfile({ data: { id: authResult.id } });
+    if (!fresh) {
+      throw new Error("Unable to retrieve citizen profile. Please try again.");
+    }
     return fresh as CitizenProfile;
   };
 
   const signup = async (input: SignUpCitizenInput) => {
     const cleanEmail = input.email.trim().toLowerCase();
+    const cleanPassword = input.password?.trim();
+
+    if (!cleanPassword || cleanPassword.length < 6) {
+      throw new Error("Password is required and must be at least 6 characters long.");
+    }
+
     const saved = await serverSaveCitizenProfile({
       data: {
         fullName: input.fullName.trim(),
         email: cleanEmail,
+        password: cleanPassword,
         phone: input.phone,
         address: input.address || "Barangay Culiat, Quezon City",
         tokens: 1000,
@@ -315,6 +323,20 @@ export function useCitizenAuth() {
     return fresh as CitizenProfile;
   };
 
+  const resetPassword = async (email: string, newPassword: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = newPassword.trim();
+    if (!cleanEmail || !cleanPassword) {
+      throw new Error("Email and new password are required.");
+    }
+    if (cleanPassword.length < 6) {
+      throw new Error("New password must be at least 6 characters.");
+    }
+    return await serverResetCitizenPassword({
+      data: { email: cleanEmail, newPassword: cleanPassword },
+    });
+  };
+
   const logout = () => {
     setStoredCitizenId(null);
     setCurrentId(null);
@@ -326,6 +348,7 @@ export function useCitizenAuth() {
     isAuthenticated,
     login,
     signup,
+    resetPassword,
     logout,
   };
 }
@@ -493,6 +516,44 @@ export function useNominateActualDriver() {
         console.warn(err);
       }
 
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+    },
+  });
+}
+
+export function useRecordFailedPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      citationNumber,
+      plateNumber,
+      amount,
+      paymentMethod,
+      reason,
+      referenceNumber,
+    }: {
+      citationNumber: string;
+      plateNumber?: string;
+      amount?: number;
+      paymentMethod?: string;
+      reason?: string;
+      referenceNumber?: string;
+    }) => {
+      const res = await serverRecordFailedPayment({
+        data: {
+          citationNumber,
+          plateNumber,
+          amount,
+          paymentMethod,
+          reason,
+          referenceNumber,
+        },
+      });
       return res;
     },
     onSuccess: () => {

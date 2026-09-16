@@ -57,6 +57,9 @@ import {
   ChevronLeft,
   RefreshCw,
   Receipt,
+  RotateCcw,
+  AlertOctagon,
+  XCircle,
   Tag,
   ChevronDown,
   ChevronUp,
@@ -342,7 +345,7 @@ function CitizenPortal() {
   const [activeTab, setActiveTab] = useState<"vehicles" | "ncap" | "pass" | "traffic" | "hazard" | "disputes" | "rewards">("ncap");
 
   // Tab 1 NCAP Filtering & Batch Settle State
-  const [novFilterStatus, setNovFilterStatus] = useState<"all" | "unpaid" | "settled" | "appealed">("all");
+  const [novFilterStatus, setNovFilterStatus] = useState<"all" | "unpaid" | "settled" | "failed" | "appealed">("all");
   const [novFilterPlate, setNovFilterPlate] = useState<string>("all");
   const [novSearchQuery, setNovSearchQuery] = useState<string>("");
   const [batchSettleModalOpen, setBatchSettleModalOpen] = useState(false);
@@ -422,13 +425,21 @@ function CitizenPortal() {
     return <CitizenAuthScreen />;
   }
 
-  const unpaidCitations = currentCitizen.citations ? currentCitizen.citations.filter((c) => c.status === "unpaid") : [];
+  const allCitations = currentCitizen.citations || [];
+  const unpaidOnlyCitations = allCitations.filter((c) => c.status === "unpaid");
+  const settledCitations = allCitations.filter((c) => c.status === "settled" || c.paymentDetails?.status === "verified");
+  const failedCitations = allCitations.filter((c) => c.status === "payment_failed" || c.paymentDetails?.status === "failed");
+  const appealedCitations = allCitations.filter((c) => c.status === "appealed");
+
+  // Citations with outstanding liability (regular unpaid + failed payment attempts)
+  const unpaidCitations = allCitations.filter((c) => c.status === "unpaid" || c.status === "payment_failed");
   const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount + (c.surcharge || 0), 0);
 
   // Filtered Citations for Tab 1
-  const filteredCitations = (currentCitizen.citations || []).filter((c) => {
+  const filteredCitations = allCitations.filter((c) => {
     if (novFilterStatus === "unpaid" && c.status !== "unpaid") return false;
-    if (novFilterStatus === "settled" && c.status !== "settled") return false;
+    if (novFilterStatus === "settled" && c.status !== "settled" && c.paymentDetails?.status !== "verified") return false;
+    if (novFilterStatus === "failed" && c.status !== "payment_failed" && c.paymentDetails?.status !== "failed") return false;
     if (novFilterStatus === "appealed" && c.status !== "appealed") return false;
 
     if (novFilterPlate !== "all") {
@@ -845,19 +856,19 @@ function CitizenPortal() {
                       novFilterStatus === "all" ? "bg-white text-black font-bold shadow" : "bg-white/5 text-white/70 hover:bg-white/10",
                     )}
                   >
-                    All ({currentCitizen.citations?.length || 0})
+                    All ({allCitations.length})
                   </button>
                   <button
                     onClick={() => setNovFilterStatus("unpaid")}
                     className={cn(
                       "rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5",
                       novFilterStatus === "unpaid"
-                        ? "bg-red-500 text-white font-bold shadow"
-                        : "bg-red-500/10 text-red-400 hover:bg-red-500/20",
+                        ? "bg-amber-500 text-black font-bold shadow"
+                        : "bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
                     )}
                   >
-                    <span className="size-1.5 rounded-full bg-red-400" />
-                    Unpaid ({unpaidCitations.length})
+                    <span className="size-1.5 rounded-full bg-amber-400" />
+                    Unpaid ({unpaidOnlyCitations.length})
                   </button>
                   <button
                     onClick={() => setNovFilterStatus("settled")}
@@ -869,7 +880,19 @@ function CitizenPortal() {
                     )}
                   >
                     <CheckCircle2 className="size-3" />
-                    Settled ({(currentCitizen.citations || []).filter((c) => c.status === "settled").length})
+                    Payment Verified ({settledCitations.length})
+                  </button>
+                  <button
+                    onClick={() => setNovFilterStatus("failed")}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5",
+                      novFilterStatus === "failed"
+                        ? "bg-rose-600 text-white font-bold shadow"
+                        : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20",
+                    )}
+                  >
+                    <AlertOctagon className="size-3" />
+                    Payment Failed ({failedCitations.length})
                   </button>
                   <button
                     onClick={() => setNovFilterStatus("appealed")}
@@ -881,7 +904,7 @@ function CitizenPortal() {
                     )}
                   >
                     <Scale className="size-3" />
-                    Under Protest ({(currentCitizen.citations || []).filter((c) => c.status === "appealed").length})
+                    Under Protest ({appealedCitations.length})
                   </button>
                 </div>
 
@@ -944,9 +967,11 @@ function CitizenPortal() {
 
               {filteredCitations.length > 0 ? (
                 filteredCitations.map((c) => {
-                  const isUnpaid = c.status === "unpaid";
-                  const isSettled = c.status === "settled";
+                  const isPaymentVerified = c.status === "settled" || c.paymentDetails?.status === "verified";
+                  const isPaymentFailed = c.status === "payment_failed" || c.paymentDetails?.status === "failed";
+                  const isPaymentPending = c.status === "payment_pending" || c.paymentDetails?.status === "pending_verification";
                   const isAppealed = c.status === "appealed";
+                  const isUnpaid = !isPaymentVerified && !isPaymentFailed && !isPaymentPending && !isAppealed;
 
                   const parsedOffenses = parseCitationOffenses(c.violation, c.amount);
                   const isMultiOffense = parsedOffenses.length > 1;
@@ -959,11 +984,15 @@ function CitizenPortal() {
                       key={c.id}
                       className={cn(
                         "rounded-2xl border p-6 transition-all flex flex-col gap-5 shadow-xl backdrop-blur-sm",
-                        isUnpaid
-                          ? "border-red-500/30 bg-gradient-to-br from-red-950/20 via-black/40 to-black/60 hover:border-red-500/50"
-                          : isSettled
-                            ? "border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-black/40 to-black/60"
-                            : "border-blue-500/30 bg-gradient-to-br from-blue-950/20 via-black/40 to-black/60",
+                        isPaymentVerified
+                          ? "border-emerald-500/40 bg-gradient-to-br from-emerald-950/25 via-black/40 to-black/60 shadow-emerald-950/20"
+                          : isPaymentFailed
+                            ? "border-rose-500/50 bg-gradient-to-br from-rose-950/30 via-black/50 to-black/70 shadow-rose-950/30 ring-1 ring-rose-500/30"
+                            : isPaymentPending
+                              ? "border-amber-500/40 bg-gradient-to-br from-amber-950/25 via-black/40 to-black/60"
+                              : isAppealed
+                                ? "border-blue-500/30 bg-gradient-to-br from-blue-950/20 via-black/40 to-black/60"
+                                : "border-red-500/30 bg-gradient-to-br from-red-950/20 via-black/40 to-black/60 hover:border-red-500/50",
                       )}
                     >
                       {/* Top Header: Identity, Tags, Total Amount */}
@@ -972,19 +1001,27 @@ function CitizenPortal() {
                           <div
                             className={cn(
                               "grid size-11 shrink-0 place-items-center rounded-xl shadow-inner",
-                              isUnpaid
-                                ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                                : isSettled
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  : "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+                              isPaymentVerified
+                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                : isPaymentFailed
+                                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                                  : isPaymentPending
+                                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                    : isAppealed
+                                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                      : "bg-red-500/20 text-red-400 border border-red-500/30",
                             )}
                           >
-                            {isUnpaid ? (
-                              <AlertTriangle className="size-5" />
-                            ) : isSettled ? (
+                            {isPaymentVerified ? (
                               <CheckCircle2 className="size-5" />
-                            ) : (
+                            ) : isPaymentFailed ? (
+                              <AlertOctagon className="size-5" />
+                            ) : isPaymentPending ? (
                               <Clock className="size-5" />
+                            ) : isAppealed ? (
+                              <Scale className="size-5" />
+                            ) : (
+                              <AlertTriangle className="size-5" />
                             )}
                           </div>
 
@@ -999,18 +1036,26 @@ function CitizenPortal() {
                               <span
                                 className={cn(
                                   "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
-                                  isUnpaid
-                                    ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                    : isSettled
-                                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                      : "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                                  isPaymentVerified
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
+                                    : isPaymentFailed
+                                      ? "bg-rose-500/25 text-rose-200 border-rose-500/50 shadow-sm"
+                                      : isPaymentPending
+                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                        : isAppealed
+                                          ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                                          : "bg-red-500/20 text-red-400 border-red-500/30",
                                 )}
                               >
-                                {c.status === "unpaid"
-                                  ? "NOTICE ISSUED / UNPAID"
-                                  : c.status === "settled"
-                                    ? "CLEARED & SETTLED"
-                                    : "UNDER ADJUDICATION"}
+                                {isPaymentVerified
+                                  ? "✓ PAYMENT VERIFIED & SETTLED · LTO HOLD LIFTED"
+                                  : isPaymentFailed
+                                    ? "✕ PAYMENT NOT PUSHED THROUGH / FAILED"
+                                    : isPaymentPending
+                                      ? "⏳ PAYMENT SUBMITTED · PENDING VERIFICATION"
+                                      : isAppealed
+                                        ? "UNDER ADJUDICATION / PROTEST"
+                                        : "NOTICE ISSUED / UNPAID"}
                               </span>
                               {isMultiOffense ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">
@@ -1036,26 +1081,175 @@ function CitizenPortal() {
                           </div>
                         </div>
 
-                        {/* Amount & Due Date Box */}
+                        {/* Amount & Status Box */}
                         <div className="flex flex-row lg:flex-col items-end justify-between lg:justify-start border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0 shrink-0">
                           <div className="text-right">
-                            <span className="font-mono-tab text-[10px] uppercase text-white/50 block">Total Assessed Fine</span>
-                            <span className="font-mono-tab text-2xl sm:text-3xl font-black text-white tracking-tight">
+                            <span className="font-mono-tab text-[10px] uppercase text-white/50 block">
+                              {isPaymentVerified ? "Settled Total Fine" : "Total Assessed Fine"}
+                            </span>
+                            <span
+                              className={cn(
+                                "font-mono-tab text-2xl sm:text-3xl font-black tracking-tight",
+                                isPaymentVerified ? "text-emerald-400" : isPaymentFailed ? "text-rose-300" : "text-white",
+                              )}
+                            >
                               {formatPeso(totalLiability)}
                             </span>
                           </div>
+                          {isPaymentVerified && (
+                            <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 mt-1">
+                              <FileCheck2 className="size-3.5" /> Clearance Issued & Verified
+                            </span>
+                          )}
+                          {isPaymentFailed && (
+                            <span className="text-[11px] font-bold text-rose-400 flex items-center gap-1 mt-1">
+                              <AlertOctagon className="size-3.5" /> Fine Remains Unpaid
+                            </span>
+                          )}
+                          {isPaymentPending && (
+                            <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1 mt-1">
+                              <Clock className="size-3.5" /> Treasury Review Pending
+                            </span>
+                          )}
+                          {isAppealed && (
+                            <span className="text-[11px] font-semibold text-blue-400 flex items-center gap-1 mt-1">
+                              <Scale className="size-3.5" /> Protest Under Review
+                            </span>
+                          )}
                           {isUnpaid && (
                             <span className="text-[11px] font-semibold text-orange-400 flex items-center gap-1 mt-1">
                               <Clock className="size-3" /> Due: {new Date(c.dueDate || Date.now() + 7 * 86400000).toLocaleDateString()}
                             </span>
                           )}
-                          {isSettled && (
-                            <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1 mt-1">
-                              <FileCheck2 className="size-3" /> Clearance Issued
-                            </span>
-                          )}
                         </div>
                       </div>
+
+                      {/* PAYMENT STATUS SPECIFIC DETAIL BANNERS */}
+                      {/* Case 1: Verified Settlement Details Card */}
+                      {isPaymentVerified && (
+                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-3 shadow-inner">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/20 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="size-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 grid place-items-center">
+                                <Check className="size-3.5" />
+                              </div>
+                              <span className="text-xs font-bold text-emerald-300 font-mono-tab">
+                                Official Electronic Receipt & LTO Clearance Active
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono-tab font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                              LTMS Hold Lifted
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Official Receipt #</span>
+                              <span className="font-mono-tab font-bold text-white text-xs block truncate">
+                                {c.paymentDetails?.receiptNumber || c.clearanceCertNumber || `OR-2026-${c.id.slice(-6).toUpperCase()}`}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Payment Channel</span>
+                              <span className="font-bold text-white text-xs block">
+                                {c.paymentDetails?.method || "GCash (Online QR Ph)"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Settlement Date</span>
+                              <span className="font-mono-tab text-white/80 text-xs block">
+                                {c.paymentDetails?.paidAt
+                                  ? new Date(c.paymentDetails.paidAt).toLocaleDateString("en-PH", { dateStyle: "medium" })
+                                  : new Date(c.date).toLocaleDateString("en-PH", { dateStyle: "medium" })}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Clearance Certificate</span>
+                              <span className="font-mono-tab font-bold text-emerald-400 text-xs block">
+                                {c.clearanceCertNumber || `MMDA-QC-CLR-${c.id.slice(-5).toUpperCase()}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Case 2: Payment Failed / Not Push Through Warning Banner */}
+                      {isPaymentFailed && (
+                        <div className="rounded-2xl border-2 border-rose-500/50 bg-gradient-to-r from-rose-950/40 via-red-950/30 to-black/60 p-4 sm:p-5 shadow-lg shadow-rose-950/30 space-y-3.5">
+                          <div className="flex items-start gap-3.5">
+                            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-inner">
+                              <AlertOctagon className="size-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-bold text-rose-200">
+                                  Online Payment Did Not Push Through
+                                </h4>
+                                <span className="rounded bg-rose-500/30 text-rose-200 border border-rose-500/40 px-2 py-0.5 text-[10px] font-mono-tab uppercase font-bold">
+                                  Transaction Incomplete
+                                </span>
+                              </div>
+                              <p className="text-xs text-rose-100/80 leading-relaxed">
+                                Your online payment attempt could not be completed (the payment gateway declined authorization or the session timed out).
+                                The statutory fine of <strong className="text-white font-mono-tab font-bold">{formatPeso(totalLiability)}</strong> remains <strong>UNPAID</strong>. Your vehicle remains flagged under active LTO registration alarm holds until full settlement.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 rounded-xl border border-rose-500/20 bg-black/40 p-3 text-xs">
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Attempted Channel</span>
+                              <span className="font-semibold text-white/90 font-mono-tab">
+                                {c.paymentDetails?.method || "Online Payment Gateway"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Attempt Reference</span>
+                              <span className="font-mono-tab text-white/80">
+                                {c.paymentDetails?.referenceNumber || "FAIL-SESSION"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono-tab uppercase text-white/50 block">Gateway Error Reason</span>
+                              <span className="font-medium text-rose-300 truncate block" title={c.paymentDetails?.failureReason}>
+                                {c.paymentDetails?.failureReason || "Gateway authorization declined or timed out"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-rose-500/20">
+                            <span className="text-[11px] text-rose-200/70 flex items-center gap-1.5 font-mono-tab">
+                              <Clock className="size-3 text-rose-400" />
+                              Re-attempt payment immediately to prevent penalty surcharges and LTO alarms.
+                            </span>
+                            <Link
+                              to="/portal/pay/$citationId"
+                              params={{ citationId: c.novNumber || c.id }}
+                              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:brightness-110 transition-all active:scale-[0.98]"
+                            >
+                              <RotateCcw className="size-3.5" /> Retry Payment Now ({formatPeso(totalLiability)})
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Case 3: Payment Submitted & Pending Verification */}
+                      {isPaymentPending && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 space-y-2">
+                          <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                            <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5 font-mono-tab">
+                              <Clock className="size-4 text-amber-400" />
+                              Payment Proof Submitted · Pending Treasury Verification
+                            </span>
+                            <span className="text-[10px] font-mono-tab font-semibold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                              IN REVIEW
+                            </span>
+                          </div>
+                          <p className="text-xs text-amber-100/70 leading-relaxed">
+                            Your payment reference <strong className="text-white font-mono-tab font-semibold">{c.paymentDetails?.referenceNumber || "Submitted Proof"}</strong> is currently being validated by DPOS Treasury officers. Once reconciled, your LTO hold will automatically be lifted.
+                          </p>
+                        </div>
+                      )}
 
                       {/* Itemized Charged Violations & Statutory Fines Breakdown */}
                       <div className="rounded-xl border border-white/10 bg-black/50 overflow-hidden shadow-inner">
@@ -1138,26 +1332,28 @@ function CitizenPortal() {
                           <span
                             className={cn(
                               "font-bold mt-1 block font-mono-tab",
-                              c.ltoAlarmStatus === "CLEARED" || isSettled ? "text-emerald-400" : "text-amber-400",
+                              c.ltoAlarmStatus === "CLEARED" || isPaymentVerified ? "text-emerald-400" : "text-amber-400",
                             )}
                           >
-                            {c.ltoAlarmStatus === "CLEARED" || isSettled
+                            {c.ltoAlarmStatus === "CLEARED" || isPaymentVerified
                               ? "CLEARED (No LTMS Hold)"
-                              : "WARNING: Pending LTO Hold in 7 Days"}
+                              : isPaymentFailed
+                                ? "LTO ALARM ACTIVE: Unpaid Fine"
+                                : "WARNING: Pending LTO Hold in 7 Days"}
                           </span>
                         </div>
 
                         <div className="rounded-xl border border-white/10 bg-black/40 p-3.5">
                           <span className="text-white/40 block font-mono-tab text-[10px] uppercase">Protest Window</span>
                           <span className="font-medium text-white/80 mt-1 block">
-                            {isSettled ? "Case Closed" : "10 Calendar Days from Notice"}
+                            {isPaymentVerified ? "Case Closed" : "10 Calendar Days from Notice"}
                           </span>
                         </div>
                       </div>
 
                       {/* Action Bar */}
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => {
                               setSelectedNov(c);
@@ -1181,21 +1377,31 @@ function CitizenPortal() {
                             <Printer className="size-3.5" /> Official NOV Slip
                           </button>
 
-                          {isSettled && (
-                            <button
-                              onClick={() => {
-                                setClearedCitation(c);
-                                setClearanceModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20"
-                            >
-                              <FileCheck2 className="size-3.5" /> View Clearance Certificate
-                            </button>
+                          {isPaymentVerified && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setClearedCitation(c);
+                                  setClearanceModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                              >
+                                <FileCheck2 className="size-3.5" /> View Clearance Certificate
+                              </button>
+
+                              <Link
+                                to="/portal/receipt/$citationId"
+                                params={{ citationId: c.novNumber || c.id }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                              >
+                                <Receipt className="size-3.5" /> Official e-OR Receipt
+                              </Link>
+                            </>
                           )}
                         </div>
 
-                        {isUnpaid && (
-                          <div className="flex items-center gap-2">
+                        {(isUnpaid || isPaymentFailed) && (
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               onClick={() => {
                                 setSelectedNov(c);
@@ -1229,9 +1435,22 @@ function CitizenPortal() {
                             <Link
                               to="/portal/pay/$citationId"
                               params={{ citationId: c.novNumber || c.id }}
-                              className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                              className={cn(
+                                "rounded-xl px-3.5 py-2 text-xs font-bold transition-all flex items-center gap-1.5",
+                                isPaymentFailed
+                                  ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500"
+                                  : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20",
+                              )}
                             >
-                              <ExternalLink className="size-3.5" /> Official Checkout
+                              {isPaymentFailed ? (
+                                <>
+                                  <RotateCcw className="size-3.5" /> Retry Payment
+                                </>
+                              ) : (
+                                <>
+                                  <ExternalLink className="size-3.5" /> Official Checkout
+                                </>
+                              )}
                             </Link>
                           </div>
                         )}
@@ -2859,16 +3078,34 @@ function CitizenPortal() {
                         Contest / File Protest
                       </button>
 
-                      {selectedNov.status === "unpaid" && (
+                      {(selectedNov.status === "unpaid" || selectedNov.status === "payment_failed") && (
                         <button
                           onClick={() => {
                             setSelectedCitationId(selectedNov.id);
                             setSettleModalOpen(true);
                           }}
-                          className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-600/30"
+                          className={cn(
+                            "rounded-xl px-6 py-2.5 text-xs font-bold text-white transition-all shadow-lg flex items-center gap-1.5",
+                            selectedNov.status === "payment_failed"
+                              ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/30"
+                              : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30",
+                          )}
                         >
-                          Settle Online ({formatPeso(selectedNov.amount)})
+                          {selectedNov.status === "payment_failed" ? (
+                            <>
+                              <RotateCcw className="size-3.5" /> Retry Payment ({formatPeso(selectedNov.amount)})
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard className="size-3.5" /> Settle Online ({formatPeso(selectedNov.amount)})
+                            </>
+                          )}
                         </button>
+                      )}
+                      {(selectedNov.status === "settled" || selectedNov.paymentDetails?.status === "verified") && (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-400">
+                          <CheckCircle2 className="size-4" /> Payment Verified & Settled
+                        </span>
                       )}
                     </div>
                   </div>

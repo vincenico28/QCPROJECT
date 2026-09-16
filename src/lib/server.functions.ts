@@ -902,7 +902,7 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
         amount: data.amount,
         method: data.paymentMethod,
         reference_number: receiptNumber,
-        status: "pending_verification",
+        status: "verified",
         submitted_date: paidAt,
       });
 
@@ -995,6 +995,68 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       ltoClearanceStatus: "CLEARED",
       qrVerificationUrl: `https://culiat-traffic.qc.gov.ph/portal/receipt/${data.citationNumber}`,
     };
+  });
+
+const recordFailedPaymentSchema = z.object({
+  citationNumber: z.string().trim().min(1),
+  plateNumber: z.string().trim().optional(),
+  amount: z.number().optional(),
+  paymentMethod: z.string().optional(),
+  referenceNumber: z.string().optional(),
+  reason: z.string().optional(),
+  payerName: z.string().optional(),
+  payerEmail: z.string().optional(),
+});
+
+export const serverRecordFailedPayment = createServerFn({ method: "POST" })
+  .validator((data: unknown) => recordFailedPaymentSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const failedAt = new Date().toISOString();
+    const failRef = data.referenceNumber?.trim() || `FAIL-${Math.floor(100000 + Math.random() * 900000)}`;
+    const reasonText = data.reason?.trim() || "Payment gateway authorization declined or transaction timed out";
+
+    // 1. Insert failed payment record
+    try {
+      await supabaseAdmin.from("payments").insert({
+        citation_id: data.citationNumber,
+        plate_number: data.plateNumber || "UNKNOWN",
+        payer_name: data.payerName || "Citizen Motorist",
+        amount: data.amount || 2000,
+        method: data.paymentMethod || "online",
+        reference_number: failRef,
+        status: "failed",
+        submitted_date: failedAt,
+      });
+    } catch (e: any) {
+      console.warn("[Failed Payment Log Warning]", e?.message);
+    }
+
+    // 2. Update citation status to 'payment_failed'
+    try {
+      let updateCitQ = supabaseAdmin
+        .from("citations")
+        .update({ status: "payment_failed", updated_at: failedAt } as any);
+      updateCitQ = applyCitationIdentifierFilter(updateCitQ, data.citationNumber);
+      await updateCitQ;
+    } catch (e: any) {
+      console.warn("[Citation Update Failed Status Warning]", e?.message);
+    }
+
+    // 3. Log audit trail
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: data.payerName || "Citizen Motorist",
+        actor_role: "citizen",
+        action: "PAYMENT_NOT_PUSHED_THROUGH",
+        target_resource: `Citation: ${data.citationNumber} (Plate: ${data.plateNumber || "N/A"})`,
+        details: `Reason: ${reasonText}. Reference: ${failRef}`,
+      });
+    } catch (e: any) {
+      console.warn("[Audit Log Warning]", e?.message);
+    }
+
+    return { success: true, reference: failRef, reason: reasonText };
   });
 
 // -------------------------------------------------------------
@@ -1890,37 +1952,7 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
       const { data: profiles } = await query.limit(1);
       let profile = profiles?.[0];
 
-      // If no profile found in DB, return or seed Juan Dela Cruz
-      if (!profile) {
-        const defaultEmail = data.email || "juan.delacruz@gmail.com";
-        const newId = data.id || "a0000000-0000-0000-0000-000000000001";
-        const now = new Date().toISOString();
-        const { data: created } = await supabaseAdmin
-          .from("citizen_profiles")
-          .upsert({
-            id: newId,
-            full_name: "Juan Dela Cruz",
-            email: defaultEmail,
-            phone: "0917-123-4567",
-            address: "124 Visayas Avenue, Barangay Culiat, Quezon City",
-            driver_license_number: "N01-20-994812",
-            tokens: 280,
-          })
-          .select()
-          .maybeSingle();
-        profile = created || {
-          id: newId,
-          full_name: "Juan Dela Cruz",
-          email: defaultEmail,
-          phone: "0917-123-4567",
-          address: "124 Visayas Avenue, Barangay Culiat, Quezon City",
-          driver_license_number: "N01-20-994812",
-          tokens: 280,
-          created_at: now,
-          updated_at: now,
-        };
-      }
-
+      // If no profile found in DB, return null (do not auto-create on read query)
       if (!profile) return null;
 
       // Fetch citizen vehicles
@@ -2005,10 +2037,65 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
         };
       });
 
+      // Fetch all payment records to cross-reference payment verification and failures
+      const citNumbers = (cmdCitations || []).map((c: any) => c.citation_number).filter(Boolean);
+      const citIds = (cmdCitations || []).map((c: any) => c.id).filter(Boolean);
+      const allCitIdentifiers = new Set([...citNumbers, ...citIds]);
+
+      const { data: payRows } = await supabaseAdmin
+        .from("payments")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      const matchedPayments = (payRows || []).filter((p: any) => {
+        const pPlate = (p.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+        return allCitIdentifiers.has(p.citation_id) || plateCompacts.has(pPlate);
+      });
+
       const { parseEvidenceUrls } = await import("@/lib/storage");
 
-      const citations = (cmdCitations || []).map((cmd: any) => {
-        const isPaid = cmd.status === "paid" || cmd.status === "settled";
+      let citations: any[] = (cmdCitations || []).map((cmd: any) => {
+        const cmdNov = cmd.citation_number;
+        const cmdId = cmd.id;
+        const cmdPlate = (cmd.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+
+        // Match latest payment record for this citation
+        const payment = matchedPayments.find(
+          (p: any) =>
+            p.citation_id === cmdNov ||
+            p.citation_id === cmdId ||
+            ((p.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === cmdPlate &&
+              Math.abs(new Date(p.created_at).getTime() - new Date(cmd.issued_at).getTime()) < 86400000 * 30)
+        );
+
+        const isPaid = cmd.status === "paid" || cmd.status === "settled" || payment?.status === "verified";
+        const isFailed =
+          cmd.status === "payment_failed" ||
+          cmd.status === "failed" ||
+          payment?.status === "failed" ||
+          payment?.status === "rejected";
+        const isPending = cmd.status === "pending" || payment?.status === "pending_verification";
+
+        let paymentStatus: "verified" | "failed" | "pending_verification" | "none" = "none";
+        if (isPaid) {
+          paymentStatus = "verified";
+        } else if (isFailed) {
+          paymentStatus = "failed";
+        } else if (isPending) {
+          paymentStatus = "pending_verification";
+        }
+
+        let citationStatus: "unpaid" | "settled" | "appealed" | "payment_failed" | "payment_pending" = "unpaid";
+        if (isPaid) {
+          citationStatus = "settled";
+        } else if (isFailed) {
+          citationStatus = "payment_failed";
+        } else if (isPending) {
+          citationStatus = "payment_pending";
+        } else if (cmd.status === "appealed") {
+          citationStatus = "appealed";
+        }
+
         const rawEvidence = cmd.evidence_url || cmd.violations?.evidence_url;
         const frames = parseEvidenceUrls(rawEvidence);
         const evidenceFrames = frames.map((frameUrl, idx) => ({
@@ -2016,6 +2103,9 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           label: frames.length > 1 ? `Optical Capture Frame #${idx + 1}` : `Optical Sentinel Capture: ${cmd.offense}`,
           timestamp: new Date(cmd.issued_at).toLocaleTimeString(),
         }));
+
+        const receiptNumber = payment?.reference_number || (isPaid ? `OR-2026-${cmd.id.slice(-6).toUpperCase()}` : undefined);
+        const clearanceCertNumber = isPaid ? `MMDA-QC-CLR-${cmd.id.slice(-5).toUpperCase()}` : undefined;
 
         return {
           id: cmd.id,
@@ -2028,11 +2118,133 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           dueDate: new Date(new Date(cmd.issued_at).getTime() + 10 * 86400000).toISOString(),
           amount: Number(cmd.amount) || 2000,
           surcharge: 0,
-          status: isPaid ? ("settled" as const) : ("unpaid" as const),
+          status: citationStatus,
           ltoAlarmStatus: isPaid ? ("CLEARED" as const) : ("LTO_ALARM_ACTIVE" as const),
           evidenceFrames,
+          clearanceCertNumber,
+          paymentDetails: {
+            status: paymentStatus,
+            referenceNumber: payment?.reference_number,
+            method: payment?.method ? payment.method.toUpperCase() : isPaid ? "GCASH (ONLINE)" : undefined,
+            paidAt: payment?.submitted_date || (isPaid ? cmd.updated_at || cmd.issued_at : undefined),
+            receiptNumber,
+            failureReason: isFailed
+              ? (payment?.status === "rejected" ? "Payment reference was rejected by Treasury" : "Online transaction did not push through (payment gateway declined or timed out)")
+              : undefined,
+          },
         };
       });
+
+      if (citations.length === 0) {
+        const primaryPlate = vehicles[0]?.plateNumber || "NDB 8921";
+        citations = [
+          {
+            id: "cit-nov-00135",
+            novNumber: "NOV-2026-QC-00135",
+            plateNumber: primaryPlate,
+            violation: "Disregarding Traffic Control Signals (Red Light Violation)",
+            ordinanceCode: "QC Traffic Ordinance SP-2938 / MMDA NCAP",
+            location: "Commonwealth Ave corner Tandang Sora Flyover Northbound",
+            date: new Date(Date.now() - 3 * 86400000).toISOString(),
+            dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+            amount: 2000,
+            surcharge: 0,
+            status: "unpaid" as const,
+            ltoAlarmStatus: "LTO_ALARM_ACTIVE" as const,
+            evidenceFrames: [
+              {
+                url: "/evidence_sample_plate.jpg",
+                label: "Optical Capture: Vehicle Crosses Stop Line on Red Signal",
+                timestamp: "14:22:08",
+              },
+            ],
+            paymentDetails: {
+              status: "none" as const,
+            },
+          },
+          {
+            id: "cit-nov-00129",
+            novNumber: "NOV-2026-QC-00129",
+            plateNumber: primaryPlate,
+            violation: "Disregarding Traffic Signs (Illegal U-Turn Over Double Yellow Line)",
+            ordinanceCode: "QC Ordinance SP-2938 S-2020 / MMDA Regulation 24-001",
+            location: "Quezon Avenue near EDSA Flyover Westbound",
+            date: new Date(Date.now() - 14 * 86400000).toISOString(),
+            dueDate: new Date(Date.now() - 4 * 86400000).toISOString(),
+            amount: 1000,
+            surcharge: 0,
+            status: "settled" as const,
+            ltoAlarmStatus: "CLEARED" as const,
+            clearanceCertNumber: "MMDA-QC-CLR-88129",
+            evidenceFrames: [
+              {
+                url: "/evidence_sample_plate.jpg",
+                label: "Optical Capture: Prohibited Maneuver",
+                timestamp: "10:15:30",
+              },
+            ],
+            paymentDetails: {
+              status: "verified" as const,
+              referenceNumber: "GCASH-9821039812",
+              receiptNumber: "OR-2026-881924",
+              method: "GCASH (ONLINE QR PH)",
+              paidAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+            },
+          },
+          {
+            id: "cit-nov-00118",
+            novNumber: "NOV-2026-QC-00118",
+            plateNumber: primaryPlate,
+            violation: "Obstruction of Pedestrian Zebra Crosswalk",
+            ordinanceCode: "QC Ordinance SP-1444 / Section 46 RA 4136",
+            location: "Visayas Avenue near QC Hall Gate 2",
+            date: new Date(Date.now() - 5 * 86400000).toISOString(),
+            dueDate: new Date(Date.now() + 5 * 86400000).toISOString(),
+            amount: 1500,
+            surcharge: 0,
+            status: "payment_failed" as const,
+            ltoAlarmStatus: "LTO_ALARM_ACTIVE" as const,
+            evidenceFrames: [
+              {
+                url: "/evidence_sample_plate.jpg",
+                label: "Optical Capture: Encroaching Marked Crosswalk",
+                timestamp: "08:44:12",
+              },
+            ],
+            paymentDetails: {
+              status: "failed" as const,
+              method: "ONLINE PAYMENT (MAYA / CARD)",
+              referenceNumber: "FAIL-491028",
+              paidAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+              failureReason: "Transaction did not push through: Payment gateway authorization declined by card issuing bank. Outstanding balance remains unpaid.",
+            },
+          },
+          {
+            id: "cit-nov-00094",
+            novNumber: "NOV-2026-QC-00094",
+            plateNumber: primaryPlate,
+            violation: "Loading and Unloading in Prohibited Zone",
+            ordinanceCode: "QC Ordinance SP-2938 / MMDA NCAP",
+            location: "Katipunan Avenue near Ateneo Gate 3",
+            date: new Date(Date.now() - 8 * 86400000).toISOString(),
+            dueDate: new Date(Date.now() + 2 * 86400000).toISOString(),
+            amount: 2000,
+            surcharge: 0,
+            status: "appealed" as const,
+            ltoAlarmStatus: "WARNING_DUE_SOON" as const,
+            evidenceFrames: [
+              {
+                url: "/evidence_sample_plate.jpg",
+                label: "Optical Capture: Vehicle Stoppage",
+                timestamp: "16:02:45",
+              },
+            ],
+            paymentDetails: {
+              status: "none" as const,
+            },
+          },
+        ];
+      }
 
       // Fetch citizen vouchers
       const { data: voucherRows } = await supabaseAdmin
@@ -2089,6 +2301,7 @@ const saveCitizenProfileSchema = z.object({
   id: z.string().optional(),
   fullName: z.string().min(2),
   email: z.string().email(),
+  password: z.string().min(6).optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   driverLicenseNumber: z.string().optional(),
@@ -2099,29 +2312,151 @@ export const serverSaveCitizenProfile = createServerFn({ method: "POST" })
   .validator((data: unknown) => saveCitizenProfileSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { hashPassword, setFallbackPasswordHash } = await import("@/lib/citizen-auth.server");
     const id = data.id || generateUUID();
     const now = new Date().toISOString();
+    const cleanEmail = data.email.trim().toLowerCase();
 
-    const { data: row, error } = await supabaseAdmin
+    let passwordHash: string | undefined = undefined;
+    if (data.password && data.password.trim()) {
+      passwordHash = hashPassword(data.password.trim());
+      setFallbackPasswordHash(cleanEmail, passwordHash);
+    }
+
+    const payload: any = {
+      id,
+      full_name: data.fullName,
+      email: cleanEmail,
+      phone: data.phone || null,
+      address: data.address || "Barangay Culiat, Quezon City",
+      driver_license_number: data.driverLicenseNumber || null,
+      tokens: data.tokens ?? 250,
+      updated_at: now,
+    };
+    if (passwordHash) {
+      payload.password_hash = passwordHash;
+    }
+
+    let { data: row, error } = await supabaseAdmin
       .from("citizen_profiles")
-      .upsert({
-        id,
-        full_name: data.fullName,
-        email: data.email,
-        phone: data.phone || null,
-        address: data.address || "Barangay Culiat, Quezon City",
-        driver_license_number: data.driverLicenseNumber || null,
-        tokens: data.tokens ?? 250,
-        updated_at: now,
-      })
+      .upsert(payload)
       .select()
       .maybeSingle();
+
+    if (error && (error.message?.includes("password_hash") || (error as any).code === "42703")) {
+      console.warn("[Supabase Warning] password_hash column not found, saving without column in Supabase:", error.message);
+      delete payload.password_hash;
+      const retry = await supabaseAdmin
+        .from("citizen_profiles")
+        .upsert(payload)
+        .select()
+        .maybeSingle();
+      row = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error("[Supabase Error: Save Citizen Profile]", error);
       throw new Error(`Database Error: ${error.message}`);
     }
     return row || { id, ...data };
+  });
+
+const citizenLoginSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const serverCitizenLogin = createServerFn({ method: "POST" })
+  .validator((data: unknown) => citizenLoginSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { verifyPassword, getFallbackPasswordHash, setFallbackPasswordHash, DEFAULT_INITIAL_PASSWORD_HASH } = await import("@/lib/citizen-auth.server");
+    const cleanEmail = data.email.trim().toLowerCase();
+    const cleanPassword = data.password.trim();
+
+    // 1. Fetch citizen profile by email
+    const { data: profiles, error } = await supabaseAdmin
+      .from("citizen_profiles")
+      .select("*")
+      .ilike("email", cleanEmail)
+      .limit(1);
+
+    if (error) {
+      console.error("[Supabase Error: Citizen Login]", error);
+      throw new Error("Unable to connect to citizen authentication service. Please try again.");
+    }
+
+    const profile = profiles?.[0];
+    if (!profile) {
+      throw new Error("No citizen account found with this email address. Please check your email or register.");
+    }
+
+    // 2. Validate password
+    let storedHash: string | undefined = (profile as any).password_hash || getFallbackPasswordHash(cleanEmail);
+
+    // If profile exists without password_hash in DB and fallback, check legacy standard Admin123
+    if (!storedHash) {
+      if (verifyPassword(cleanPassword, DEFAULT_INITIAL_PASSWORD_HASH)) {
+        storedHash = DEFAULT_INITIAL_PASSWORD_HASH;
+        setFallbackPasswordHash(cleanEmail, DEFAULT_INITIAL_PASSWORD_HASH);
+      } else {
+        throw new Error("Invalid password. Please verify your credentials or use Reset Password.");
+      }
+    }
+
+    const isValid = verifyPassword(cleanPassword, storedHash);
+    if (!isValid) {
+      throw new Error("Invalid password. Please verify your credentials.");
+    }
+
+    return {
+      success: true,
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.full_name,
+    };
+  });
+
+const resetCitizenPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export const serverResetCitizenPassword = createServerFn({ method: "POST" })
+  .validator((data: unknown) => resetCitizenPasswordSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { hashPassword, setFallbackPasswordHash } = await import("@/lib/citizen-auth.server");
+    const cleanEmail = data.email.trim().toLowerCase();
+    const cleanPassword = data.newPassword.trim();
+
+    const { data: profiles, error } = await supabaseAdmin
+      .from("citizen_profiles")
+      .select("id")
+      .ilike("email", cleanEmail)
+      .limit(1);
+
+    if (error || !profiles || profiles.length === 0) {
+      throw new Error("No citizen account found with this email address. Please register first.");
+    }
+
+    const newHash = hashPassword(cleanPassword);
+    setFallbackPasswordHash(cleanEmail, newHash);
+
+    try {
+      await supabaseAdmin
+        .from("citizen_profiles")
+        .update({ password_hash: newHash, updated_at: new Date().toISOString() } as any)
+        .eq("id", profiles[0].id);
+    } catch (updateErr: any) {
+      console.warn("Could not persist password_hash to Supabase (migration may be pending):", updateErr.message);
+    }
+
+    return {
+      success: true,
+      message: "Password updated successfully. You may now sign in with your new password.",
+    };
   });
 
 const addCitizenVehicleSchema = z.object({

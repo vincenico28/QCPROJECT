@@ -29,6 +29,7 @@ import { parseCitationOffenses } from "@/lib/data/review";
 import {
   processPaymentCheckout,
   serverCreateStripeCheckoutSession,
+  serverRecordFailedPayment,
 } from "@/lib/server.functions";
 import { VerifiableQrCode } from "@/components/ui/verifiable-qr";
 import { DEFAULT_GCASH_QR, GCASH_QR_URL } from "@/assets/gcash-qr";
@@ -188,13 +189,63 @@ function PaymentPage() {
       });
     } catch (err) {
       console.error("[Payment Error]", err);
+      const errMsg = err instanceof Error ? err.message : "Payment gateway authorization declined or connection timed out";
       toast.error("Payment settlement error", {
-        description: err instanceof Error ? err.message : "Please review your payment details.",
+        description: errMsg,
       });
+
+      try {
+        await serverRecordFailedPayment({
+          data: {
+            citationNumber: citNumber,
+            plateNumber: plate,
+            amount,
+            paymentMethod: method,
+            referenceNumber: gcashRefNumber.trim() || undefined,
+            reason: errMsg,
+            payerName,
+            payerEmail,
+          },
+        });
+      } catch (logErr) {
+        console.warn("[Record Failed Payment Warning]", logErr);
+      }
     } finally {
       setBusy(false);
       setBusyStep("");
     }
+  };
+
+  const handleSimulateFailure = async () => {
+    setBusy(true);
+    setBusyStep("Contacting Payment Gateway Provider…");
+    const citNumber = citation?.citation_number || citationId;
+    const plate = citation?.plate_number || "NDB-8921";
+
+    setTimeout(async () => {
+      try {
+        await serverRecordFailedPayment({
+          data: {
+            citationNumber: citNumber,
+            plateNumber: plate,
+            amount,
+            paymentMethod: method,
+            referenceNumber: `FAIL-${Math.floor(100000 + Math.random() * 900000)}`,
+            reason: "Payment did not push through: Gateway authorization declined by bank or connection timed out.",
+            payerName,
+            payerEmail,
+          },
+        });
+        toast.error("Payment Did Not Push Through", {
+          description: `Transaction for Notice ${citNumber} failed. Status updated in Citizen Portal.`,
+        });
+      } catch (err: any) {
+        toast.error("Error recording failed transaction", { description: err?.message });
+      } finally {
+        setBusy(false);
+        setBusyStep("");
+      }
+    }, 800);
   };
 
   if (isLoading) {
@@ -237,6 +288,7 @@ function PaymentPage() {
   }
 
   const isAlreadyPaid = citation.status === "paid" || citation.status === "settled";
+  const isPaymentFailed = citation.status === "payment_failed" || citation.status === "failed";
 
   const gcashQrPayload = `00020101021226600016PH.GCASH.GATEWAY0115${citation.citation_number || citationId}5204601153066085405${amount}.005802PH5924QUEZON CITY LGU TREASURY6011QUEZON CITY62210517QC-NOV-${citation.plate_number}6304`;
 
@@ -286,6 +338,34 @@ function PaymentPage() {
             >
               View Official Receipt
             </Link>
+          </div>
+        )}
+
+        {/* Payment Failed / Did Not Push Through Alert Banner */}
+        {isPaymentFailed && !isAlreadyPaid && (
+          <div className="mb-6 rounded-2xl border-2 border-rose-500/50 bg-gradient-to-r from-rose-950/40 via-red-950/30 to-black/60 p-4 sm:p-5 flex items-start justify-between gap-4 shadow-xl">
+            <div className="flex items-start gap-3.5">
+              <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <AlertCircle className="size-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-rose-500/30 text-rose-200 border border-rose-500/40 px-2 py-0.5 font-mono-tab text-[10px] font-bold uppercase">
+                    Payment Not Pushed Through
+                  </span>
+                  <span className="text-xs text-white/70 font-mono-tab">
+                    Previous Attempt Failed
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-white">
+                  Your previous online payment attempt did not push through.
+                </p>
+                <p className="text-xs text-rose-200/80 leading-relaxed">
+                  The transaction was declined by the payment gateway or connection timed out before verification.
+                  The outstanding fine of <strong>{formatPeso(amount)}</strong> remains UNPAID and your vehicle still has an active LTO registration hold. Please complete payment below to lift the apprehension hold.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -693,6 +773,23 @@ function PaymentPage() {
                 <Lock className="size-3 text-emerald-400" />
                 <span>Authorized Settlement Node · Official Republic Act 4136 & QC Traffic Ordinance Enforcement</span>
               </div>
+
+              {!isAlreadyPaid && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] font-semibold text-white/70 block">Gateway Diagnostic & Simulation</span>
+                    <span className="text-[10px] text-white/40 block font-mono-tab">Test "Payment Not Pushed Through" state in Citizen Portal</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSimulateFailure}
+                    disabled={busy}
+                    className="shrink-0 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+                  >
+                    Simulate Payment Not Pushed Through
+                  </button>
+                </div>
+              )}
             </form>
           </div>
 
