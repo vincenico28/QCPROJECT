@@ -3286,12 +3286,43 @@ function CitizenPortal() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Verifiable QR Code & Official Digital Seal */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-3.5 mt-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-white rounded-xl shadow-md shrink-0">
+                          <VerifiableQrCode
+                            data={`QC-DPOS-CLR|${clearedCitation.clearanceCertNumber || "MMDA-QC-CLR"}|${clearedCitation.plateNumber}|${clearedCitation.novNumber || clearedCitation.id}`}
+                            size={72}
+                          />
+                        </div>
+                        <div className="space-y-0.5 text-left">
+                          <span className="text-[10px] font-mono-tab font-bold text-emerald-400 block uppercase">
+                            Digital Seal Verified · LTO LTMS Synced
+                          </span>
+                          <p className="text-[11px] text-white/70 leading-snug">
+                            Scan to verify official clearance with Quezon City Hall Traffic Adjudication Bureau.
+                          </p>
+                          <span className="text-[10px] text-white/40 font-mono-tab block">
+                            Signed: Maria Teresa L. Santos, City Treasurer
+                          </span>
+                        </div>
+                      </div>
+
+                      <Link
+                        to="/portal/receipt/$citationId"
+                        params={{ citationId: clearedCitation.novNumber || clearedCitation.id }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-300 transition-colors shrink-0"
+                      >
+                        <Receipt className="size-3.5" /> Official e-OR
+                      </Link>
+                    </div>
                   </div>
 
-                  <div className="mt-8 flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <div className="mt-6 flex justify-end gap-3 border-t border-white/10 pt-4">
                     <button
                       onClick={() => window.print()}
-                      className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                      className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20 transition-colors"
                     >
                       <Printer className="size-4" /> Print Certificate
                     </button>

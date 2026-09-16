@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   useFinanceQueue,
   useVerifyPayment,
+  useDeclinePayment,
   useProcessRefund,
   useSettleCashDrawer,
   type PaymentQueueItem,
@@ -29,6 +30,9 @@ import {
   Smartphone,
   Hash,
   ExternalLink,
+  AlertOctagon,
+  RotateCcw,
+  XCircle,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -44,6 +48,7 @@ export const Route = createFileRoute("/finance")({
 function FinanceDashboard() {
   const { data, isLoading } = useFinanceQueue();
   const verifyPayment = useVerifyPayment();
+  const declinePayment = useDeclinePayment();
   const processRefund = useProcessRefund();
   const settleDrawer = useSettleCashDrawer();
 
@@ -51,19 +56,30 @@ function FinanceDashboard() {
   const [selectedRefund, setSelectedRefund] = useState<RefundQueueItem | null>(null);
   const [closeDrawerModal, setCloseDrawerModal] = useState(false);
 
-  // Detailed Payment Verification Modal States
+  // Detailed Payment Verification & Decline Modal States
   const [verifyModalPayment, setVerifyModalPayment] = useState<PaymentQueueItem | null>(null);
+  const [modalActionTab, setModalActionTab] = useState<"verify" | "decline">("verify");
   const [gcashRefInput, setGcashRefInput] = useState<string>("");
   const [cashierNotesInput, setCashierNotesInput] = useState<string>("");
   const [refInputError, setRefInputError] = useState<string>("");
+  const [declineReason, setDeclineReason] = useState<string>(
+    "GCash / Bank Reference Number not found in QC Treasury merchant statement"
+  );
+  const [customDeclineReason, setCustomDeclineReason] = useState<string>("");
 
-  const handleOpenVerifyModal = (payment: PaymentQueueItem) => {
+  const handleOpenVerifyModal = (
+    payment: PaymentQueueItem,
+    initialTab: "verify" | "decline" = "verify"
+  ) => {
     setVerifyModalPayment(payment);
     const existingRef = payment.referenceNumber || "";
     // Pre-fill if motorist provided a realistic reference (not auto-generated OR-)
     setGcashRefInput(existingRef.startsWith("OR-") ? "" : existingRef);
     setCashierNotesInput("");
     setRefInputError("");
+    setModalActionTab(initialTab);
+    setDeclineReason("GCash / Bank Reference Number not found in QC Treasury merchant statement");
+    setCustomDeclineReason("");
   };
 
   const handleConfirmVerification = (e: React.FormEvent) => {
@@ -93,6 +109,41 @@ function FinanceDashboard() {
         onError: (err: any) => {
           toast.error("Verification failed", {
             description: err?.message || "Could not verify payment.",
+          });
+        },
+      }
+    );
+  };
+
+  const handleConfirmDecline = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyModalPayment) return;
+
+    const finalReason =
+      declineReason === "Other" ? customDeclineReason.trim() : declineReason;
+
+    if (!finalReason || finalReason.length < 4) {
+      toast.error("Please provide a valid decline reason for the audit record.");
+      return;
+    }
+
+    declinePayment.mutate(
+      {
+        paymentId: verifyModalPayment.id,
+        citationId: verifyModalPayment.citationId,
+        reason: finalReason,
+        cashierNotes: cashierNotesInput.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.warning(`Payment for ${verifyModalPayment.citationId} Declined`, {
+            description: `Citation marked as 'Payment Not Pushed Through'. Citizen alerted to retry settlement.`,
+          });
+          setVerifyModalPayment(null);
+        },
+        onError: (err: any) => {
+          toast.error("Decline action failed", {
+            description: err?.message || "Could not decline payment.",
           });
         },
       }
@@ -323,14 +374,25 @@ function FinanceDashboard() {
                       {/* Actions */}
                       <div className="flex items-center gap-2 border-t border-border/50 pt-2.5">
                         {!isVerified ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenVerifyModal(p)}
-                            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
-                          >
-                            <ShieldCheck className="size-4" />
-                            <span>Verify Payment & Input GCash Ref</span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenVerifyModal(p, "verify")}
+                              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+                            >
+                              <ShieldCheck className="size-4" />
+                              <span>Verify GCash Ref</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenVerifyModal(p, "decline")}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition-all cursor-pointer"
+                              title="Decline payment / mark transaction as not pushed through"
+                            >
+                              <AlertOctagon className="size-4" />
+                              <span className="hidden sm:inline">Decline</span>
+                            </button>
+                          </>
                         ) : (
                           <a
                             href={`/portal/receipt/${p.citationId}`}
@@ -564,7 +626,7 @@ function FinanceDashboard() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* DETAILED PAYMENT VERIFICATION MODAL (REQUIRES GCASH REF NO) */}
+      {/* DETAILED PAYMENT VERIFICATION & DECLINE MODAL */}
       {verifyModalPayment && (
         <Dialog.Root
           open={!!verifyModalPayment}
@@ -572,21 +634,40 @@ function FinanceDashboard() {
         >
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-blue-500/40 bg-gradient-to-b from-slate-950 via-panel to-panel p-6 shadow-2xl animate-in fade-in zoom-in-95 text-white max-h-[90vh] overflow-y-auto">
+            <Dialog.Content className={cn(
+              "fixed left-1/2 top-1/2 z-50 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border bg-gradient-to-b from-slate-950 via-panel to-panel p-6 shadow-2xl animate-in fade-in zoom-in-95 text-white max-h-[90vh] overflow-y-auto transition-colors",
+              modalActionTab === "verify" ? "border-blue-500/40" : "border-rose-500/50"
+            )}>
               <div className="flex items-start justify-between border-b border-border/70 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                    <Smartphone className="size-5" />
+                  <div className={cn(
+                    "size-10 rounded-xl border flex items-center justify-center",
+                    modalActionTab === "verify"
+                      ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+                      : "bg-rose-500/20 border-rose-500/40 text-rose-400"
+                  )}>
+                    {modalActionTab === "verify" ? (
+                      <Smartphone className="size-5" />
+                    ) : (
+                      <AlertOctagon className="size-5" />
+                    )}
                   </div>
                   <div>
                     <Dialog.Title className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                      Verify GCash Settlement
-                      <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono-tab px-2 py-0.5">
-                        Audit Required
+                      {modalActionTab === "verify" ? "Verify GCash Settlement" : "Decline Payment Submission"}
+                      <span className={cn(
+                        "rounded text-[10px] font-mono-tab px-2 py-0.5 border",
+                        modalActionTab === "verify"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                          : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                      )}>
+                        {modalActionTab === "verify" ? "Audit Required" : "Failure Trigger"}
                       </span>
                     </Dialog.Title>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Cross-reference GCash SMS/app alert & lift LTO LTMS apprehension hold
+                      {modalActionTab === "verify"
+                        ? "Cross-reference GCash SMS/app alert & lift LTO LTMS apprehension hold"
+                        : "Mark notice as payment not pushed through & alert citizen to retry"}
                     </p>
                   </div>
                 </div>
@@ -597,165 +678,312 @@ function FinanceDashboard() {
                 </Dialog.Close>
               </div>
 
-              <form onSubmit={handleConfirmVerification} className="mt-4 flex flex-col gap-4">
-                {/* 1. Itemized Inspection Summary */}
-                <div className="rounded-2xl border border-border/80 bg-background/80 p-4 flex flex-col gap-3">
-                  <span className="font-mono-tab text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                    Citation Notice & Offense Breakdown
+              {/* Action Mode Toggle Switcher */}
+              <div className="mt-4 flex rounded-xl bg-background/80 p-1 border border-border/80 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setModalActionTab("verify")}
+                  className={cn(
+                    "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                    modalActionTab === "verify"
+                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Verify & Settle</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalActionTab("decline")}
+                  className={cn(
+                    "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                    modalActionTab === "decline"
+                      ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <AlertOctagon className="size-3.5" />
+                  <span>Decline / Payment Not Pushed Through</span>
+                </button>
+              </div>
+
+              {/* 1. Itemized Inspection Summary (Common) */}
+              <div className="mt-4 rounded-2xl border border-border/80 bg-background/80 p-4 flex flex-col gap-3">
+                <span className="font-mono-tab text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                  Citation Notice & Offense Breakdown
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-subtle text-[11px] block">Notice Number</span>
+                    <span className="font-mono-tab font-bold text-white">{verifyModalPayment.citationId}</span>
+                  </div>
+                  <div>
+                    <span className="text-subtle text-[11px] block">Plate Number</span>
+                    <span className="font-mono-tab font-black text-white bg-primary/20 px-2 py-0.5 rounded border border-primary/30 inline-block">
+                      {verifyModalPayment.plateNumber}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-subtle text-[11px] block">Settlement Amount</span>
+                    <span className="font-mono-tab font-black text-emerald-400 text-sm">
+                      {formatPeso(verifyModalPayment.amount)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-subtle text-[11px] block">Offense</span>
+                    <span className="font-medium text-amber-300">
+                      {verifyModalPayment.offense || "Traffic Ordinance Infraction"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-subtle text-[11px] block">Vehicle Model</span>
+                    <span className="font-medium text-white">
+                      {verifyModalPayment.vehicleModel || "Registered Vehicle"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-subtle text-[11px] block">Apprehending Officer</span>
+                    <span className="font-medium text-white">
+                      {verifyModalPayment.officerName || "Field Patrol"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border-t border-border/50 pt-2 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Payer: <strong className="text-white">{verifyModalPayment.payerName}</strong></span>
+                  <span className="font-mono-tab">
+                    Submitted: {new Date(verifyModalPayment.submittedDate).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}
                   </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
-                      <span className="text-subtle text-[11px] block">Notice Number</span>
-                      <span className="font-mono-tab font-bold text-white">{verifyModalPayment.citationId}</span>
-                    </div>
-                    <div>
-                      <span className="text-subtle text-[11px] block">Plate Number</span>
-                      <span className="font-mono-tab font-black text-white bg-primary/20 px-2 py-0.5 rounded border border-primary/30 inline-block">
-                        {verifyModalPayment.plateNumber}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-subtle text-[11px] block">Settlement Amount</span>
-                      <span className="font-mono-tab font-black text-emerald-400 text-sm">
-                        {formatPeso(verifyModalPayment.amount)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-subtle text-[11px] block">Offense</span>
-                      <span className="font-medium text-amber-300">
-                        {verifyModalPayment.offense || "Traffic Ordinance Infraction"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-subtle text-[11px] block">Vehicle Model</span>
-                      <span className="font-medium text-white">
-                        {verifyModalPayment.vehicleModel || "Registered Vehicle"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-subtle text-[11px] block">Apprehending Officer</span>
-                      <span className="font-medium text-white">
-                        {verifyModalPayment.officerName || "Field Patrol"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-border/50 pt-2 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Payer: <strong className="text-white">{verifyModalPayment.payerName}</strong></span>
-                    <span className="font-mono-tab">
-                      Submitted: {new Date(verifyModalPayment.submittedDate).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}
-                    </span>
-                  </div>
                 </div>
+              </div>
 
-                {/* 2. Official Treasury GCash Instructions */}
-                <div className="rounded-2xl border border-blue-500/30 bg-blue-950/20 p-3.5 flex items-start gap-3 text-xs">
-                  <AlertCircle className="size-4 text-blue-400 shrink-0 mt-0.5" />
-                  <div className="flex flex-col gap-1 leading-relaxed">
-                    <p className="text-blue-200">
-                      <strong>Check Recipient Account (VINCE NICO O. ESCALA · 0956-618-0016):</strong>
-                    </p>
-                    <p className="text-muted-foreground text-[11px]">
-                      Open the GCash app on the treasury phone or check incoming SMS alerts from <strong>2882</strong> to locate the 13-digit Reference Number (e.g. <code>1002 9841 2910</code>) for <strong>{formatPeso(verifyModalPayment.amount)}</strong>.
-                    </p>
+              {/* MODE A: VERIFICATION FORM */}
+              {modalActionTab === "verify" && (
+                <form onSubmit={handleConfirmVerification} className="mt-4 flex flex-col gap-4">
+                  {/* Official Treasury GCash Instructions */}
+                  <div className="rounded-2xl border border-blue-500/30 bg-blue-950/20 p-3.5 flex items-start gap-3 text-xs">
+                    <AlertCircle className="size-4 text-blue-400 shrink-0 mt-0.5" />
+                    <div className="flex flex-col gap-1 leading-relaxed">
+                      <p className="text-blue-200">
+                        <strong>Check Recipient Account (VINCE NICO O. ESCALA · 0956-618-0016):</strong>
+                      </p>
+                      <p className="text-muted-foreground text-[11px]">
+                        Open the GCash app on the treasury phone or check incoming SMS alerts from <strong>2882</strong> to locate the 13-digit Reference Number (e.g. <code>1002 9841 2910</code>) for <strong>{formatPeso(verifyModalPayment.amount)}</strong>.
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {/* 3. GCash Reference Number Input (REQUIRED) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center justify-between text-xs font-semibold text-white">
-                    <span className="flex items-center gap-1.5">
-                      <Hash className="size-3.5 text-blue-400" />
-                      <span>GCash Transaction Reference No.</span>
-                      <span className="text-red-400 font-bold">*</span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono-tab font-normal">
-                      Required for Audit
-                    </span>
-                  </label>
-                  <div className="relative">
+                  {/* GCash Reference Number Input */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="flex items-center justify-between text-xs font-semibold text-white">
+                      <span className="flex items-center gap-1.5">
+                        <Hash className="size-3.5 text-blue-400" />
+                        <span>GCash Transaction Reference No.</span>
+                        <span className="text-red-400 font-bold">*</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono-tab font-normal">
+                        Required for Audit
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        autoFocus
+                        value={gcashRefInput}
+                        onChange={(e) => {
+                          setGcashRefInput(e.target.value);
+                          if (refInputError) setRefInputError("");
+                        }}
+                        placeholder="e.g. 1002 9841 2910"
+                        className={cn(
+                          "w-full rounded-xl border bg-background px-4 py-3 text-sm text-white font-mono-tab tracking-wider focus:outline-none transition-colors",
+                          refInputError
+                            ? "border-red-500 focus:border-red-400"
+                            : "border-border focus:border-blue-400"
+                        )}
+                      />
+                    </div>
+                    {refInputError ? (
+                      <p className="text-[11px] text-red-400 flex items-center gap-1 mt-0.5">
+                        <AlertCircle className="size-3" />
+                        <span>{refInputError}</span>
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        Input or confirm the exact reference from the GCash transaction receipt to bind this settlement.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Cashier Audit Notes */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                      <span>Cashier Audit Remark (Optional)</span>
+                      <span className="text-[10px]">Internal QC Treasury Record</span>
+                    </label>
                     <input
                       type="text"
-                      required
-                      autoFocus
-                      value={gcashRefInput}
-                      onChange={(e) => {
-                        setGcashRefInput(e.target.value);
-                        if (refInputError) setRefInputError("");
-                      }}
-                      placeholder="e.g. 1002 9841 2910"
-                      className={cn(
-                        "w-full rounded-xl border bg-background px-4 py-3 text-sm text-white font-mono-tab tracking-wider focus:outline-none transition-colors",
-                        refInputError
-                          ? "border-red-500 focus:border-red-400"
-                          : "border-border focus:border-blue-400"
-                      )}
+                      value={cashierNotesInput}
+                      onChange={(e) => setCashierNotesInput(e.target.value)}
+                      placeholder="e.g. Matched with SMS from 2882 on 0956-618-0016"
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none"
                     />
                   </div>
-                  {refInputError ? (
-                    <p className="text-[11px] text-red-400 flex items-center gap-1 mt-0.5">
-                      <AlertCircle className="size-3" />
-                      <span>{refInputError}</span>
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground">
-                      Input or confirm the exact reference from the GCash transaction receipt to bind this settlement.
-                    </p>
-                  )}
-                </div>
 
-                {/* 4. Cashier Audit Notes (Optional) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                    <span>Cashier Audit Remark (Optional)</span>
-                    <span className="text-[10px]">Internal QC Treasury Record</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={cashierNotesInput}
-                    onChange={(e) => setCashierNotesInput(e.target.value)}
-                    placeholder="e.g. Matched with SMS from 2882 on 0956-618-0016"
-                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-primary focus:outline-none"
-                  />
-                </div>
+                  {/* LTO LTMS Clearance Guarantee */}
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-[11px] text-emerald-400 flex items-center gap-2.5">
+                    <ShieldCheck className="size-4 shrink-0" />
+                    <span>
+                      Confirming this payment marks the notice as <strong>PAID</strong>, issues the electronic receipt, and automatically clears the LTO LTMS apprehension hold on plate <strong>{verifyModalPayment.plateNumber}</strong>.
+                    </span>
+                  </div>
 
-                {/* 5. LTO LTMS Clearance Guarantee */}
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-[11px] text-emerald-400 flex items-center gap-2.5">
-                  <ShieldCheck className="size-4 shrink-0" />
-                  <span>
-                    Confirming this payment marks the notice as <strong>PAID</strong>, issues the electronic receipt, and automatically clears the LTO LTMS apprehension hold on plate <strong>{verifyModalPayment.plateNumber}</strong>.
-                  </span>
-                </div>
+                  {/* Action buttons */}
+                  <div className="mt-2 flex items-center justify-end gap-2.5 pt-2 border-t border-border/70">
+                    <button
+                      type="button"
+                      onClick={() => setVerifyModalPayment(null)}
+                      disabled={verifyPayment.isPending}
+                      className="rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated hover:text-white transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={verifyPayment.isPending}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {verifyPayment.isPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          <span>Verifying & Reconciling…</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="size-4" />
+                          <span>Confirm GCash Ref & Settle</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
 
-                {/* Action buttons */}
-                <div className="mt-2 flex items-center justify-end gap-2.5 pt-2 border-t border-border/70">
-                  <button
-                    type="button"
-                    onClick={() => setVerifyModalPayment(null)}
-                    disabled={verifyPayment.isPending}
-                    className="rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={verifyPayment.isPending}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {verifyPayment.isPending ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        <span>Verifying & Reconciling…</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="size-4" />
-                        <span>Confirm GCash Ref & Settle</span>
-                      </>
+              {/* MODE B: DECLINE / PAYMENT NOT PUSHED THROUGH FORM */}
+              {modalActionTab === "decline" && (
+                <form onSubmit={handleConfirmDecline} className="mt-4 flex flex-col gap-4">
+                  {/* Warning Notice */}
+                  <div className="rounded-2xl border border-rose-500/40 bg-rose-950/25 p-3.5 flex items-start gap-3 text-xs">
+                    <AlertOctagon className="size-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex flex-col gap-1 leading-relaxed">
+                      <p className="text-rose-200 font-bold">
+                        Payment Not Pushed Through / Rejection Action:
+                      </p>
+                      <p className="text-rose-100/80 text-[11px]">
+                        Declining this payment marks the citation status as <strong>Payment Not Pushed Through</strong> in the Citizen Portal. The statutory fine remains <strong>UNPAID</strong>, LTO holds stay active, and the motorist will receive an immediate alert prompting them to retry payment.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Standard Decline Reasons */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-white flex items-center justify-between">
+                      <span>Reason for Decline / Failure</span>
+                      <span className="text-[10px] text-rose-400 font-mono-tab">Visible to Motorist</span>
+                    </label>
+
+                    <div className="flex flex-col gap-2">
+                      {[
+                        "GCash / Bank Reference Number not found in QC Treasury merchant statement",
+                        "Payment amount discrepancy (transferred amount does not match citation fine)",
+                        "Invalid or unreadable proof of payment / altered screenshot",
+                        "Duplicate reference number already reconciled for another citation",
+                        "Transaction reversed, cancelled, or dishonored by payment gateway",
+                        "Other",
+                      ].map((r) => (
+                        <label
+                          key={r}
+                          className={cn(
+                            "flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all",
+                            declineReason === r
+                              ? "border-rose-500 bg-rose-500/15 text-white font-semibold"
+                              : "border-border/70 bg-background/50 text-muted-foreground hover:text-white hover:bg-panel"
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="declineReason"
+                            value={r}
+                            checked={declineReason === r}
+                            onChange={() => setDeclineReason(r)}
+                            className="text-rose-600 focus:ring-rose-500"
+                          />
+                          <span>{r === "Other" ? "Custom Reason (Specify below)" : r}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {declineReason === "Other" && (
+                      <div className="mt-1">
+                        <textarea
+                          rows={2}
+                          required
+                          value={customDeclineReason}
+                          onChange={(e) => setCustomDeclineReason(e.target.value)}
+                          placeholder="Describe the exact reason why the payment cannot be verified..."
+                          className="w-full rounded-xl border border-rose-500/50 bg-background p-3 text-xs text-white focus:outline-none focus:border-rose-400"
+                        />
+                      </div>
                     )}
-                  </button>
-                </div>
-              </form>
+                  </div>
+
+                  {/* Cashier Notes */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                      <span>Internal Audit Notes (Optional)</span>
+                      <span className="text-[10px]">Treasury Log</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={cashierNotesInput}
+                      onChange={(e) => setCashierNotesInput(e.target.value)}
+                      placeholder="e.g. Checked 2882 logs from 8:00 AM to 12:00 PM; no matching amount"
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-white focus:border-rose-400 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="mt-2 flex items-center justify-end gap-2.5 pt-2 border-t border-border/70">
+                    <button
+                      type="button"
+                      onClick={() => setVerifyModalPayment(null)}
+                      disabled={declinePayment.isPending}
+                      className="rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-panel-elevated hover:text-white transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={declinePayment.isPending}
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {declinePayment.isPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          <span>Marking as Failed…</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="size-4" />
+                          <span>Confirm Decline & Mark Not Pushed Through</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>

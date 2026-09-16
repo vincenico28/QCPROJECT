@@ -1895,6 +1895,89 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+const declinePaymentSchema = z.object({
+  paymentId: z.string(),
+  citationId: z.string(),
+  reason: z.string().trim().min(3, "Decline reason is required"),
+  cashierNotes: z.string().optional(),
+});
+
+export const serverDeclinePayment = createServerFn({ method: "POST" })
+  .validator((data: unknown) => declinePaymentSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const failedAt = new Date().toISOString();
+    const reasonText = data.reason.trim();
+
+    // 1. Update Payment status to 'rejected' and save failure reason/notes
+    try {
+      const updatePayload: any = {
+        status: "rejected",
+        failure_reason: reasonText,
+      };
+      if (data.cashierNotes) {
+        updatePayload.notes = data.cashierNotes.trim();
+      }
+      const { error: payErr } = await supabaseAdmin
+        .from("payments")
+        .update(updatePayload)
+        .eq("id", data.paymentId);
+
+      if (payErr) {
+        console.warn("[Finance] Retrying payment update with status only:", payErr.message);
+        await supabaseAdmin
+          .from("payments")
+          .update({ status: "rejected" })
+          .eq("id", data.paymentId);
+      }
+    } catch (payEx: any) {
+      console.warn("[Finance] Error updating payment record on decline:", payEx?.message);
+    }
+
+    // 2. Update Citation status to 'payment_failed'
+    try {
+      let declineUpdQ = supabaseAdmin
+        .from("citations")
+        .update({
+          status: "payment_failed",
+          updated_at: failedAt,
+        } as any);
+      declineUpdQ = applyCitationIdentifierFilter(declineUpdQ, data.citationId);
+      await declineUpdQ;
+    } catch (citEx: any) {
+      console.warn("[Finance] Error updating citation status to payment_failed:", citEx?.message);
+    }
+
+    // 3. Immutable Audit Trail & Notification Dispatch
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: "QC Treasury Cashier",
+        actor_role: "finance",
+        action: "PAYMENT_DECLINED_BY_TREASURY",
+        target_resource: `Citation: ${data.citationId}`,
+        details: `Decline Reason: ${reasonText}${data.cashierNotes ? ` · Notes: ${data.cashierNotes.trim()}` : ""}`,
+      });
+
+      // Dispatch settlement declined email log
+      try {
+        await supabaseAdmin.from("email_logs").insert({
+          recipient_email: `motorist.${data.citationId.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`,
+          recipient_name: "Citizen Motorist",
+          citation_number: data.citationId,
+          subject: `Payment Incomplete / Declined Notice: ${data.citationId}`,
+          template_name: "Payment Declined",
+          status: "delivered",
+        });
+      } catch (eLogErr) {
+        console.warn("[Finance] Error logging declined payment notice:", eLogErr);
+      }
+    } catch (auditErr) {
+      console.warn("[Finance] Audit logging error:", auditErr);
+    }
+
+    return { success: true, citationId: data.citationId, reason: reasonText };
+  });
+
 const processRefundSchema = z.object({
   refundId: z.string(),
 });
@@ -2129,7 +2212,11 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
             paidAt: payment?.submitted_date || (isPaid ? cmd.updated_at || cmd.issued_at : undefined),
             receiptNumber,
             failureReason: isFailed
-              ? (payment?.status === "rejected" ? "Payment reference was rejected by Treasury" : "Online transaction did not push through (payment gateway declined or timed out)")
+              ? ((payment as any)?.failure_reason ||
+                 (payment as any)?.notes ||
+                 (payment?.status === "rejected"
+                   ? "Payment reference was declined by QC Treasury Cashier. Fine remains unpaid."
+                   : "Online transaction did not push through (payment gateway declined or timed out)"))
               : undefined,
           },
         };

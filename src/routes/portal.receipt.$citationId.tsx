@@ -30,6 +30,8 @@ import {
   Stamp,
   Hash,
   Share2,
+  AlertOctagon,
+  RotateCcw,
 } from "lucide-react";
 import { useCitation, formatPeso } from "@/lib/data/traffic";
 import { parseCitationOffenses } from "@/lib/data/review";
@@ -162,6 +164,11 @@ function ReceiptPage() {
   const amount = stripeDetails?.amount || (citation?.amount ? Number(citation.amount) : 2000);
   const plate = citation?.plate_number || "NDB 8921";
 
+  const isFailedPayment =
+    !stripeVerified &&
+    !search.session_id &&
+    (citation?.status === "payment_failed" || citation?.status === "failed");
+
   const parsedOffenses = parseCitationOffenses(citation?.offense, amount);
 
   const handleCopyReceipt = () => {
@@ -254,8 +261,65 @@ function ReceiptPage() {
       {/* Main Container */}
       <div className="w-full max-w-2xl flex flex-col items-center gap-6">
 
-        {/* View Mode Tab Switcher (Hidden in Print) */}
-        <div className="print:hidden w-full flex items-center justify-between gap-2 p-1 rounded-2xl bg-panel border border-border shadow-sm">
+        {/* Failed Payment Notice Guard */}
+        {isFailedPayment ? (
+          <div className="w-full rounded-3xl border-2 border-rose-500/50 bg-gradient-to-b from-rose-950/40 via-panel to-panel p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center gap-5">
+            <div className="grid size-16 place-items-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-inner">
+              <AlertOctagon className="size-9" />
+            </div>
+
+            <div className="space-y-2 max-w-md">
+              <span className="rounded-full bg-rose-500/20 px-3 py-1 text-[10px] font-mono-tab font-bold text-rose-300 border border-rose-500/40 uppercase tracking-wider">
+                Transaction Incomplete · Fine Unpaid
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                No Official Receipt Generated
+              </h2>
+              <p className="text-xs text-rose-100/80 leading-relaxed">
+                The payment attempt for Notice of Violation <strong className="text-white font-mono-tab">{citationId}</strong> did not push through or was declined by the QC Treasury Cashier. An official electronic receipt (e-OR) and clearance certificate have not been generated.
+              </p>
+
+              <div className="rounded-xl border border-rose-500/20 bg-black/40 p-3.5 text-xs text-left space-y-2 mt-3 font-mono-tab">
+                <div className="flex justify-between">
+                  <span className="text-white/50">Notice Number:</span>
+                  <span className="font-bold text-white">{citationId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Vehicle Plate:</span>
+                  <span className="font-bold text-white">{plate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Outstanding Fine:</span>
+                  <span className="font-black text-rose-400 text-sm">{formatPeso(amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">LTO Hold Status:</span>
+                  <span className="font-bold text-amber-400">ACTIVE REGISTRATION HOLD</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 w-full pt-2">
+              <Link
+                to="/citizen"
+                className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-white/80 transition-colors"
+              >
+                Back to Citizen Portal
+              </Link>
+              <Link
+                to="/portal/pay/$citationId"
+                params={{ citationId }}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:brightness-110 transition-all"
+              >
+                <RotateCcw className="size-3.5" />
+                Retry Payment Now ({formatPeso(amount)})
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* View Mode Tab Switcher (Hidden in Print) */}
+            <div className="print:hidden w-full flex items-center justify-between gap-2 p-1 rounded-2xl bg-panel border border-border shadow-sm">
           <button
             type="button"
             onClick={() => setActiveTab("receipt")}
@@ -831,6 +895,8 @@ function ReceiptPage() {
             <ExternalLink className="size-3" />
           </Link>
         </div>
+        </>
+      )}
       </div>
 
       {/* ========================================================================= */}

@@ -3,6 +3,7 @@ import {
   serverUpdateCitationStatus,
   serverFetchFinanceQueue,
   serverVerifyPayment,
+  serverDeclinePayment,
   serverProcessRefund,
 } from "@/lib/server.functions";
 
@@ -144,8 +145,42 @@ export function useVerifyPayment() {
         data: { paymentId, citationId, referenceNumber, cashierNotes },
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["citation", variables.citationId] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+}
+
+export function useDeclinePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      paymentId,
+      citationId,
+      reason,
+      cashierNotes,
+    }: {
+      paymentId: string;
+      citationId: string;
+      reason: string;
+      cashierNotes?: string;
+    }) => {
+      return await serverDeclinePayment({
+        data: { paymentId, citationId, reason, cashierNotes },
+      });
+    },
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      qc.invalidateQueries({ queryKey: ["citizen-profile"] });
+      qc.invalidateQueries({ queryKey: ["citation", variables.citationId] });
+      qc.invalidateQueries({ queryKey: ["citations"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["audit-logs"] });
+      qc.invalidateQueries({ queryKey: ["email-logs"] });
     },
   });
 }
