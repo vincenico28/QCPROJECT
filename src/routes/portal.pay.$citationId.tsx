@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
 
 export const Route = createFileRoute("/portal/pay/$citationId")({
   head: ({ params }) => ({
@@ -323,6 +324,7 @@ function PaymentPage() {
 
   const isAlreadyPaid = citation.status === "paid" || citation.status === "settled";
   const isPaymentFailed = citation.status === "payment_failed" || citation.status === "failed";
+  const isDisputed = citation.status === "disputed";
 
   const gcashQrPayload = `00020101021226600016PH.GCASH.GATEWAY0115${citation.citation_number || citationId}5204601153066085405${amount}.005802PH5924QUEZON CITY LGU TREASURY6011QUEZON CITY62210517QC-NOV-${citation.plate_number}6304`;
 
@@ -540,6 +542,66 @@ function PaymentPage() {
                 Pay your traffic violation fine online via GCash QR Ph or authorized government gateways. Settlement triggers immediate clearance and synchronization with the LTO Land Transportation Management System (LTMS).
               </p>
             </div>
+
+            {/* TAB Dispute & Statutory Due Process Banner */}
+            {isDisputed ? (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-4.5 flex items-start gap-3.5 shadow-md">
+                <div className="size-9 rounded-xl bg-amber-500/20 border border-amber-500/40 grid place-items-center text-amber-400 shrink-0">
+                  <Scale className="size-4.5" />
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-300">Under Formal TAB Adjudication Review</span>
+                    <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 text-[9px] font-mono-tab uppercase font-bold">
+                      Docket Active
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed text-[11px]">
+                    This citation has an active statutory protest filed with the Quezon City Traffic Adjudication Board. Fines and penalties are held in abeyance pending board resolution. You may voluntarily settle below to immediately clear all LTO LTMS registration holds.
+                  </p>
+                  <div className="pt-1">
+                    <Link
+                      to="/citizen"
+                      className="text-primary hover:underline text-[11px] font-semibold inline-flex items-center gap-1"
+                    >
+                      <span>Check Appeal Status in Citizen Portal</span>
+                      <ExternalLink className="size-3" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : !isAlreadyPaid ? (
+              <div className="rounded-2xl border border-border/80 bg-background/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="size-8 rounded-xl bg-primary/15 border border-primary/25 grid place-items-center text-primary shrink-0 mt-0.5">
+                    <Scale className="size-4" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-white block">
+                      Right to Contest Before Payment (Due Process)
+                    </span>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed max-w-lg">
+                      Motorists who believe this violation was issued in error, that an optical plate misread occurred, or an emergency exemption applies may file a formal protest under QC Ordinance No. SP-2957 within 10 days of notice.
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 pl-11 sm:pl-0">
+                  <FileDisputeDialog
+                    citationId={citation.id}
+                    citationNumber={citation.citation_number || citationId}
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-300 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+                      >
+                        <Scale className="size-3.5" />
+                        <span>Contest Violation</span>
+                      </button>
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <form onSubmit={handlePay} className="flex flex-col gap-6">
               {/* Payment Methods */}

@@ -4,7 +4,15 @@ import { Scale, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCreateDispute } from "@/lib/data/disputes";
 
-export function FileDisputeDialog({ citationId, citationNumber }: { citationId: string; citationNumber: string }) {
+export function FileDisputeDialog({
+  citationId,
+  citationNumber,
+  trigger,
+}: {
+  citationId: string;
+  citationNumber: string;
+  trigger?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const createDispute = useCreateDispute();
@@ -31,10 +39,14 @@ export function FileDisputeDialog({ citationId, citationNumber }: { citationId: 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border-strong bg-panel px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-panel-elevated">
-          <Scale className="size-4" />
-          Contest Citation
-        </button>
+        {trigger ? (
+          trigger
+        ) : (
+          <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border-strong bg-panel px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-panel-elevated">
+            <Scale className="size-4" />
+            Contest Citation
+          </button>
+        )}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
