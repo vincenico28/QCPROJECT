@@ -1319,9 +1319,12 @@ export const serverDispatchSettlementNotice = createServerFn({ method: "POST" })
     // 1. Dispatch Email Notice
     if (data.sendEmail && data.recipientEmail && data.recipientEmail.includes("@")) {
       try {
+        const motorist = await findCitizenMotoristForPlate(data.plateNumber);
+        const recipientName = motorist?.fullName || data.plateNumber.toUpperCase();
+
         await supabaseAdmin.from("email_logs").insert({
           recipient_email: data.recipientEmail.trim().toLowerCase(),
-          recipient_name: data.plateNumber.toUpperCase(),
+          recipient_name: recipientName,
           citation_number: data.citationNumber,
           subject: `Official Electronic Receipt & LTO Clearance: ${data.citationNumber}`,
           template_name: "Payment Receipt",

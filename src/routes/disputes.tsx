@@ -38,7 +38,16 @@ import { timeAgo, formatPeso } from "@/lib/data/traffic";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
 
+type DisputeSearch = {
+  citation?: string;
+  citationId?: string;
+};
+
 export const Route = createFileRoute("/disputes")({
+  validateSearch: (search: Record<string, unknown>): DisputeSearch => ({
+    citation: typeof search.citation === "string" ? search.citation : undefined,
+    citationId: typeof search.citationId === "string" ? search.citationId : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Traffic Adjudication Board (TAB) Appeals · Culiat Traffic Ops" },
@@ -53,10 +62,14 @@ export const Route = createFileRoute("/disputes")({
 });
 
 export function DisputesPage() {
+  const search = Route.useSearch();
   const { data: disputes = [], isLoading } = useDisputes();
-  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+  const initialQuery = search.citation || search.citationId || "";
+  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">(
+    initialQuery ? "all" : "pending"
+  );
   const [groundFilter, setGroundFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedResolutionDispute, setSelectedResolutionDispute] = useState<Dispute | null>(null);
 
   const availableGrounds = useMemo(() => {
@@ -269,18 +282,32 @@ export function DisputesPage() {
           <Scale className="mb-3 size-8 opacity-30 text-primary" />
           <p className="font-bold text-white text-base">No Adjudication Dockets Match Filter</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-            Try adjusting your search criteria or resetting filters to view all filed motorist protests.
+            {searchQuery
+              ? `No formal adjudication docket found matching "${searchQuery}".`
+              : "Try adjusting your search criteria or resetting filters to view all filed motorist protests."}
           </p>
-          <button
-            onClick={() => {
-              setFilter("all");
-              setGroundFilter("all");
-              setSearchQuery("");
-            }}
-            className="mt-4 rounded-xl border border-border bg-panel px-4 py-2 text-xs font-semibold text-white hover:bg-panel-elevated transition-colors"
-          >
-            Reset Filters
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setFilter("all");
+                setGroundFilter("all");
+                setSearchQuery("");
+              }}
+              className="rounded-xl border border-border bg-panel px-4 py-2 text-xs font-semibold text-white hover:bg-panel-elevated transition-colors"
+            >
+              Reset Filters
+            </button>
+            {searchQuery && (
+              <a
+                href="/citizen"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
+              >
+                <span>Lodge Protest in Citizen Portal</span>
+                <ExternalLink className="size-3" />
+              </a>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">

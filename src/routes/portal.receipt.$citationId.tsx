@@ -105,6 +105,32 @@ function ReceiptPage() {
     timestamp: string;
   } | null>(null);
 
+  // Auto-populate settlement clearance dispatch contacts from citation or citizen session
+  useEffect(() => {
+    if (citation) {
+      let candidateEmail = citation.citizenEmail || "";
+      let candidatePhone = citation.citizenPhone || "";
+
+      try {
+        const storedSession = localStorage.getItem("qc_citizen_session");
+        if (storedSession) {
+          const parsed = JSON.parse(storedSession);
+          if (!candidateEmail && parsed.email) candidateEmail = parsed.email;
+          if (!candidatePhone && parsed.phone) candidatePhone = parsed.phone;
+        }
+      } catch {
+        // Ignore session parse error
+      }
+
+      if (candidateEmail && !dispatchEmail) {
+        setDispatchEmail(candidateEmail);
+      }
+      if (candidatePhone && !dispatchPhone) {
+        setDispatchPhone(candidatePhone);
+      }
+    }
+  }, [citation]);
+
   // Verify Stripe session if session_id is present in query parameters
   useEffect(() => {
     if (search.session_id && !stripeVerified) {
@@ -163,6 +189,7 @@ function ReceiptPage() {
   const clearanceNo = `QC-CLR-2026-${cleanId}`;
   const amount = stripeDetails?.amount || (citation?.amount ? Number(citation.amount) : 2000);
   const plate = citation?.plate_number || "NDB 8921";
+  const registeredOwner = citation?.citizenName || citation?.registeredOwner || null;
 
   const isFailedPayment =
     !stripeVerified &&
@@ -423,7 +450,7 @@ function ReceiptPage() {
               </div>
 
               {/* Key Citation Identifiers */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pb-1">
                 <div>
                   <span className="text-[10px] text-muted-foreground block print:text-neutral-600">Notice of Violation</span>
                   <span className="font-mono-tab font-bold text-white text-xs print:text-black">
@@ -436,7 +463,15 @@ function ReceiptPage() {
                     {plate}
                   </span>
                 </div>
-                <div className="col-span-2 sm:col-span-1">
+                {registeredOwner ? (
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block print:text-neutral-600">Registered Motorist</span>
+                    <span className="font-bold text-white text-xs print:text-black truncate block" title={registeredOwner}>
+                      {registeredOwner}
+                    </span>
+                  </div>
+                ) : null}
+                <div className={cn("col-span-2 sm:col-span-1", !registeredOwner && "sm:col-span-2")}>
                   <span className="text-[10px] text-muted-foreground block print:text-neutral-600">Settlement Status</span>
                   <span className="inline-flex items-center gap-1 font-mono-tab font-bold text-emerald-400 text-xs print:text-emerald-800">
                     <BadgeCheck className="size-3.5" />
@@ -620,6 +655,14 @@ function ReceiptPage() {
                   <span className="font-mono-tab font-black text-emerald-400 underline underline-offset-4 px-1 print:text-black">
                     {plate}
                   </span>
+                  {registeredOwner ? (
+                    <>
+                      {" "}and registered to{" "}
+                      <span className="font-bold text-white uppercase px-1 print:text-black">
+                        {registeredOwner}
+                      </span>
+                    </>
+                  ) : null}
                   , has <span className="font-bold text-white uppercase print:text-black">FULLY SATISFIED, DISCHARGED, AND SETTLED</span> all statutory fines, municipal ordinances, and administrative liabilities associated with Notice of Violation Number{" "}
                   <span className="font-mono-tab font-black text-primary px-1 print:text-black">
                     {citation?.citation_number || citationId}
@@ -636,7 +679,7 @@ function ReceiptPage() {
                 </p>
 
                 {/* Certificate Particulars Table */}
-                <div className="rounded-xl border border-border/80 bg-background/60 p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 my-2 text-xs print:bg-neutral-50 print:border-neutral-300">
+                <div className="rounded-xl border border-border/80 bg-background/60 p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 my-2 text-xs print:bg-neutral-50 print:border-neutral-300">
                   <div>
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider block print:text-neutral-600">
                       Clearance Ref
@@ -651,6 +694,14 @@ function ReceiptPage() {
                     </span>
                     <span className="font-mono-tab font-black text-primary text-xs print:text-black">
                       {receiptNo}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider block print:text-neutral-600">
+                      Registered Owner
+                    </span>
+                    <span className="font-semibold text-white text-xs print:text-black truncate block" title={registeredOwner || "Registered Motorist"}>
+                      {registeredOwner || "Registered Motorist"}
                     </span>
                   </div>
                   <div>
@@ -736,9 +787,17 @@ function ReceiptPage() {
                 <Send className="size-4.5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">
-                  Instant Dispatch to Motorist (SMS & Email)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    Instant Dispatch to Motorist (SMS & Email)
+                  </h3>
+                  {(citation?.isCitizenRegistered || registeredOwner) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
+                      <BadgeCheck className="size-2.5" />
+                      Verified Motorist
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground">
                   Send official copies of the e-OR and LTO Clearance directly to your inbox and phone.
                 </p>

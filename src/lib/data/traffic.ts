@@ -349,6 +349,10 @@ export function useUpdateCitationStatus() {
     onSuccess: (_, { citationId }) => {
       qc.invalidateQueries({ queryKey: ["citations"] });
       qc.invalidateQueries({ queryKey: ["citation", citationId] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["citizen-vehicles"] });
+      qc.invalidateQueries({ queryKey: ["finance-queue"] });
     },
   });
 }

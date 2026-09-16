@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Loader2,
@@ -23,6 +23,8 @@ import {
   ZoomIn,
   ZoomOut,
   Download,
+  Search,
+  BadgeCheck,
 } from "lucide-react";
 import { formatPeso, useCitation, useUpdateCitationStatus } from "@/lib/data/traffic";
 import { parseCitationOffenses } from "@/lib/data/review";
@@ -80,6 +82,7 @@ function PaymentPage() {
   const [payerName, setPayerName] = useState("Juan Dela Cruz");
   const [payerEmail, setPayerEmail] = useState("juan.delacruz@gmail.com");
   const [mobileNumber, setMobileNumber] = useState("0917-882-9411");
+  const [profileAutoFilled, setProfileAutoFilled] = useState(false);
 
   // Card details state
   const [cardNumber, setCardNumber] = useState("4532 •••• •••• 8912");
@@ -89,6 +92,35 @@ function PaymentPage() {
   const { data: citation, isLoading, error } = useCitation(citationId);
   const updateCitation = useUpdateCitationStatus();
   const amount = citation?.amount ? Number(citation.amount) : 2000;
+
+  // Auto-populate from citation's citizen motorist details or active citizen session
+  useEffect(() => {
+    if (citation && !profileAutoFilled) {
+      let candidateName = citation.citizenName || citation.registeredOwner || "";
+      let candidateEmail = citation.citizenEmail || "";
+      let candidatePhone = citation.citizenPhone || "";
+
+      try {
+        const storedSession = localStorage.getItem("qc_citizen_session");
+        if (storedSession) {
+          const parsed = JSON.parse(storedSession);
+          if (!candidateName && parsed.full_name) candidateName = parsed.full_name;
+          if (!candidateEmail && parsed.email) candidateEmail = parsed.email;
+          if (!candidatePhone && parsed.phone) candidatePhone = parsed.phone;
+        }
+      } catch {
+        // Ignore session parse error
+      }
+
+      if (candidateName) setPayerName(candidateName);
+      if (candidateEmail) setPayerEmail(candidateEmail);
+      if (candidatePhone) setMobileNumber(candidatePhone);
+
+      if (candidateName || candidateEmail || citation.isCitizenRegistered) {
+        setProfileAutoFilled(true);
+      }
+    }
+  }, [citation, profileAutoFilled]);
 
   // Breakdown of statutory offenses
   const parsedOffenses = parseCitationOffenses(citation?.offense, amount);
@@ -185,6 +217,8 @@ function PaymentPage() {
         search: {
           method: method,
           provider: method === "gcash" ? "gcash_qrph" : method,
+          email: payerEmail || undefined,
+          phone: mobileNumber || undefined,
         },
       });
     } catch (err) {
@@ -292,6 +326,122 @@ function PaymentPage() {
 
   const gcashQrPayload = `00020101021226600016PH.GCASH.GATEWAY0115${citation.citation_number || citationId}5204601153066085405${amount}.005802PH5924QUEZON CITY LGU TREASURY6011QUEZON CITY62210517QC-NOV-${citation.plate_number}6304`;
 
+  // Dedicated Already Settled View: Prevents accidental duplicate payments
+  if (isAlreadyPaid) {
+    return (
+      <div className="min-h-dvh bg-background text-foreground flex flex-col selection:bg-emerald-500/30">
+        {/* Ambient lighting */}
+        <div className="fixed -top-40 right-1/4 -z-10 h-[500px] w-[500px] rounded-full bg-emerald-500/10 blur-[140px] pointer-events-none" />
+        <div className="fixed bottom-10 -left-20 -z-10 h-[450px] w-[450px] rounded-full bg-primary/10 blur-[130px] pointer-events-none" />
+
+        {/* Header Bar */}
+        <header className="border-b border-border bg-panel/60 backdrop-blur-md sticky top-0 z-30">
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+            <Link
+              to="/citizen"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-white"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to Citizen Portal
+            </Link>
+            <div className="flex items-center gap-2 text-emerald-400 font-mono-tab text-xs font-bold">
+              <CheckCircle2 className="size-4" />
+              <span>SETTLEMENT VERIFIED · LTO HOLD LIFTED</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-2xl px-6 py-12 flex-1 flex flex-col items-center justify-center text-center">
+          <div className="w-full rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/25 via-panel to-panel p-8 sm:p-12 shadow-2xl flex flex-col items-center gap-6">
+            <div className="relative">
+              <div className="absolute -inset-3 rounded-full bg-emerald-500/20 blur-xl animate-pulse" />
+              <div className="relative grid size-20 place-items-center rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 text-emerald-400 shadow-xl">
+                <ShieldCheck className="size-10" />
+              </div>
+            </div>
+
+            <div className="space-y-2 max-w-md">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3.5 py-1 text-xs font-bold text-emerald-300">
+                <CheckCircle2 className="size-3.5" />
+                SETTLEMENT CONFIRMED BY QC TREASURY
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                Notice Already Settled & Cleared
+              </h1>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                This traffic citation has already been satisfied and marked paid. No additional payment is required. The Certificate of Traffic Clearance is active and all LTO registration hold alarms have been cleared.
+              </p>
+            </div>
+
+            {/* Citation Particulars Summary Card */}
+            <div className="w-full rounded-2xl bg-background/60 border border-border p-5 text-left flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border/60 text-xs">
+                <div>
+                  <span className="text-[10px] font-mono-tab uppercase tracking-wider text-muted-foreground block">Notice Identifier</span>
+                  <strong className="font-mono-tab text-white text-sm mt-0.5 block">{citation.citation_number || citationId}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono-tab uppercase tracking-wider text-muted-foreground block">Vehicle License Plate</span>
+                  <span className="inline-block font-mono-tab text-amber-300 font-black text-sm mt-0.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/25">
+                    {citation.plate_number}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10px] font-mono-tab uppercase tracking-wider text-muted-foreground block">Violation Offense</span>
+                  <span className="text-white font-medium">{citation.offense}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-mono-tab uppercase tracking-wider text-muted-foreground block">Amount Settled</span>
+                  <span className="font-mono-tab font-black text-emerald-400 text-sm">{formatPeso(amount)}</span>
+                </div>
+              </div>
+
+              {citation.citizenName && (
+                <div className="pt-2 border-t border-border/60 text-xs flex items-center justify-between text-muted-foreground">
+                  <span>Registered Motorist:</span>
+                  <span className="text-white font-semibold">{citation.citizenName}</span>
+                </div>
+              )}
+            </div>
+
+            {/* LTO Clearance Status Banner */}
+            <div className="w-full rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3.5 flex items-center gap-3 text-left">
+              <BadgeCheck className="size-6 text-emerald-400 shrink-0" />
+              <div className="text-xs">
+                <strong className="text-emerald-300 block">LTO LTMS Vehicle Clearance: ACTIVE</strong>
+                <span className="text-muted-foreground text-[11px]">Cleared for Land Transportation Office registration renewal nationwide.</span>
+              </div>
+            </div>
+
+            {/* CTAs */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+              <Link
+                to="/portal/receipt/$citationId"
+                params={{ citationId: citation.citation_number || citation.id }}
+                className="w-full sm:flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-xs font-bold text-emerald-950 shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 transition-all"
+              >
+                <FileText className="size-4" />
+                View Official Receipt & Clearance
+              </Link>
+
+              <Link
+                to="/lookup"
+                search={{ query: citation.plate_number }}
+                className="w-full sm:flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-panel-elevated px-5 py-3 text-xs font-semibold text-white hover:bg-panel-highlight transition-all"
+              >
+                <Search className="size-4" />
+                Check Plate Violations
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       {/* Header Bar */}
@@ -319,27 +469,33 @@ function PaymentPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8">
-        {/* Already Paid Banner if applicable */}
-        {isAlreadyPaid && (
-          <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="size-6 text-emerald-400 shrink-0" />
-              <div>
-                <p className="text-sm font-bold text-white">This Notice Has Already Been Settled</p>
-                <p className="text-xs text-muted-foreground">
-                  The statutory fine is fully paid and your vehicle is clear of LTO alarms.
-                </p>
-              </div>
+        {/* TAB Appeal & Contest Due Process Banner */}
+        <div className="mb-6 rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-950/40 via-blue-950/20 to-black/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-start gap-3.5">
+            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <Scale className="size-5" />
             </div>
-            <Link
-              to="/portal/receipt/$citationId"
-              params={{ citationId: citation.citation_number || citation.id }}
-              className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-emerald-950 hover:bg-emerald-400 transition-colors shrink-0"
-            >
-              View Official Receipt
-            </Link>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <strong className="text-white text-sm">Disputing this Notice of Violation?</strong>
+                <span className="rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                  Legal Due Process
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Under QC Ordinance No. SP-2957, you have the legal right to submit an official contest to the Traffic Adjudication Board (TAB) for emergency overrides, stolen plates, or enforcer errors before payment.
+              </p>
+            </div>
           </div>
-        )}
+          <Link
+            to="/disputes"
+            search={{ citation: citation.citation_number || citationId }}
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-500/20 transition-colors"
+          >
+            <span>File TAB Contest</span>
+            <ExternalLink className="size-3.5" />
+          </Link>
+        </div>
 
         {/* Payment Failed / Did Not Push Through Alert Banner */}
         {isPaymentFailed && !isAlreadyPaid && (
@@ -689,9 +845,22 @@ function PaymentPage() {
 
               {/* Payer Information */}
               <div className="panel flex flex-col gap-3.5 rounded-2xl p-5 border border-border bg-panel">
-                <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Payer & Official Receipt Credentials
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Payer & Official Receipt Credentials
+                  </span>
+                  {citation.isCitizenRegistered ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                      <ShieldCheck className="size-3" />
+                      Verified Citizen Motorist Profile
+                    </span>
+                  ) : profileAutoFilled ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 border border-blue-500/30 px-2.5 py-0.5 text-[10px] font-bold text-blue-400">
+                      <Check className="size-3" />
+                      Auto-filled from Registry
+                    </span>
+                  ) : null}
+                </div>
 
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-muted-foreground">Full Name (Registered Motorist / Representative)</span>
