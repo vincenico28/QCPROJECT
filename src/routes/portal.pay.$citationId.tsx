@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Loader2,
@@ -92,6 +93,7 @@ function PaymentPage() {
 
   const { data: citation, isLoading, error } = useCitation(citationId);
   const updateCitation = useUpdateCitationStatus();
+  const queryClient = useQueryClient();
   const amount = citation?.amount ? Number(citation.amount) : 2000;
 
   // Auto-populate from citation's citizen motorist details or active citizen session
@@ -211,6 +213,11 @@ function PaymentPage() {
         citationId: citNumber,
         status: "paid",
       });
+
+      queryClient.invalidateQueries({ queryKey: ["finance-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["citations"] });
+      queryClient.invalidateQueries({ queryKey: ["citation", citNumber] });
 
       toast.success("Payment settlement verified!", {
         description: `Official Clearance certificate and Receipt generated for ${citNumber}.`,

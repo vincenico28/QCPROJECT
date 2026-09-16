@@ -33,6 +33,7 @@ import {
   AlertOctagon,
   RotateCcw,
   XCircle,
+  Search,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -66,6 +67,36 @@ function FinanceDashboard() {
     "GCash / Bank Reference Number not found in QC Treasury merchant statement"
   );
   const [customDeclineReason, setCustomDeclineReason] = useState<string>("");
+
+  // Payment Verification Queue Filter & Search
+  const [paymentFilterTab, setPaymentFilterTab] = useState<"pending" | "verified" | "all">("all");
+  const [paymentSearch, setPaymentSearch] = useState<string>("");
+
+  const allList = data?.allPayments || [];
+  const pendingList = data?.pendingPayments || [];
+  const verifiedList = data?.verifiedPayments || [];
+  const pendingCount = pendingList.length;
+  const verifiedCount = verifiedList.length;
+  const allCount = allList.length;
+
+  const basePayments =
+    paymentFilterTab === "pending"
+      ? pendingList
+      : paymentFilterTab === "verified"
+        ? verifiedList
+        : allList;
+
+  const filteredPayments = basePayments.filter((p) => {
+    if (!paymentSearch.trim()) return true;
+    const q = paymentSearch.toLowerCase().trim();
+    return (
+      p.citationId?.toLowerCase().includes(q) ||
+      p.plateNumber?.toLowerCase().includes(q) ||
+      (p.referenceNumber || "")?.toLowerCase().includes(q) ||
+      (p.payerName || "")?.toLowerCase().includes(q) ||
+      (p.offense || "")?.toLowerCase().includes(q)
+    );
+  });
 
   const handleOpenVerifyModal = (
     payment: PaymentQueueItem,
@@ -277,148 +308,263 @@ function FinanceDashboard() {
           {/* Queues Grid */}
           <div className="grid gap-6 lg:grid-cols-2 mt-2">
             {/* Payment Verification Queue */}
-            <div className="panel flex flex-col gap-4 rounded-2xl border border-border bg-panel p-6 shadow-xl h-[520px] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-border/50 pb-4">
-                <h2 className="font-bold text-white flex items-center gap-2 text-base">
-                  <DollarSign className="size-5 text-emerald-400" />
-                  Payment Verification Queue
-                </h2>
-                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 font-mono-tab">
-                  {data.pendingPayments.filter(p => p.status === "pending_verification").length} Pending Verification
-                </span>
-              </div>
+            <div className="panel flex flex-col gap-4 rounded-2xl border border-border bg-panel p-6 shadow-xl h-[560px] overflow-hidden">
+              <div className="flex flex-col gap-3 border-b border-border/50 pb-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold text-white flex items-center gap-2 text-base">
+                    <DollarSign className="size-5 text-emerald-400" />
+                    Payment Verification Queue
+                  </h2>
+                  <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 font-mono-tab">
+                    {pendingCount} Pending Verification
+                  </span>
+                </div>
 
-              <div className="flex flex-col gap-3.5">
-                {data.pendingPayments.map((p) => {
-                  const isVerified = p.status === "verified";
-                  return (
-                    <div
-                      key={p.id}
+                {/* Filter Tabs & Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-1 rounded-xl bg-background/80 p-1 border border-border/60 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFilterTab("pending")}
                       className={cn(
-                        "flex flex-col gap-3 rounded-2xl border p-4.5 transition-all shadow-sm",
-                        isVerified
-                          ? "border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 to-panel"
-                          : "border-border/80 bg-background/80 hover:border-border"
+                        "px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                        paymentFilterTab === "pending"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
+                          : "text-muted-foreground hover:text-white"
                       )}
                     >
-                      {/* Top row: Identifiers & Badges */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono-tab text-sm font-black text-white">
-                              {p.citationId}
-                            </span>
-                            <span className="rounded-md bg-blue-500/20 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-blue-400 border border-blue-500/30 uppercase">
-                              {p.method}
-                            </span>
-                            <span className="font-mono-tab text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded text-white border border-white/20">
-                              {p.plateNumber}
-                            </span>
-                          </div>
+                      <span>Pending</span>
+                      <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[10px] font-mono-tab">
+                        {pendingCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFilterTab("verified")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                        paymentFilterTab === "verified"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                          : "text-muted-foreground hover:text-white"
+                      )}
+                    >
+                      <span>Verified</span>
+                      <span className="rounded-full bg-emerald-500/30 px-1.5 py-0.2 text-[10px] font-mono-tab">
+                        {verifiedCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFilterTab("all")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                        paymentFilterTab === "all"
+                          ? "bg-primary/20 text-primary-foreground border border-primary/40 shadow-sm"
+                          : "text-muted-foreground hover:text-white"
+                      )}
+                    >
+                      <span>All</span>
+                      <span className="rounded-full bg-white/10 px-1.5 py-0.2 text-[10px] font-mono-tab">
+                        {allCount}
+                      </span>
+                    </button>
+                  </div>
 
-                          {/* Itemized details */}
-                          <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
-                            {p.offense && (
-                              <p className="flex items-center gap-1.5 text-white/90">
-                                <span className="text-subtle font-medium">Offense:</span>
-                                <span className="font-semibold text-amber-300">{p.offense}</span>
-                              </p>
-                            )}
-                            <p className="flex items-center gap-1.5">
-                              <span className="text-subtle">Payer:</span>
-                              <span className="text-white font-medium">{p.payerName}</span>
-                              {p.vehicleModel && (
-                                <span className="text-subtle">· Model: <strong className="text-white">{p.vehicleModel}</strong></span>
-                              )}
-                            </p>
-                            <p className="text-[11px] font-mono-tab text-subtle flex items-center gap-1.5 mt-0.5">
-                              <span>Submitted: {new Date(p.submittedDate).toLocaleString("en-PH", { dateStyle: "short", timeStyle: "short" })}</span>
-                              <span>({timeAgo(p.timestamp)})</span>
-                            </p>
-                          </div>
-                        </div>
+                  <div className="relative flex-1 sm:max-w-[220px]">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search ref / plate / cit…"
+                      value={paymentSearch}
+                      onChange={(e) => setPaymentSearch(e.target.value)}
+                      className="w-full rounded-xl bg-background/80 pl-8 pr-7 py-1 text-xs text-white border border-border/60 focus:border-primary focus:outline-none placeholder:text-muted-foreground/60"
+                    />
+                    {paymentSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-                        <div className="text-right shrink-0">
-                          <span className="font-mono-tab text-lg font-black text-emerald-400 block">
-                            {formatPeso(p.amount)}
-                          </span>
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono-tab font-black uppercase mt-1",
-                              isVerified
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse"
-                            )}
-                          >
-                            {isVerified ? "✓ VERIFIED" : "⏳ PENDING AUDIT"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Reference details banner */}
-                      <div className="rounded-xl bg-panel p-2.5 border border-border/60 text-xs flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Smartphone className="size-3.5 text-blue-400" />
-                          <span className="text-subtle text-[11px]">GCash Reference:</span>
-                          <span className="font-mono-tab font-bold text-white text-[11px]">
-                            {p.referenceNumber || "Awaiting Input"}
-                          </span>
-                        </div>
-                        {isVerified && (
-                          <span className="text-[10px] font-bold text-emerald-400 font-mono-tab">
-                            Cleared & Reconciled
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 border-t border-border/50 pt-2.5">
-                        {!isVerified ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenVerifyModal(p, "verify")}
-                              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
-                            >
-                              <ShieldCheck className="size-4" />
-                              <span>Verify GCash Ref</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenVerifyModal(p, "decline")}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition-all cursor-pointer"
-                              title="Decline payment / mark transaction as not pushed through"
-                            >
-                              <AlertOctagon className="size-4" />
-                              <span className="hidden sm:inline">Decline</span>
-                            </button>
-                          </>
-                        ) : (
-                          <a
-                            href={`/portal/receipt/${p.citationId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-panel hover:bg-panel-elevated py-2 text-xs font-semibold text-foreground transition-colors"
-                          >
-                            <Receipt className="size-3.5 text-primary" />
-                            <span>View Official Clearance Receipt</span>
-                            <ExternalLink className="size-3 text-subtle" />
-                          </a>
-                        )}
-                        {p.proofUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedProofPayment(p)}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"
-                          >
-                            <Eye className="size-3.5" />
-                            <span>Proof</span>
-                          </button>
-                        )}
-                      </div>
+              {/* Scrollable payments list */}
+              <div className="flex flex-col gap-3.5 overflow-y-auto pr-1">
+                {filteredPayments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                    <div className="grid size-12 place-items-center rounded-2xl bg-white/5 border border-white/10 text-muted-foreground mb-3">
+                      <DollarSign className="size-6 text-muted-foreground/60" />
                     </div>
-                  );
-                })}
+                    <p className="text-sm font-semibold text-white">No payments found</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      {paymentSearch
+                        ? `No transactions matched "${paymentSearch}". Try clearing your search.`
+                        : paymentFilterTab === "pending"
+                          ? "All online and over-the-counter payments are currently verified and reconciled."
+                          : "No payment records match this filter."}
+                    </p>
+                    {(paymentSearch || paymentFilterTab !== "all") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentSearch("");
+                          setPaymentFilterTab("all");
+                        }}
+                        className="mt-3 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                      >
+                        View All Transactions ({allCount})
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  filteredPayments.map((p) => {
+                    const isVerified = p.status === "verified";
+                    const isRejected = p.status === "rejected" || p.status === "failed";
+                    return (
+                      <div
+                        key={p.id}
+                        className={cn(
+                          "flex flex-col gap-3 rounded-2xl border p-4.5 transition-all shadow-sm",
+                          isVerified
+                            ? "border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 to-panel"
+                            : isRejected
+                              ? "border-rose-500/30 bg-rose-950/10"
+                              : "border-border/80 bg-background/80 hover:border-border"
+                        )}
+                      >
+                        {/* Top row: Identifiers & Badges */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono-tab text-sm font-black text-white">
+                                {p.citationId}
+                              </span>
+                              <span className="rounded-md bg-blue-500/20 px-2 py-0.5 font-mono-tab text-[10px] font-bold text-blue-400 border border-blue-500/30 uppercase">
+                                {p.method}
+                              </span>
+                              <span className="font-mono-tab text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded text-white border border-white/20">
+                                {p.plateNumber}
+                              </span>
+                            </div>
+
+                            {/* Itemized details */}
+                            <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                              {p.offense && (
+                                <p className="flex items-center gap-1.5 text-white/90">
+                                  <span className="text-subtle font-medium">Offense:</span>
+                                  <span className="font-semibold text-amber-300">{p.offense}</span>
+                                </p>
+                              )}
+                              <p className="flex items-center gap-1.5">
+                                <span className="text-subtle">Payer:</span>
+                                <span className="text-white font-medium">{p.payerName}</span>
+                                {p.vehicleModel && (
+                                  <span className="text-subtle">· Model: <strong className="text-white">{p.vehicleModel}</strong></span>
+                                )}
+                              </p>
+                              <p className="text-[11px] font-mono-tab text-subtle flex items-center gap-1.5 mt-0.5">
+                                <span>Submitted: {new Date(p.submittedDate).toLocaleString("en-PH", { dateStyle: "short", timeStyle: "short" })}</span>
+                                <span>({timeAgo(p.timestamp)})</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="font-mono-tab text-lg font-black text-emerald-400 block">
+                              {formatPeso(p.amount)}
+                            </span>
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono-tab font-black uppercase mt-1",
+                                isVerified
+                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  : isRejected
+                                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse"
+                              )}
+                            >
+                              {isVerified ? "✓ VERIFIED" : isRejected ? "✕ DECLINED" : "⏳ PENDING AUDIT"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Reference details banner */}
+                        <div className="rounded-xl bg-panel p-2.5 border border-border/60 text-xs flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Smartphone className="size-3.5 text-blue-400" />
+                            <span className="text-subtle text-[11px]">GCash Reference:</span>
+                            <span className="font-mono-tab font-bold text-white text-[11px]">
+                              {p.referenceNumber || "Awaiting Input"}
+                            </span>
+                          </div>
+                          {isVerified ? (
+                            <span className="text-[10px] font-bold text-emerald-400 font-mono-tab">
+                              Cleared & Reconciled
+                            </span>
+                          ) : isRejected ? (
+                            <span className="text-[10px] font-bold text-rose-400 font-mono-tab">
+                              Payment Not Pushed Through
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-400 font-mono-tab">
+                              Awaiting Cashier Audit
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 border-t border-border/50 pt-2.5">
+                          {!isVerified ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenVerifyModal(p, "verify")}
+                                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+                              >
+                                <ShieldCheck className="size-4" />
+                                <span>Verify GCash Ref</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenVerifyModal(p, "decline")}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition-all cursor-pointer"
+                                title="Decline payment / mark transaction as not pushed through"
+                              >
+                                <AlertOctagon className="size-4" />
+                                <span className="hidden sm:inline">Decline</span>
+                              </button>
+                            </>
+                          ) : (
+                            <a
+                              href={`/portal/receipt/${p.citationId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-panel hover:bg-panel-elevated py-2 text-xs font-semibold text-foreground transition-colors"
+                            >
+                              <Receipt className="size-3.5 text-primary" />
+                              <span>View Official Clearance Receipt</span>
+                              <ExternalLink className="size-3 text-subtle" />
+                            </a>
+                          )}
+                          {p.proofUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProofPayment(p)}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated transition-colors"
+                            >
+                              <Eye className="size-3.5" />
+                              <span>Proof</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 

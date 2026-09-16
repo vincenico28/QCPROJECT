@@ -481,6 +481,8 @@ export function useSettleCitizenCitation() {
       qc.invalidateQueries({ queryKey: ["vehicles"] });
       qc.invalidateQueries({ queryKey: ["registered-vehicles"] });
       qc.invalidateQueries({ queryKey: ["command-dashboard-metrics"] });
+      qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
     },
   });
 }

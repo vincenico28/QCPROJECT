@@ -711,7 +711,7 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
       throw new Error(`Database Error: ${error.message}`);
     }
 
-    // If citation is marked paid or settled, clear LTO alarms and dispatch clearance receipt!
+    // If citation is marked paid or settled, ensure payment record exists, clear LTO alarms, and dispatch clearance receipt!
     if (data.status === "paid" || data.status === "settled" || data.status === "waived") {
       try {
         let citQ = supabaseAdmin
@@ -722,6 +722,29 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
 
         if (citRow?.plate_number) {
           const citNum = citRow.citation_number || data.citationNumber;
+
+          // Check if payment row exists
+          const { data: existingPay } = await supabaseAdmin
+            .from("payments")
+            .select("id")
+            .or(`citation_id.eq.${citNum},citation_id.eq.${data.citationNumber}`)
+            .maybeSingle();
+
+          if (!existingPay) {
+            const cleanCitNum = citNum.replace(/[^0-9]/g, "");
+            const refSuffix = cleanCitNum ? cleanCitNum.slice(-6) : Math.floor(100000 + Math.random() * 900000);
+            await supabaseAdmin.from("payments").insert({
+              citation_id: citNum,
+              plate_number: citRow.plate_number,
+              payer_name: "Registered Motorist",
+              amount: Number(citRow.amount || 2000),
+              method: "over-the-counter",
+              reference_number: `OR-2026-${refSuffix}`,
+              status: "verified",
+              submitted_date: new Date().toISOString(),
+            });
+          }
+
           await clearVehicleLtoAlarms(citRow.plate_number, citNum);
           await dispatchPaymentReceiptNotice(citRow.plate_number, citNum, {
             amount: Number(citRow.amount || 0),
@@ -1127,6 +1150,9 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
     const receiptNumber = data.referenceNumber?.trim() || `OR-2026-${Math.floor(100000 + Math.random() * 900000)}`;
     const paidAt = new Date().toISOString();
 
+    const isManualGateway = data.paymentMethod === "gcash" || data.paymentMethod === "maya";
+    const paymentStatus = isManualGateway ? "pending_verification" : "verified";
+
     const { error: insertErr } = await supabaseAdmin
       .from("payments")
       .insert({
@@ -1136,7 +1162,7 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
         amount: data.amount,
         method: data.paymentMethod,
         reference_number: receiptNumber,
-        status: "verified",
+        status: paymentStatus,
         submitted_date: paidAt,
       });
 
@@ -1992,6 +2018,11 @@ export const serverFetchFinanceQueue = createServerFn({ method: "GET" })
         if (c.id) citMap.set(c.id, c);
       });
 
+      const existingPayCitIds = new Set<string>();
+      (paymentsReq.data || []).forEach((p: any) => {
+        if (p.citation_id) existingPayCitIds.add(p.citation_id);
+      });
+
       const enrichedPayments = (paymentsReq.data || []).map((p: any) => {
         const cit = citMap.get(p.citation_id) || {};
         return {
@@ -2002,6 +2033,41 @@ export const serverFetchFinanceQueue = createServerFn({ method: "GET" })
           citation_issued_at: cit.issued_at || null,
           citation_status: cit.status || null,
         };
+      });
+
+      // Synthesize verified payment entries for citations marked 'paid' or 'settled' that don't have a payment record
+      (citationsReq.data || []).forEach((c: any) => {
+        const isPaidStatus = c.status === "paid" || c.status === "settled";
+        if (isPaidStatus && !existingPayCitIds.has(c.citation_number) && !existingPayCitIds.has(c.id)) {
+          const citNum = c.citation_number || c.id;
+          const cleanCitNum = citNum.replace(/[^0-9]/g, "");
+          const refSuffix = cleanCitNum ? cleanCitNum.slice(-6) : Math.floor(100000 + Math.random() * 900000);
+          enrichedPayments.push({
+            id: `pay-cit-${c.id || citNum}`,
+            citation_id: citNum,
+            plate_number: c.plate_number || "QC-PLATE",
+            payer_name: "Registered Motorist",
+            amount: Number(c.amount || 2000),
+            method: "over-the-counter",
+            reference_number: `OR-2026-${refSuffix}`,
+            proof_url: null,
+            status: "verified",
+            submitted_date: c.issued_at || new Date().toISOString(),
+            created_at: c.issued_at || new Date().toISOString(),
+            offense: c.offense || null,
+            vehicle_model: c.vehicle_model || null,
+            officer_name: c.officer_name || null,
+            citation_issued_at: c.issued_at || null,
+            citation_status: c.status || "paid",
+          });
+        }
+      });
+
+      // Sort all payments by timestamp descending (newest first)
+      enrichedPayments.sort((a: any, b: any) => {
+        const timeA = new Date(a.submitted_date || a.created_at || 0).getTime();
+        const timeB = new Date(b.submitted_date || b.created_at || 0).getTime();
+        return timeB - timeA;
       });
 
       return {
@@ -2281,7 +2347,7 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
       }
 
       let vehicles = Array.from(combinedVehiclesMap.values());
-      if (vehicles.length === 0) {
+      if (vehicles.length === 0 && profile.id === "a0000000-0000-0000-0000-000000000001") {
         vehicles = [
           {
             id: "veh-001",
@@ -2307,20 +2373,6 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
         return plateCompacts.has(cCompact);
       });
 
-      // Update vehicle ltoAlarmStatus dynamically based on real citation state
-      vehicles = vehicles.map((v: any) => {
-        const vCompact = v.plateNumber.replace(/[\s-]/g, "").toUpperCase();
-        const hasUnpaid = cmdCitations.some(
-          (c: any) =>
-            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === vCompact &&
-            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
-        );
-        return {
-          ...v,
-          ltoAlarmStatus: hasUnpaid ? ("LTO_ALARM_ACTIVE" as const) : ("CLEARED" as const),
-        };
-      });
-
       // Fetch all payment records to cross-reference payment verification and failures
       const citNumbers = (cmdCitations || []).map((c: any) => c.citation_number).filter(Boolean);
       const citIds = (cmdCitations || []).map((c: any) => c.id).filter(Boolean);
@@ -2331,9 +2383,27 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
         .select("*")
         .order("created_at", { ascending: false });
 
+      // STRICT citation payment matching: payments must strictly correspond to the citation identifier
       const matchedPayments = (payRows || []).filter((p: any) => {
-        const pPlate = (p.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
-        return allCitIdentifiers.has(p.citation_id) || plateCompacts.has(pPlate);
+        return allCitIdentifiers.has(p.citation_id);
+      });
+
+      // Update vehicle ltoAlarmStatus dynamically based on real citation state
+      vehicles = vehicles.map((v: any) => {
+        const vCompact = v.plateNumber.replace(/[\s-]/g, "").toUpperCase();
+        const hasUnpaid = cmdCitations.some((c: any) => {
+          const cCompact = (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
+          if (cCompact !== vCompact) return false;
+          const citPayment = matchedPayments.find(
+            (p: any) => (p.citation_id === c.citation_number || p.citation_id === c.id) && p.status === "verified"
+          );
+          const isCitPaid = c.status === "paid" || c.status === "settled" || !!citPayment;
+          return !isCitPaid && c.status !== "appealed" && c.status !== "dismissed";
+        });
+        return {
+          ...v,
+          ltoAlarmStatus: hasUnpaid ? ("LTO_ALARM_ACTIVE" as const) : ("CLEARED" as const),
+        };
       });
 
       const { parseEvidenceUrls } = await import("@/lib/storage");
@@ -2341,15 +2411,10 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
       let citations: any[] = (cmdCitations || []).map((cmd: any) => {
         const cmdNov = cmd.citation_number;
         const cmdId = cmd.id;
-        const cmdPlate = (cmd.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
 
-        // Match latest payment record for this citation
+        // Match latest payment record strictly for this citation (NEVER fall back to plate matching)
         const payment = matchedPayments.find(
-          (p: any) =>
-            p.citation_id === cmdNov ||
-            p.citation_id === cmdId ||
-            ((p.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === cmdPlate &&
-              Math.abs(new Date(p.created_at).getTime() - new Date(cmd.issued_at).getTime()) < 86400000 * 30)
+          (p: any) => p.citation_id === cmdNov || p.citation_id === cmdId
         );
 
         const isPaid = cmd.status === "paid" || cmd.status === "settled" || payment?.status === "verified";
@@ -2358,14 +2423,14 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           cmd.status === "failed" ||
           payment?.status === "failed" ||
           payment?.status === "rejected";
-        const isPending = cmd.status === "pending" || payment?.status === "pending_verification";
+        const isPendingVerification = payment?.status === "pending_verification";
 
         let paymentStatus: "verified" | "failed" | "pending_verification" | "none" = "none";
         if (isPaid) {
           paymentStatus = "verified";
         } else if (isFailed) {
           paymentStatus = "failed";
-        } else if (isPending) {
+        } else if (isPendingVerification) {
           paymentStatus = "pending_verification";
         }
 
@@ -2374,10 +2439,12 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           citationStatus = "settled";
         } else if (isFailed) {
           citationStatus = "payment_failed";
-        } else if (isPending) {
+        } else if (isPendingVerification) {
           citationStatus = "payment_pending";
-        } else if (cmd.status === "appealed") {
+        } else if (cmd.status === "appealed" || cmd.status === "contested" || cmd.status === "disputed") {
           citationStatus = "appealed";
+        } else {
+          citationStatus = "unpaid";
         }
 
         const rawEvidence = cmd.evidence_url || cmd.violations?.evidence_url;
@@ -2423,7 +2490,8 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
         };
       });
 
-      if (citations.length === 0) {
+      const isDefaultDemoAccount = profile.id === "a0000000-0000-0000-0000-000000000001";
+      if (citations.length === 0 && isDefaultDemoAccount && (vRows || []).length === 0) {
         const primaryPlate = vehicles[0]?.plateNumber || "NDB 8921";
         citations = [
           {

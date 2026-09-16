@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   serverUpdateCitationStatus,
   serverFetchFinanceQueue,
@@ -51,6 +53,27 @@ export type CashDrawer = {
 let DRAWER_SETTLED = false;
 
 export function useFinanceQueue() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("finance_realtime_sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => {
+        qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
+        qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "refunds" }, () => {
+        qc.invalidateQueries({ queryKey: ["finance-queue"] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   return useQuery({
     queryKey: ["finance-queue"],
     queryFn: async () => {
@@ -110,7 +133,10 @@ export function useFinanceQueue() {
         .reduce((sum, x) => sum + x.amount, 0);
 
       return {
+        allPayments: payments,
         pendingPayments: payments.filter(x => x.status === "pending_verification"),
+        verifiedPayments: payments.filter(x => x.status === "verified"),
+        rejectedPayments: payments.filter(x => x.status === "rejected" || x.status === "failed"),
         pendingRefunds: refunds.filter(x => x.status === "pending"),
         dailyDrawer: {
           openingBalance,
