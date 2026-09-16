@@ -321,6 +321,189 @@ export const serverUpdateViolationStatus = createServerFn({ method: "POST" })
   });
 
 // -------------------------------------------------------------
+// CITIZEN MOTORIST & EMAIL DISPATCH HELPERS
+// -------------------------------------------------------------
+async function findCitizenMotoristForPlate(plateNumber: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const compact = plateNumber.replace(/[\s-]/g, "").toUpperCase();
+
+  try {
+    const [cvRes, vehRes, profRes] = await Promise.all([
+      supabaseAdmin.from("citizen_vehicles").select("id, citizen_id, plate_number, make_model"),
+      supabaseAdmin.from("vehicles").select("plate_number, registered_owner"),
+      supabaseAdmin.from("citizen_profiles").select("id, full_name, email, phone"),
+    ]);
+
+    const profMap = new Map<string, any>();
+    for (const p of profRes.data || []) {
+      profMap.set(p.id, p);
+    }
+
+    const cvMatch = (cvRes.data || []).find(
+      (cv: any) => (cv.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compact
+    );
+
+    if (cvMatch?.citizen_id) {
+      const prof = profMap.get(cvMatch.citizen_id);
+      if (prof?.email) {
+        return {
+          isCitizenRegistered: true,
+          fullName: prof.full_name || "Registered Citizen Motorist",
+          email: prof.email,
+          phone: prof.phone || undefined,
+          vehicleModel: cvMatch.make_model || undefined,
+        };
+      }
+    }
+
+    // Fallback to vehicles registry
+    const vehMatch = (vehRes.data || []).find(
+      (v: any) => (v.plate_number || "").replace(/[\s-]/g, "").toUpperCase() === compact
+    );
+
+    if (vehMatch?.registered_owner) {
+      return {
+        isCitizenRegistered: false,
+        fullName: vehMatch.registered_owner,
+        email: `motorist.${compact.toLowerCase()}@motorist.qc.gov.ph`,
+        phone: undefined,
+        vehicleModel: undefined,
+      };
+    }
+  } catch (findErr) {
+    console.warn("[findCitizenMotoristForPlate]", findErr);
+  }
+
+  return null;
+}
+
+// Shared helper to clear vehicle LTO alarms if no unpaid citations remain
+async function clearVehicleLtoAlarms(plateNumber: string, currentCitationNumber?: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  try {
+    const compact = plateNumber.replace(/[\s-]/g, "").toUpperCase();
+    let query = supabaseAdmin
+      .from("citations")
+      .select("id, status, plate_number");
+
+    if (currentCitationNumber) {
+      query = query.neq("citation_number", currentCitationNumber).neq("id", currentCitationNumber);
+    }
+
+    const { data: allCitations } = await query;
+
+    const remainingUnpaid = (allCitations || []).filter(
+      (c: any) =>
+        c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+        (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
+    );
+
+    if (remainingUnpaid.length === 0) {
+      const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+      const matchingVeh = (allVehs || []).find(
+        (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+      );
+      if (matchingVeh) {
+        await supabaseAdmin
+          .from("vehicles")
+          .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+          .eq("plate_number", matchingVeh.plate_number);
+      }
+
+      const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+      const matchingCv = (allCv || []).filter(
+        (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+      );
+      for (const cv of matchingCv) {
+        await supabaseAdmin
+          .from("citizen_vehicles")
+          .update({ lto_alarm_status: "CLEARED" })
+          .eq("id", cv.id);
+      }
+    }
+  } catch (err) {
+    console.warn("[clearVehicleLtoAlarms]", err);
+  }
+}
+
+// Shared helper to dispatch citation notice email to registered motorist
+async function dispatchCitizenNoticeEmail(
+  plateNumber: string,
+  citationNumber: string,
+  offense: string,
+  amount: number,
+  issuedAt: string
+) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  try {
+    const motorist = await findCitizenMotoristForPlate(plateNumber);
+    const recipientEmail = motorist?.email || `motorist.${plateNumber.replace(/[\s-]/g, "").toLowerCase()}@motorist.qc.gov.ph`;
+    const recipientName = motorist?.fullName || "Registered Motorist";
+
+    const emailSubject = `QC LGU & MMDA NCAP: Official Notice of Violation (${citationNumber})`;
+    await supabaseAdmin.from("email_logs").insert({
+      recipient_email: recipientEmail,
+      recipient_name: recipientName,
+      citation_number: citationNumber,
+      subject: emailSubject,
+      template_name: "Citation Notice",
+      status: "delivered",
+      sent_at: issuedAt,
+    });
+
+    await supabaseAdmin.from("audit_logs").insert({
+      actor_name: "QC Automated Communications Gateway",
+      actor_role: "system",
+      action: "AUTO_CITATION_NOTICE_DISPATCHED",
+      target_resource: `Citation: ${citationNumber} (Plate: ${plateNumber})`,
+      details: `Automated Notice of Violation email logged for ${recipientName} (${recipientEmail}) · Offense: ${offense} · Fine: ₱${Number(amount).toLocaleString()}`,
+    });
+  } catch (err) {
+    console.warn("[dispatchCitizenNoticeEmail]", err);
+  }
+}
+
+// Shared helper to dispatch payment receipt & LTO clearance email to registered motorist
+async function dispatchPaymentReceiptNotice(
+  plateNumber: string,
+  citationNumber: string,
+  options?: {
+    payerName?: string;
+    payerEmail?: string;
+    amount?: number;
+    receiptNumber?: string;
+    method?: string;
+  }
+) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  try {
+    const motorist = await findCitizenMotoristForPlate(plateNumber);
+    const recipientEmail = options?.payerEmail || motorist?.email || `motorist.${citationNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`;
+    const recipientName = options?.payerName || motorist?.fullName || "Verified Motorist";
+
+    await supabaseAdmin.from("email_logs").insert({
+      recipient_email: recipientEmail,
+      recipient_name: recipientName,
+      citation_number: citationNumber,
+      subject: `Official Electronic Receipt & LTO Clearance: ${citationNumber}`,
+      template_name: "Payment Receipt",
+      status: "delivered",
+      sent_at: new Date().toISOString(),
+    });
+
+    await supabaseAdmin.from("audit_logs").insert({
+      actor_name: "QC Treasury / Settlement Gateway",
+      actor_role: "finance",
+      action: "AUTO_PAYMENT_CLEARANCE_DISPATCHED",
+      target_resource: `Citation: ${citationNumber} (Plate: ${plateNumber})`,
+      details: `Official Electronic Receipt and LTO Clearance confirmation dispatched to ${recipientName} (${recipientEmail})${options?.receiptNumber ? ` · Ref: ${options.receiptNumber}` : ""}`,
+    });
+  } catch (err) {
+    console.warn("[dispatchPaymentReceiptNotice]", err);
+  }
+}
+
+// -------------------------------------------------------------
 // 2. CITATIONS
 // -------------------------------------------------------------
 const citationInsertSchema = z.object({
@@ -500,6 +683,9 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
       } catch (syncErr) {
         console.warn("[Citation] Could not sync LTO alarm tag:", syncErr);
       }
+
+      // 3. Automated Citizen Motorist Email Notice Dispatch
+      await dispatchCitizenNoticeEmail(plate, citation_number, data.offense, data.amount, issued_at);
     }
 
     return row || { id, citation_number, plate_number: plate, offense: data.offense, amount: data.amount, status, officer_name: officerName, issued_at };
@@ -525,53 +711,21 @@ export const serverUpdateCitationStatus = createServerFn({ method: "POST" })
       throw new Error(`Database Error: ${error.message}`);
     }
 
-    // If citation is marked paid or settled, verify if vehicle has other unpaid citations.
-    // If not, clear the LTO alarm tags!
+    // If citation is marked paid or settled, clear LTO alarms and dispatch clearance receipt!
     if (data.status === "paid" || data.status === "settled" || data.status === "waived") {
       try {
         let citQ = supabaseAdmin
           .from("citations")
-          .select("plate_number");
+          .select("id, citation_number, plate_number, offense, amount");
         citQ = applyCitationIdentifierFilter(citQ, data.citationNumber);
         const { data: citRow } = await citQ.maybeSingle();
 
         if (citRow?.plate_number) {
-          const compact = citRow.plate_number.replace(/[\s-]/g, "").toUpperCase();
-          const { data: allCitations } = await supabaseAdmin
-            .from("citations")
-            .select("id, status, plate_number")
-            .neq("citation_number", data.citationNumber);
-
-          const remainingUnpaid = (allCitations || []).filter(
-            (c: any) =>
-              c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
-              (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
-          );
-
-          if (remainingUnpaid.length === 0) {
-            // All cleared!
-            const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
-            const matchingVeh = (allVehs || []).find(
-              (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-            );
-            if (matchingVeh) {
-              await supabaseAdmin
-                .from("vehicles")
-                .update({ lto_alarm_tagged: false, risk_level: "Clean" })
-                .eq("plate_number", matchingVeh.plate_number);
-            }
-
-            const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
-            const matchingCv = (allCv || []).filter(
-              (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-            );
-            for (const cv of matchingCv) {
-              await supabaseAdmin
-                .from("citizen_vehicles")
-                .update({ lto_alarm_status: "CLEARED" })
-                .eq("id", cv.id);
-            }
-          }
+          const citNum = citRow.citation_number || data.citationNumber;
+          await clearVehicleLtoAlarms(citRow.plate_number, citNum);
+          await dispatchPaymentReceiptNotice(citRow.plate_number, citNum, {
+            amount: Number(citRow.amount || 0),
+          });
         }
       } catch (clearErr) {
         console.warn("[Citation] Error checking remaining citations for vehicle clearance:", clearErr);
@@ -1217,54 +1371,7 @@ export const serverDispatchSettlementNotice = createServerFn({ method: "POST" })
     };
   });
 
-// Shared helper to clear vehicle LTO alarms if no unpaid citations remain
-async function clearVehicleLtoAlarms(plateNumber: string, currentCitationNumber?: string) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  try {
-    const compact = plateNumber.replace(/[\s-]/g, "").toUpperCase();
-    let query = supabaseAdmin
-      .from("citations")
-      .select("id, status, plate_number");
-
-    if (currentCitationNumber) {
-      query = query.neq("citation_number", currentCitationNumber).neq("id", currentCitationNumber);
-    }
-
-    const { data: allCitations } = await query;
-
-    const remainingUnpaid = (allCitations || []).filter(
-      (c: any) =>
-        c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
-        (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
-    );
-
-    if (remainingUnpaid.length === 0) {
-      const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
-      const matchingVeh = (allVehs || []).find(
-        (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-      );
-      if (matchingVeh) {
-        await supabaseAdmin
-          .from("vehicles")
-          .update({ lto_alarm_tagged: false, risk_level: "Clean" })
-          .eq("plate_number", matchingVeh.plate_number);
-      }
-
-      const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
-      const matchingCv = (allCv || []).filter(
-        (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-      );
-      for (const cv of matchingCv) {
-        await supabaseAdmin
-          .from("citizen_vehicles")
-          .update({ lto_alarm_status: "CLEARED" })
-          .eq("id", cv.id);
-      }
-    }
-  } catch (err) {
-    console.warn("[clearVehicleLtoAlarms]", err);
-  }
-}
+// Note: clearVehicleLtoAlarms is hoisted above for global availability
 
 // -------------------------------------------------------------
 // 6B. STRIPE & GCASH CHECKOUT GATEWAY
@@ -1434,6 +1541,12 @@ export const serverVerifyStripeSession = createServerFn({ method: "POST" })
       }
 
       await clearVehicleLtoAlarms(plateNumber, data.citationNumber);
+      await dispatchPaymentReceiptNotice(plateNumber, data.citationNumber, {
+        payerName: "Verified Motorist (Stripe Test Simulator)",
+        amount,
+        receiptNumber,
+        method: "GCash (Stripe Test Mode)",
+      });
 
       return {
         verified: true,
@@ -1519,6 +1632,13 @@ export const serverVerifyStripeSession = createServerFn({ method: "POST" })
     }
 
     await clearVehicleLtoAlarms(plateNumber, citNumber);
+    await dispatchPaymentReceiptNotice(plateNumber, citNumber, {
+      payerName,
+      payerEmail: session.customer_email || undefined,
+      amount,
+      receiptNumber,
+      method: paymentMethod,
+    });
 
     return {
       verified: true,
@@ -1922,47 +2042,15 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
     await verifyUpdQ;
 
     // 3. Clear vehicle LTO alarms if no unpaid citations remain
+    let resolvedPlate = "";
     try {
       let citQuery = supabaseAdmin.from("citations").select("plate_number");
       citQuery = applyCitationIdentifierFilter(citQuery, data.citationId);
       const { data: citRow } = await citQuery.maybeSingle();
 
       if (citRow?.plate_number) {
-        const compact = citRow.plate_number.replace(/[\s-]/g, "").toUpperCase();
-        const { data: allCitations } = await supabaseAdmin
-          .from("citations")
-          .select("id, status, plate_number")
-          .neq("citation_number", data.citationId);
-
-        const remainingUnpaid = (allCitations || []).filter(
-          (c: any) =>
-            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
-            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
-        );
-
-        if (remainingUnpaid.length === 0) {
-          const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
-          const matchingVeh = (allVehs || []).find(
-            (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-          );
-          if (matchingVeh) {
-            await supabaseAdmin
-              .from("vehicles")
-              .update({ lto_alarm_tagged: false, risk_level: "Clean" })
-              .eq("plate_number", matchingVeh.plate_number);
-          }
-
-          const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
-          const matchingCv = (allCv || []).filter(
-            (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-          );
-          for (const cv of matchingCv) {
-            await supabaseAdmin
-              .from("citizen_vehicles")
-              .update({ lto_alarm_status: "CLEARED" })
-              .eq("id", cv.id);
-          }
-        }
+        resolvedPlate = citRow.plate_number;
+        await clearVehicleLtoAlarms(resolvedPlate, data.citationId);
       }
     } catch (clearErr) {
       console.warn("[Finance] Error checking remaining citations for vehicle clearance:", clearErr);
@@ -1979,18 +2067,9 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
       });
 
       // Dispatch settlement confirmation email log to communications hub
-      try {
-        await supabaseAdmin.from("email_logs").insert({
-          recipient_email: `motorist.${data.citationId.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`,
-          recipient_name: "Verified Motorist",
-          citation_number: data.citationId,
-          subject: `Official Electronic Receipt & LTO Clearance: ${data.citationId}`,
-          template_name: "Payment Receipt",
-          status: "delivered",
-        });
-      } catch (eLogErr) {
-        console.warn("[Finance] Error logging verified payment notice:", eLogErr);
-      }
+      await dispatchPaymentReceiptNotice(resolvedPlate || data.citationId, data.citationId, {
+        receiptNumber: data.referenceNumber,
+      });
     } catch (auditErr) {
       console.warn(auditErr);
     }
@@ -2063,13 +2142,29 @@ export const serverDeclinePayment = createServerFn({ method: "POST" })
 
       // Dispatch settlement declined email log
       try {
+        let recipientEmail = `motorist.${data.citationId.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`;
+        let recipientName = "Citizen Motorist";
+
+        let citQ = supabaseAdmin.from("citations").select("plate_number");
+        citQ = applyCitationIdentifierFilter(citQ, data.citationId);
+        const { data: citRow } = await citQ.maybeSingle();
+
+        if (citRow?.plate_number) {
+          const motorist = await findCitizenMotoristForPlate(citRow.plate_number);
+          if (motorist) {
+            recipientEmail = motorist.email;
+            recipientName = motorist.fullName;
+          }
+        }
+
         await supabaseAdmin.from("email_logs").insert({
-          recipient_email: `motorist.${data.citationId.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`,
-          recipient_name: "Citizen Motorist",
+          recipient_email: recipientEmail,
+          recipient_name: recipientName,
           citation_number: data.citationId,
-          subject: `Payment Incomplete / Declined Notice: ${data.citationId}`,
+          subject: `Action Required: Payment Incomplete / Declined Notice: ${data.citationId}`,
           template_name: "Payment Declined",
           status: "delivered",
+          sent_at: failedAt,
         });
       } catch (eLogErr) {
         console.warn("[Finance] Error logging declined payment notice:", eLogErr);

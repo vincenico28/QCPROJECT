@@ -22,6 +22,7 @@ import {
   X,
   Eye,
   FileCheck2,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -48,6 +49,7 @@ const TYPES = [
   "Payment Receipt",
   "Warning Reminder",
   "TAB Appeal Resolution",
+  "Payment Declined",
 ] as const;
 
 function CommunicationsPage() {
@@ -75,8 +77,11 @@ function CommunicationsPage() {
       return (
         log.subject.toLowerCase().includes(q) ||
         log.recipient.toLowerCase().includes(q) ||
+        (log.recipientName ?? "").toLowerCase().includes(q) ||
         (log.citationNumber ?? "").toLowerCase().includes(q) ||
-        (log.plateNumber ?? "").toLowerCase().includes(q)
+        (log.plateNumber ?? "").toLowerCase().includes(q) ||
+        (log.offense ?? "").toLowerCase().includes(q) ||
+        (log.vehicleModel ?? "").toLowerCase().includes(q)
       );
     });
   }, [logs, typeFilter, searchQuery]);
@@ -338,7 +343,16 @@ function CommunicationsPage() {
           {/* Live Delivery Stream */}
           <div className="panel lg:col-span-2 flex flex-col gap-4 rounded-2xl border border-border p-6 shadow-xl h-[580px] overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/50 pb-4">
-              <h2 className="font-bold text-white text-base">Real-Time Email Dispatch Stream</h2>
+              <div className="flex items-center gap-2.5">
+                <h2 className="font-bold text-white text-base">Real-Time Email Dispatch Stream</h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                  <span className="relative flex size-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500"></span>
+                  </span>
+                  Realtime Sync
+                </span>
+              </div>
 
               {/* Filters */}
               <div className="flex items-center gap-2">
@@ -373,19 +387,38 @@ function CommunicationsPage() {
                   onClick={() => setSelectedEmail(log)}
                   className="group flex flex-col gap-2 rounded-xl border border-border bg-background/50 p-4 transition-all hover:bg-background/90 hover:border-primary/40 cursor-pointer shadow-sm"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 pr-4">
-                      <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-sm text-white group-hover:text-primary transition-colors">
                           {log.subject}
                         </span>
                         {log.plateNumber && (
-                          <span className="rounded bg-primary/15 px-1.5 py-0.2 font-mono-tab text-[9px] font-bold text-primary">
+                          <span className="rounded bg-primary/15 border border-primary/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-primary">
                             {log.plateNumber}
                           </span>
                         )}
+                        {log.amount && (
+                          <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono-tab text-[9px] font-bold text-amber-400">
+                            ₱{log.amount.toLocaleString()}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{log.recipient}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                        {log.recipientName && (
+                          <>
+                            <strong className="text-white/80 font-medium">{log.recipientName}</strong>
+                            <span>·</span>
+                          </>
+                        )}
+                        <span className="truncate">{log.recipient}</span>
+                        {log.vehicleModel && (
+                          <>
+                            <span>·</span>
+                            <span className="text-white/50 text-[11px] truncate">{log.vehicleModel}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <span
@@ -405,8 +438,14 @@ function CommunicationsPage() {
                     </span>
                   </div>
 
+                  {log.offense && (
+                    <div className="text-[11px] text-amber-300/80 bg-amber-950/20 border border-amber-500/20 rounded px-2 py-0.5 w-fit">
+                      Offense: <span className="font-semibold text-white/90">{log.offense}</span>
+                    </div>
+                  )}
+
                   {log.previewBody && (
-                    <p className="text-xs text-white/70 line-clamp-2 leading-relaxed mt-1">
+                    <p className="text-xs text-white/70 line-clamp-2 leading-relaxed mt-0.5">
                       {log.previewBody}
                     </p>
                   )}
@@ -427,15 +466,15 @@ function CommunicationsPage() {
         <Dialog.Root open onOpenChange={(o) => !o && setSelectedEmail(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-panel p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
               <div className="flex items-start justify-between border-b border-border pb-3">
                 <div>
                   <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
                     <MailOpen className="size-4 text-primary" />
-                    Official Email Transmission Preview
+                    Official Email Transmission Dispatch
                   </Dialog.Title>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Recipient: <strong className="text-white">{selectedEmail.recipient}</strong>
+                    Transmitted to: <strong className="text-white">{selectedEmail.recipientName ? `${selectedEmail.recipientName} (${selectedEmail.recipient})` : selectedEmail.recipient}</strong>
                   </p>
                 </div>
                 <Dialog.Close asChild>
@@ -445,62 +484,242 @@ function CommunicationsPage() {
                 </Dialog.Close>
               </div>
 
-              {/* Rendered HTML email body */}
-              <div className="mt-4 rounded-2xl border border-border bg-white text-black p-6 shadow-inner flex flex-col gap-4 font-sans">
-                {/* Government Header */}
-                <div className="flex items-center justify-between border-b border-neutral-200 pb-4">
+              {/* Rendered Government Letterhead Email Body */}
+              <div className="mt-4 rounded-2xl border border-neutral-300 bg-neutral-50 text-neutral-900 p-6 sm:p-8 shadow-inner flex flex-col gap-5 font-sans">
+                {/* Government Official Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-neutral-800 pb-4 gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="grid size-10 place-items-center rounded-xl bg-blue-600 text-white font-bold text-xs">
+                    <div className="grid size-12 place-items-center rounded-2xl bg-blue-900 text-white font-black text-sm shadow-md border-2 border-amber-400">
                       QC
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-neutral-900 leading-tight">Barangay Culiat, Quezon City</h4>
-                      <p className="text-[10px] uppercase tracking-wider text-neutral-500">MMDA NCAP Traffic Enforcement Department</p>
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-neutral-500 font-bold block">
+                        Republic of the Philippines
+                      </span>
+                      <h3 className="font-black text-base text-blue-950 tracking-tight leading-tight">
+                        QUEZON CITY GOVERNMENT
+                      </h3>
+                      <p className="text-[11px] font-semibold text-neutral-700">
+                        Department of Public Order and Safety (DPOS) · MMDA NCAP Operations
+                      </p>
                     </div>
                   </div>
-                  <span className="rounded bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold font-mono">
-                    {selectedEmail.id}
+
+                  <div className="flex flex-col sm:items-end text-xs font-mono">
+                    <span className="rounded bg-blue-900 text-amber-300 px-2.5 py-0.5 text-[10px] font-bold tracking-wider">
+                      TRANSMISSION REF: {selectedEmail.id.slice(0, 13)}
+                    </span>
+                    <span className="text-[10px] text-neutral-500 mt-1">
+                      {new Date(selectedEmail.timestamp).toLocaleString("en-PH", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Recipient & Metadata Card */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-white border border-neutral-200 p-4 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider">Registered Motorist</span>
+                    <strong className="text-neutral-900 text-sm block mt-0.5">
+                      {selectedEmail.recipientName || "Registered Vehicle Owner"}
+                    </strong>
+                    <span className="text-neutral-500 text-[11px] break-all">{selectedEmail.recipient}</span>
+                  </div>
+
+                  <div className="flex flex-col sm:items-end justify-center">
+                    <span className="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider">Notice Identifier</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <strong className="font-mono text-sm text-blue-950">
+                        {selectedEmail.citationNumber || "NOV-NOTICE-REF"}
+                      </strong>
+                      {selectedEmail.plateNumber && (
+                        <span className="rounded bg-amber-100 border border-amber-300 px-2 py-0.5 font-mono text-[10px] font-black text-amber-900">
+                          {selectedEmail.plateNumber}
+                        </span>
+                      )}
+                    </div>
+                    {selectedEmail.vehicleModel && (
+                      <span className="text-neutral-500 text-[11px] mt-0.5">{selectedEmail.vehicleModel}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Email Subject Headline */}
+                <div className="border-l-4 border-blue-800 pl-3 py-1">
+                  <h4 className="text-base font-black text-blue-950">{selectedEmail.subject}</h4>
+                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
+                    Category: {selectedEmail.type} · Delivery: {selectedEmail.status}
                   </span>
                 </div>
 
-                {/* Email Subject & Meta */}
-                <div>
-                  <h3 className="text-base font-bold text-neutral-900">{selectedEmail.subject}</h3>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Sent: {new Date(selectedEmail.timestamp).toLocaleString("en-PH")}
-                  </p>
-                </div>
-
-                {/* Body */}
-                <div className="rounded-xl bg-neutral-50 border border-neutral-200 p-4 text-xs text-neutral-800 leading-relaxed">
-                  <p className="font-semibold text-neutral-900 mb-2">Dear Registered Motorist / Citizen,</p>
-                  <p>{selectedEmail.previewBody || "This is an official automated advisory from the Quezon City Local Government Unit regarding your vehicle record and Notice of Violation under the No Contact Apprehension Policy (NCAP)."}</p>
-
-                  {selectedEmail.citationNumber && (
-                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-white border border-neutral-200 p-3 font-mono text-[11px]">
-                      <div>
-                        <span className="text-neutral-400 block text-[9px] uppercase">Notice Serial:</span>
-                        <strong className="text-neutral-900">{selectedEmail.citationNumber}</strong>
+                {/* Dynamic Content based on Email Type */}
+                <div className="rounded-xl bg-white border border-neutral-200 p-5 text-xs text-neutral-800 leading-relaxed flex flex-col gap-3">
+                  {selectedEmail.type === "Citation Notice" && (
+                    <>
+                      <p className="font-semibold text-neutral-900">
+                        Notice to Registered Motorist under Quezon City Ordinance SP-2957, S-2020:
+                      </p>
+                      <p>
+                        Please be advised that an automated traffic citation was issued against the vehicle with license plate <strong className="text-blue-900 font-mono">{selectedEmail.plateNumber || "registered to your name"}</strong> for the offense of:
+                      </p>
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 p-3.5 flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-amber-950 text-sm">
+                            {selectedEmail.offense || "Traffic Ordinance Violation"}
+                          </span>
+                          {selectedEmail.amount && (
+                            <span className="font-mono font-black text-amber-900 text-sm">
+                              ₱{selectedEmail.amount.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-normal">
+                          Location: Commonwealth Ave. / Katipunan Ave. Corridor · High-resolution digital CCTV evidence verified by QC DPOS Traffic Operations.
+                        </p>
                       </div>
-                      <div>
-                        <span className="text-neutral-400 block text-[9px] uppercase">License Plate:</span>
-                        <strong className="text-neutral-900">{selectedEmail.plateNumber || "NDB-8921"}</strong>
+
+                      <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-[11px] text-red-900 flex items-start gap-2">
+                        <AlertTriangle className="size-4 shrink-0 text-red-600 mt-0.5" />
+                        <div>
+                          <strong className="block">STATUTORY DEADLINE FOR SETTLEMENT: 10 CALENDAR DAYS</strong>
+                          Unsettled notices will cause your vehicle record to be automatically tagged with an <span className="font-bold underline">LTO LTMS Registration Renewal Alarm</span>, preventing vehicle registration renewal nationwide.
+                        </div>
                       </div>
-                    </div>
+                    </>
+                  )}
+
+                  {selectedEmail.type === "Payment Receipt" && (
+                    <>
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3.5 text-emerald-950 flex items-start gap-2.5">
+                        <CheckCircle2 className="size-5 shrink-0 text-emerald-600 mt-0.5" />
+                        <div>
+                          <strong className="text-sm block">TRAFFIC CITATION SETTLEMENT CONFIRMED</strong>
+                          <p className="text-[11px] text-emerald-800 mt-0.5">
+                            Your settlement has been recorded and certified by the Quezon City Treasury. Your Certificate of Traffic Clearance is active and all LTO LTMS registration hold alarms have been lifted in real time.
+                          </p>
+                        </div>
+                      </div>
+
+                      {selectedEmail.amount && (
+                        <div className="grid grid-cols-2 gap-2 border-t border-b border-neutral-200 py-2.5 text-[11px] font-mono">
+                          <div>
+                            <span className="text-neutral-400 block text-[9px] uppercase">Amount Settled:</span>
+                            <strong className="text-emerald-900 text-sm font-bold">₱{selectedEmail.amount.toLocaleString()}.00</strong>
+                          </div>
+                          <div>
+                            <span className="text-neutral-400 block text-[9px] uppercase">LTO Clearance Status:</span>
+                            <strong className="text-emerald-700">CLEARED FOR RENEWAL</strong>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedEmail.type === "Warning Reminder" && (
+                    <>
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 p-3.5 text-amber-950 flex items-start gap-2.5">
+                        <AlertTriangle className="size-5 shrink-0 text-amber-600 mt-0.5" />
+                        <div>
+                          <strong className="text-sm block">FINAL URGENT WARNING BEFORE LTO TAGGING</strong>
+                          <p className="text-[11px] text-amber-800 mt-0.5">
+                            Our records indicate that Notice of Violation <strong className="font-mono">{selectedEmail.citationNumber}</strong> remains unsettled. Only 7 calendar days remain prior to automatic transmission to the Land Transportation Office (LTO) LTMS database.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedEmail.type === "Payment Declined" && (
+                    <>
+                      <div className="rounded-lg bg-red-50 border border-red-200 p-3.5 text-red-950 flex items-start gap-2.5">
+                        <AlertTriangle className="size-5 shrink-0 text-red-600 mt-0.5" />
+                        <div>
+                          <strong className="text-sm block">PAYMENT VERIFICATION DECLINED</strong>
+                          <p className="text-[11px] text-red-800 mt-0.5">
+                            The Quezon City Treasury was unable to verify your submitted payment reference. Please access the Citizen Portal to review the cashier notes and resubmit your valid GCash or LandBank proof of transfer.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedEmail.type === "TAB Appeal Resolution" && (
+                    <>
+                      <div className="rounded-lg bg-blue-50 border border-blue-200 p-3.5 text-blue-950 flex items-start gap-2.5">
+                        <FileCheck2 className="size-5 shrink-0 text-blue-600 mt-0.5" />
+                        <div>
+                          <strong className="text-sm block">TRAFFIC ADJUDICATION BOARD RESOLUTION ORDER</strong>
+                          <p className="text-[11px] text-blue-800 mt-0.5">
+                            The adjudication panel has reviewed your contest regarding {selectedEmail.citationNumber}. Please review the formal resolution order and clearance certificates attached.
+                          </p>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
 
-                {/* QR and Footer in email */}
-                <div className="flex items-center justify-between border-t border-neutral-200 pt-3 text-[10px] text-neutral-500">
-                  <div className="flex items-center gap-2">
-                    <QrCode className="size-6 text-neutral-800" />
-                    <span>Scan to verify digital clearance on QC Citizen Portal</span>
+                {/* Quick Action Navigation Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {selectedEmail.citationNumber && (
+                    <>
+                      <a
+                        href={`/portal/pay/${encodeURIComponent(selectedEmail.citationNumber)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-900 px-3.5 py-1.5 text-[11px] font-bold text-white hover:bg-blue-800 transition-colors shadow-sm"
+                      >
+                        <ExternalLink className="size-3" />
+                        Open Citizen Payment Portal
+                      </a>
+
+                      <a
+                        href={`/citations?query=${encodeURIComponent(selectedEmail.citationNumber)}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-[11px] font-bold text-neutral-800 hover:bg-neutral-100 transition-colors"
+                      >
+                        <Eye className="size-3" />
+                        View Citation Record
+                      </a>
+                    </>
+                  )}
+
+                  {selectedEmail.plateNumber && (
+                    <a
+                      href={`/lookup?query=${encodeURIComponent(selectedEmail.plateNumber)}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-[11px] font-bold text-neutral-800 hover:bg-neutral-100 transition-colors"
+                    >
+                      <Search className="size-3" />
+                      Public Plate NOV Check
+                    </a>
+                  )}
+                </div>
+
+                {/* Official Verification QR & Seal Footer */}
+                <div className="flex items-center justify-between border-t border-neutral-300 pt-4 text-[10px] text-neutral-500">
+                  <div className="flex items-center gap-3">
+                    <QrCode className="size-8 text-neutral-900 shrink-0" />
+                    <div>
+                      <span className="font-bold text-neutral-800 block">DIGITALLY SIGNED & VERIFIABLE</span>
+                      <span>Quezon City DPOS Automated Communications Gateway</span>
+                    </div>
                   </div>
-                  <span className="font-bold text-emerald-700">Official Government Advisory</span>
+                  <div className="text-right">
+                    <span className="font-bold text-blue-900 block uppercase">Republic Act No. 8792</span>
+                    <span>Electronic Commerce Act Verified</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex items-center justify-between">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel-elevated px-4 py-2 text-xs font-semibold text-white hover:bg-panel-highlight transition-all"
+                >
+                  <Printer className="size-3.5" />
+                  Print Transmission Copy
+                </button>
+
                 <Dialog.Close asChild>
                   <button className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/90">
                     Close Preview
