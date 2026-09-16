@@ -1468,6 +1468,30 @@ function CitationsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {selectedCitation.status === "paid" ? (
+                    <a
+                      href={`/portal/receipt/${selectedCitation.citation_number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-400 transition-colors shadow-sm"
+                    >
+                      <Receipt className="size-3.5" />
+                      <span>View e-OR & Clearance Pass</span>
+                      <ExternalLink className="size-3" />
+                    </a>
+                  ) : (
+                    <a
+                      href={`/portal/pay/${selectedCitation.citation_number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary/20 border border-primary/40 hover:bg-primary/30 px-3.5 py-2 text-xs font-bold text-primary transition-colors shadow-sm"
+                    >
+                      <CreditCard className="size-3.5" />
+                      <span>Open Motorist Portal</span>
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+
                   {selectedCitation.status !== "paid" && (
                     <button
                       onClick={() => handleMarkSettled(selectedCitation)}
@@ -1637,13 +1661,36 @@ function CitationRow({
         </span>
       </td>
       <td className="px-5 py-3.5 text-right">
-        <button
-          onClick={onOpenDetail}
-          className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
-        >
-          <FileText className="size-3.5" />
-          View Slip
-        </button>
+        <div className="flex items-center justify-end gap-1.5">
+          {c.status === "paid" ? (
+            <a
+              href={`/portal/receipt/${c.citation_number}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open Official e-OR & LTO Clearance Pass"
+              className="inline-flex items-center justify-center size-7 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors shrink-0"
+            >
+              <Receipt className="size-3.5" />
+            </a>
+          ) : (
+            <a
+              href={`/portal/pay/${c.citation_number}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open Public Payment Portal"
+              className="inline-flex items-center justify-center size-7 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            >
+              <CreditCard className="size-3.5" />
+            </a>
+          )}
+          <button
+            onClick={onOpenDetail}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
+          >
+            <FileText className="size-3.5" />
+            <span>Slip</span>
+          </button>
+        </div>
       </td>
     </tr>
   );

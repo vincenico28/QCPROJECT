@@ -3079,33 +3079,52 @@ function CitizenPortal() {
                       </button>
 
                       {(selectedNov.status === "unpaid" || selectedNov.status === "payment_failed") && (
-                        <button
-                          onClick={() => {
-                            setSelectedCitationId(selectedNov.id);
-                            setSettleModalOpen(true);
-                          }}
-                          className={cn(
-                            "rounded-xl px-6 py-2.5 text-xs font-bold text-white transition-all shadow-lg flex items-center gap-1.5",
-                            selectedNov.status === "payment_failed"
-                              ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/30"
-                              : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30",
-                          )}
-                        >
-                          {selectedNov.status === "payment_failed" ? (
-                            <>
-                              <RotateCcw className="size-3.5" /> Retry Payment ({formatPeso(selectedNov.amount)})
-                            </>
-                          ) : (
-                            <>
-                              <CreditCard className="size-3.5" /> Settle Online ({formatPeso(selectedNov.amount)})
-                            </>
-                          )}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedCitationId(selectedNov.id);
+                              setSettleModalOpen(true);
+                            }}
+                            className={cn(
+                              "rounded-xl px-5 py-2.5 text-xs font-bold text-white transition-all shadow-lg flex items-center gap-1.5",
+                              selectedNov.status === "payment_failed"
+                                ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/30"
+                                : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30",
+                            )}
+                          >
+                            {selectedNov.status === "payment_failed" ? (
+                              <>
+                                <RotateCcw className="size-3.5" /> Retry Payment ({formatPeso(selectedNov.amount)})
+                              </>
+                            ) : (
+                              <>
+                                <CreditCard className="size-3.5" /> Quick Settle ({formatPeso(selectedNov.amount)})
+                              </>
+                            )}
+                          </button>
+
+                          <Link
+                            to="/portal/pay/$citationId"
+                            params={{ citationId: selectedNov.novNumber || selectedNov.id }}
+                            className="rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-xs font-semibold text-white transition-all flex items-center gap-1.5"
+                          >
+                            <ExternalLink className="size-3.5" /> Official Portal
+                          </Link>
+                        </>
                       )}
                       {(selectedNov.status === "settled" || selectedNov.paymentDetails?.status === "verified") && (
-                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-400">
-                          <CheckCircle2 className="size-4" /> Payment Verified & Settled
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-400">
+                            <CheckCircle2 className="size-4" /> Payment Verified & Settled
+                          </span>
+                          <Link
+                            to="/portal/receipt/$citationId"
+                            params={{ citationId: selectedNov.novNumber || selectedNov.id }}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 transition-all"
+                          >
+                            <Receipt className="size-4" /> View Official e-OR & Clearance Pass
+                          </Link>
+                        </div>
                       )}
                     </div>
                   </div>

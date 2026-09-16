@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -12,6 +13,10 @@ import {
   Send,
   CheckCircle2,
   AlertTriangle,
+  Receipt,
+  CreditCard,
+  Scale,
+  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -248,6 +253,41 @@ export function ViolationReviewDialog({
                   <span>Adjudicating Officer: {existingCitation.officer_name || "Field Enforcer"}</span>
                   <span>Issued: {timeAgo(existingCitation.issued_at)}</span>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-emerald-500/20">
+                  {existingCitation.status === "paid" ? (
+                    <a
+                      href={`/portal/receipt/${existingCitation.citation_number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/20 hover:bg-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors"
+                    >
+                      <Receipt className="size-3.5" />
+                      <span>View e-OR & Clearance Pass</span>
+                      <ExternalLink className="size-3 text-emerald-400/80" />
+                    </a>
+                  ) : (
+                    <a
+                      href={`/portal/pay/${existingCitation.citation_number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/20 hover:bg-primary/30 px-3 py-1.5 text-xs font-bold text-primary transition-colors"
+                    >
+                      <CreditCard className="size-3.5" />
+                      <span>Open Motorist Payment Portal</span>
+                      <ExternalLink className="size-3 text-primary/80" />
+                    </a>
+                  )}
+
+                  <Link
+                    to="/disputes"
+                    search={{ citation: existingCitation.citation_number }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors"
+                  >
+                    <Scale className="size-3.5 text-amber-400" />
+                    <span>Adjudication Docket</span>
+                  </Link>
+                </div>
               </div>
             )}
 
@@ -331,9 +371,30 @@ export function ViolationReviewDialog({
               Close
             </button>
             {existingCitation ? (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300">
-                <CheckCircle2 className="size-3.5 text-emerald-400" />
-                Citation Active ({existingCitation.citation_number})
+              <div className="flex items-center gap-2">
+                {existingCitation.status === "paid" ? (
+                  <a
+                    href={`/portal/receipt/${existingCitation.citation_number}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition-colors"
+                  >
+                    <Receipt className="size-3.5" />
+                    <span>View e-OR Receipt</span>
+                    <ExternalLink className="size-3 text-white/80" />
+                  </a>
+                ) : (
+                  <a
+                    href={`/portal/pay/${existingCitation.citation_number}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-primary/25 transition-colors"
+                  >
+                    <CreditCard className="size-3.5" />
+                    <span>Open Payment Portal</span>
+                    <ExternalLink className="size-3 text-white/80" />
+                  </a>
+                )}
               </div>
             ) : (
               <button

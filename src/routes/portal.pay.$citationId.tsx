@@ -168,6 +168,10 @@ function PaymentPage() {
             toast.success("Redirecting to Stripe Hosted Checkout...");
             window.location.href = stripeRes.url;
             return;
+          } else if (stripeRes.redirectUrl) {
+            toast.success("Redirecting to Stripe Settlement Verification...");
+            window.location.href = stripeRes.redirectUrl;
+            return;
           }
         } catch {
           // Fallback to direct settlement below

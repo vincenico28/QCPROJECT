@@ -30,6 +30,9 @@ import {
   ScanLine,
   FileCheck,
   RefreshCw,
+  CreditCard,
+  Receipt,
+  Scale,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
@@ -1091,10 +1094,27 @@ function ViolationRow({
       {/* Status */}
       <td className="px-4 py-3.5">
         {linkedCitation ? (
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <CheckCircle2 className="size-3 text-emerald-400" />
-            Cited ({linkedCitation.citation_number})
-          </span>
+          <div className="flex flex-col gap-1 items-start">
+            {linkedCitation.status === "paid" ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <CheckCircle2 className="size-3 text-emerald-400" />
+                Settled · Cleared
+              </span>
+            ) : linkedCitation.status === "disputed" ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <Scale className="size-3 text-amber-400" />
+                In TAB Review
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                <FileCheck className="size-3 text-blue-400" />
+                NOV Issued
+              </span>
+            )}
+            <span className="font-mono-tab text-[10px] text-muted-foreground">
+              {linkedCitation.citation_number}
+            </span>
+          </div>
         ) : (
           <span
             className={cn(
@@ -1113,23 +1133,58 @@ function ViolationRow({
 
       {/* Actions */}
       <td className="px-4 py-3.5 text-right">
-        {isCited ? (
-          <button
-            onClick={onReview}
-            className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/40 hover:text-white transition-colors"
-          >
-            View Details
-            <Eye className="size-3" />
-          </button>
-        ) : (
-          <button
-            onClick={onReview}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
-          >
-            Review & Issue
-            <ArrowUpRight className="size-3" />
-          </button>
-        )}
+        <div className="flex items-center justify-end gap-1.5">
+          {linkedCitation && (
+            linkedCitation.status === "paid" ? (
+              <a
+                href={`/portal/receipt/${linkedCitation.citation_number || linkedCitation.id}`}
+                target="_blank"
+                rel="noreferrer"
+                title="View Official e-OR Receipt & Clearance Certificate"
+                className="inline-flex items-center justify-center size-7 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors shrink-0"
+              >
+                <Receipt className="size-3.5" />
+              </a>
+            ) : linkedCitation.status === "disputed" ? (
+              <Link
+                to="/disputes"
+                search={{ citation: linkedCitation.citation_number }}
+                title="View Traffic Adjudication Docket"
+                className="inline-flex items-center justify-center size-7 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors shrink-0"
+              >
+                <Scale className="size-3.5" />
+              </Link>
+            ) : (
+              <a
+                href={`/portal/pay/${linkedCitation.citation_number || linkedCitation.id}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Open Public Payment Portal"
+                className="inline-flex items-center justify-center size-7 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+              >
+                <CreditCard className="size-3.5" />
+              </a>
+            )
+          )}
+
+          {isCited ? (
+            <button
+              onClick={onReview}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/40 hover:text-white transition-colors"
+            >
+              <span>Inspect</span>
+              <Eye className="size-3" />
+            </button>
+          ) : (
+            <button
+              onClick={onReview}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-white transition-colors"
+            >
+              <span>Review</span>
+              <ArrowUpRight className="size-3" />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
