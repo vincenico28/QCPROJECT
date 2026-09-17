@@ -18,14 +18,24 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
-  Image as ImageIcon,
   UserCheck,
   ShieldAlert,
+  Printer,
+  MapPin,
+  Compass,
+  Crosshair,
+  Send,
+  Smartphone,
+  QrCode,
+  BadgeCheck,
+  User,
+  Radio,
 } from "lucide-react";
 import { useCreateCitation, formatPeso, useVehicleLookup } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { fineFor, formatOffenseItems } from "@/lib/data/review";
-import { uploadMultipleEvidenceToSupabase, serializeEvidenceUrls } from "@/lib/storage";
+import { uploadMultipleEvidenceToSupabase, serializeEvidenceUrls, parseEvidenceUrls } from "@/lib/storage";
+import { RoadsideThermalSlipDialog, type RoadsideCitationSlipData } from "@/components/officers/roadside-thermal-slip-dialog";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer/issue")({
@@ -61,6 +71,59 @@ const OFFENSES = [
   "Obstruction",
   "No Entry Zone",
   "Number Coding",
+];
+
+export type CuliatCorridor = {
+  id: string;
+  name: string;
+  sector: string;
+  coords: [number, number];
+  hotspots: string[];
+};
+
+export const CULIAT_CORRIDORS: CuliatCorridor[] = [
+  {
+    id: "commonwealth-tandang-sora",
+    name: "Commonwealth Ave cor. Tandang Sora",
+    sector: "Sector A - Culiat North",
+    coords: [14.6640, 121.0500],
+    hotspots: ["Bus Lane Violation", "Counterflow", "Overspeeding"],
+  },
+  {
+    id: "visayas-central",
+    name: "Visayas Ave cor. Central Ave",
+    sector: "Sector B - Culiat Central",
+    coords: [14.6610, 121.0470],
+    hotspots: ["Illegal Parking", "Obstruction", "Yellow Box Infraction"],
+  },
+  {
+    id: "tandang-sora-high-school",
+    name: "Tandang Sora Ave cor. Culiat High School",
+    sector: "Sector C - Culiat East",
+    coords: [14.6685, 121.0560],
+    hotspots: ["No Helmet", "Number Coding", "No Entry Zone"],
+  },
+  {
+    id: "katipunan-cp-garcia",
+    name: "Katipunan Ave cor. CP Garcia",
+    sector: "Sector D - University Belt Border",
+    coords: [14.6540, 121.0710],
+    hotspots: ["Illegal Parking", "Red Light", "Yellow Box Infraction"],
+  },
+  {
+    id: "edsa-quezon-ave",
+    name: "EDSA-Quezon Ave Flyover / West Triangle",
+    sector: "Sector E - Commercial Gateway",
+    coords: [14.6465, 121.0385],
+    hotspots: ["Bus Lane Violation", "Yellow Box Obstruction"],
+  },
+  {
+    id: "tomas-morato-madriñan",
+    name: "Tomas Morato Ave cor. Scout Madriñan",
+    sector: "Sector F - South Corridor",
+    coords: [14.6360, 121.0340],
+    hotspots: ["Illegal Parking", "Counterflow", "No Helmet"],
+  },
 ];
 
 const compressImageFile = (file: File): Promise<{ url: string; sizeKb: number }> => {
@@ -113,12 +176,26 @@ function IssuePage() {
   const [model, setModel] = useState("");
   const { data: lookedUpVehicle, isLoading: isLookingUpPlate } = useVehicleLookup(plate);
 
-  // Auto-fill vehicle model when recognized in registry
-  useEffect(() => {
-    if (lookedUpVehicle?.makeModel && !model) {
-      setModel(lookedUpVehicle.makeModel);
-    }
-  }, [lookedUpVehicle, model]);
+  // Sector Corridor & Geofencing GPS State
+  const [selectedCorridorId, setSelectedCorridorId] = useState("commonwealth-tandang-sora");
+  const [customLocation, setCustomLocation] = useState("");
+  const [gpsCoords, setGpsCoords] = useState<[number, number] | null>(null);
+  const [isLocatingGps, setIsLocatingGps] = useState(false);
+
+  // Roadside Apprehension & Motorist Identification
+  const [driverName, setDriverName] = useState("");
+  const [driverLicense, setDriverLicense] = useState("");
+  const [apprehensionMode, setApprehensionMode] = useState<"attended" | "unattended">("attended");
+  const [enforcementAction, setEnforcementAction] = useState<"top_issued" | "license_confiscated" | "warning_issued">("top_issued");
+  const [motoristMobile, setMotoristMobile] = useState("");
+  const [motoristEmail, setMotoristEmail] = useState("");
+
+  // Thermal Slip Dialog State
+  const [activeSlipData, setActiveSlipData] = useState<RoadsideCitationSlipData | null>(null);
+  const [showSlipDialog, setShowSlipDialog] = useState(false);
+  const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
+
+  // Multi-Violation Items State
   const [violationItems, setViolationItems] = useState<CitationViolationItem[]>([
     {
       id: "item-1",
@@ -128,11 +205,53 @@ function IssuePage() {
       customText: "",
     },
   ]);
+
+  // Evidence Photos State
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState(0);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [lastIssuedNumber, setLastIssuedNumber] = useState<string | null>(null);
+
+  // Auto-fill vehicle & motorist info when recognized in registry
+  useEffect(() => {
+    if (lookedUpVehicle) {
+      if (lookedUpVehicle.makeModel && !model) {
+        setModel(lookedUpVehicle.makeModel);
+      }
+      if ((lookedUpVehicle.citizenName || lookedUpVehicle.registeredOwner) && !driverName) {
+        setDriverName(lookedUpVehicle.citizenName || lookedUpVehicle.registeredOwner || "");
+      }
+      if (lookedUpVehicle.citizenDriverLicense && !driverLicense) {
+        setDriverLicense(lookedUpVehicle.citizenDriverLicense);
+      }
+      if (lookedUpVehicle.citizenPhone && !motoristMobile) {
+        setMotoristMobile(lookedUpVehicle.citizenPhone);
+      }
+    }
+  }, [lookedUpVehicle, model, driverName, driverLicense, motoristMobile]);
+
+  const handleDetectGps = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsLocatingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setGpsCoords(coords);
+        setIsLocatingGps(false);
+        toast.success(`GPS Fix Acquired: ${coords[0].toFixed(4)}°N, ${coords[1].toFixed(4)}°E`, {
+          description: `Roadside location pinned (±${Math.round(pos.coords.accuracy)}m accuracy)`,
+        });
+      },
+      (err) => {
+        setIsLocatingGps(false);
+        toast.error("GPS Fix Failed", { description: err.message });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const totalAmount = useMemo(() => {
     return violationItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
@@ -265,6 +384,11 @@ function IssuePage() {
       }
     }
 
+    const currentCorridor = CULIAT_CORRIDORS.find((c) => c.id === selectedCorridorId) || CULIAT_CORRIDORS[0];
+    const resolvedLocation = customLocation.trim()
+      ? customLocation.trim()
+      : `${currentCorridor.name} (${currentCorridor.sector})`;
+
     createCitation.mutate(
       {
         violation_id: null,
@@ -274,16 +398,48 @@ function IssuePage() {
         amount: totalAmount,
         officer_name: user?.email ?? "Enforcement Officer",
         evidence_url: finalEvidenceUrl,
-        location: "Quezon City Road Apprehension",
+        location: resolvedLocation,
       },
       {
         onSuccess: (data) => {
           toast.success(`Citation #${data.citation_number} issued for ${plate}`, {
-            description: `${validViolationItems.length} violation(s) charged · ${evidenceItems.length} evidence photo(s) · Total: ${formatPeso(totalAmount)}`,
+            description: `${validViolationItems.length} violation(s) charged · Roadside Thermal Slip ready for printing`,
           });
+
+          const slipData: RoadsideCitationSlipData = {
+            citationNumber: data.citation_number,
+            plateNumber: plate,
+            vehicleModel: model || "Standard Vehicle",
+            driverName: driverName.trim() || lookedUpVehicle?.registeredOwner || "Registered Motorist",
+            driverLicense: driverLicense.trim() || undefined,
+            location: resolvedLocation,
+            sector: currentCorridor.sector,
+            coords: gpsCoords || currentCorridor.coords,
+            offenses: validViolationItems.map((item) => ({
+              offense: item.name,
+              amount: item.amount,
+            })),
+            totalAmount,
+            officerName: user?.email ?? "Enforcement Officer",
+            issuedAt: new Date().toISOString(),
+            apprehensionMode,
+            enforcementAction,
+            evidenceUrls: finalEvidenceUrl ? parseEvidenceUrls(finalEvidenceUrl) : [],
+            contactMobile: motoristMobile.trim() || undefined,
+            contactEmail: motoristEmail.trim() || undefined,
+          };
+
+          setActiveSlipData(slipData);
+          setShowSlipDialog(true);
           setLastIssuedNumber(data.citation_number);
+
+          // Reset inputs for next citation
           setPlate("");
           setModel("");
+          setDriverName("");
+          setDriverLicense("");
+          setMotoristMobile("");
+          setMotoristEmail("");
           setViolationItems([
             {
               id: "item-1",
@@ -334,20 +490,33 @@ function IssuePage() {
       </div>
 
       {lastIssuedNumber && (
-        <div className="mb-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 flex items-center justify-between animate-in fade-in">
+        <div className="mb-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="size-5 text-emerald-400" />
+            <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
             <div>
-              <p className="font-bold text-foreground text-xs">Citation #{lastIssuedNumber} Issued</p>
-              <p className="text-[10px] text-muted-foreground">Logged to QC Central LGU Ledger</p>
+              <p className="font-bold text-foreground text-xs">Citation #{lastIssuedNumber} Issued & Logged</p>
+              <p className="text-[10px] text-muted-foreground">Recorded in QC Central LGU Ledger · Roadside Ticket Ready</p>
             </div>
           </div>
-          <button
-            onClick={() => setLastIssuedNumber(null)}
-            className="text-[11px] font-bold text-emerald-400 hover:underline"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2">
+            {activeSlipData && (
+              <button
+                type="button"
+                onClick={() => setShowSlipDialog(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all cursor-pointer"
+              >
+                <Printer className="size-3.5" />
+                <span>View Thermal Slip</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setLastIssuedNumber(null)}
+              className="text-[11px] font-bold text-muted-foreground hover:text-white transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -465,6 +634,222 @@ function IssuePage() {
             placeholder="e.g. Toyota Vios Silver"
             className="rounded-xl border border-border bg-panel-elevated px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
           />
+        </div>
+
+        {/* Patrol Sector Corridor & Geofencing GPS Card */}
+        <div className="rounded-2xl border border-border bg-panel-elevated/70 p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
+            <div className="flex items-center gap-2">
+              <MapPin className="size-4 text-primary" />
+              <label className="text-xs font-bold uppercase tracking-wider text-foreground font-mono-tab">
+                Patrol Sector Corridor & Geofence
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDetectGps}
+              disabled={isLocatingGps}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/20 px-2.5 py-1 text-[11px] font-bold text-primary transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Crosshair className={cn("size-3.5", isLocatingGps && "animate-spin")} />
+              <span>{isLocatingGps ? "Fixing GPS…" : gpsCoords ? "GPS Pinned" : "Use GPS"}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {CULIAT_CORRIDORS.map((corridor) => (
+              <button
+                key={corridor.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCorridorId(corridor.id);
+                  setCustomLocation("");
+                }}
+                className={cn(
+                  "flex flex-col text-left p-2.5 rounded-xl border transition-all text-xs cursor-pointer",
+                  selectedCorridorId === corridor.id && !customLocation
+                    ? "border-primary bg-primary/15 text-white shadow-sm ring-1 ring-primary/40"
+                    : "border-border/70 bg-background/60 text-muted-foreground hover:text-white hover:border-border"
+                )}
+              >
+                <div className="flex items-center justify-between gap-1 w-full">
+                  <span className="font-bold truncate">{corridor.name}</span>
+                  {selectedCorridorId === corridor.id && !customLocation && (
+                    <span className="size-1.5 rounded-full bg-primary shrink-0" />
+                  )}
+                </div>
+                <span className="text-[10px] font-mono-tab text-subtle mt-0.5">{corridor.sector}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1 pt-1">
+            <span className="text-[10px] font-mono-tab uppercase text-subtle">
+              Exact Roadside Landmark or Milepost (Optional)
+            </span>
+            <input
+              type="text"
+              value={customLocation}
+              onChange={(e) => setCustomLocation(e.target.value)}
+              placeholder="e.g. Northbound, In Front of Culiat High School Gate 2"
+              className="rounded-xl border border-border bg-panel px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          {gpsCoords && (
+            <div className="flex items-center justify-between text-[10px] font-mono-tab text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+              <span>GPS Telemetry Attached:</span>
+              <span>{gpsCoords[0].toFixed(5)}° N, {gpsCoords[1].toFixed(5)}° E</span>
+            </div>
+          )}
+        </div>
+
+        {/* Roadside Apprehension & Motorist Identification Card */}
+        <div className="rounded-2xl border border-border bg-panel-elevated/70 p-4 flex flex-col gap-3.5">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
+            <div className="flex items-center gap-2">
+              <User className="size-4 text-primary" />
+              <label className="text-xs font-bold uppercase tracking-wider text-foreground font-mono-tab">
+                Roadside Apprehension Details
+              </label>
+            </div>
+
+            {/* Attended vs Unattended Toggle */}
+            <div className="flex items-center rounded-lg bg-background p-0.5 border border-border/70 text-[10px] font-mono-tab">
+              <button
+                type="button"
+                onClick={() => setApprehensionMode("attended")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer",
+                  apprehensionMode === "attended"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                )}
+              >
+                Attended (Driver)
+              </button>
+              <button
+                type="button"
+                onClick={() => setApprehensionMode("unattended")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer",
+                  apprehensionMode === "unattended"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                )}
+              >
+                Unattended (Windshield)
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono-tab uppercase text-subtle">
+                Apprehended Driver Full Name
+              </label>
+              <input
+                type="text"
+                value={driverName}
+                onChange={(e) => setDriverName(e.target.value)}
+                placeholder="e.g. Juan P. Dela Cruz"
+                className="rounded-xl border border-border bg-panel px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono-tab uppercase text-subtle">
+                Driver's License Number
+              </label>
+              <input
+                type="text"
+                value={driverLicense}
+                onChange={(e) => setDriverLicense(e.target.value.toUpperCase())}
+                placeholder="e.g. N01-19-123456"
+                className="rounded-xl border border-border bg-panel px-3 py-2 text-xs font-mono-tab text-foreground uppercase placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Action Taken Selection */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-mono-tab uppercase text-subtle">Enforcement Action Taken</span>
+            <div className="grid grid-cols-3 gap-2 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setEnforcementAction("top_issued")}
+                className={cn(
+                  "p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1",
+                  enforcementAction === "top_issued"
+                    ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300 font-bold shadow-sm"
+                    : "border-border/70 bg-background/50 text-muted-foreground hover:text-white"
+                )}
+              >
+                <BadgeCheck className="size-3.5" />
+                <span className="text-[10px]">TOP Issued (72h)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEnforcementAction("license_confiscated")}
+                className={cn(
+                  "p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1",
+                  enforcementAction === "license_confiscated"
+                    ? "border-amber-500/50 bg-amber-500/15 text-amber-300 font-bold shadow-sm"
+                    : "border-border/70 bg-background/50 text-muted-foreground hover:text-white"
+                )}
+              >
+                <ShieldAlert className="size-3.5" />
+                <span className="text-[10px]">License Confiscated</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEnforcementAction("warning_issued")}
+                className={cn(
+                  "p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1",
+                  enforcementAction === "warning_issued"
+                    ? "border-blue-500/50 bg-blue-500/15 text-blue-300 font-bold shadow-sm"
+                    : "border-border/70 bg-background/50 text-muted-foreground hover:text-white"
+                )}
+              >
+                <Radio className="size-3.5" />
+                <span className="text-[10px]">Formal Warning</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Motorist Contact for Digital Ticket Delivery */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border/40">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono-tab uppercase text-subtle flex items-center gap-1">
+                <Smartphone className="size-3 text-primary" />
+                Driver Mobile Phone (SMS Slip)
+              </label>
+              <input
+                type="tel"
+                value={motoristMobile}
+                onChange={(e) => setMotoristMobile(e.target.value)}
+                placeholder="0917-XXX-XXXX"
+                className="rounded-xl border border-border bg-panel px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono-tab uppercase text-subtle flex items-center gap-1">
+                <Send className="size-3 text-primary" />
+                Motorist Email Address
+              </label>
+              <input
+                type="email"
+                value={motoristEmail}
+                onChange={(e) => setMotoristEmail(e.target.value)}
+                placeholder="driver@gmail.com"
+                className="rounded-xl border border-border bg-panel px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Multi-Violation & Assessed Penalties Section */}
@@ -800,6 +1185,17 @@ function IssuePage() {
             : `Issue Digital Citation (${violationItems.length > 1 ? `${violationItems.length} Violations · ` : ""}${evidenceItems.length > 0 ? `${evidenceItems.length} Photo${evidenceItems.length > 1 ? "s" : ""} · ` : ""}${formatPeso(totalAmount).replace("PHP", "₱")})`}
         </button>
       </form>
+
+      {/* Roadside Thermal Slip Modal */}
+      <RoadsideThermalSlipDialog
+        open={showSlipDialog}
+        onOpenChange={setShowSlipDialog}
+        slip={activeSlipData}
+        onIssueAnother={() => {
+          setShowSlipDialog(false);
+          setActiveSlipData(null);
+        }}
+      />
     </div>
   );
 }

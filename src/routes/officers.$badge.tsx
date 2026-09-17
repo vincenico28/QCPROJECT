@@ -60,6 +60,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
 import { getPrimaryEvidenceUrl, parseEvidenceUrls } from "@/lib/storage";
+import { RoadsideThermalSlipDialog, type RoadsideCitationSlipData } from "@/components/officers/roadside-thermal-slip-dialog";
 
 export const Route = createFileRoute("/officers/$badge")({
   head: ({ params }) => ({
@@ -102,6 +103,8 @@ export function OfficerDetailPage() {
   const [radioModalOpen, setRadioModalOpen] = useState(false);
   const [nightVision, setNightVision] = useState(false);
   const [telemetryView, setTelemetryView] = useState<"details" | "map" | "bodycam">("details");
+  const [selectedSlipData, setSelectedSlipData] = useState<RoadsideCitationSlipData | null>(null);
+  const [showSlipModal, setShowSlipModal] = useState(false);
 
   const officer = officers.find(
     (o) =>
@@ -167,6 +170,32 @@ export function OfficerDetailPage() {
       );
     });
   }, [own, citationStatusFilter, citationSearch]);
+
+  const handleOpenRoadsideSlip = (c: Citation) => {
+    const slip: RoadsideCitationSlipData = {
+      citationNumber: c.citation_number,
+      plateNumber: c.plate_number,
+      vehicleModel: c.vehicle_model || undefined,
+      driverName: undefined,
+      location: c.location || `${officer?.district || "Sector A - Culiat"} Patrol Beat`,
+      sector: officer?.district || "Sector A - Culiat",
+      offenses: [
+        {
+          offense: c.offense,
+          amount: Number(c.amount) || 1000,
+        },
+      ],
+      totalAmount: Number(c.amount) || 1000,
+      officerName: officer?.full_name || "Enforcement Officer",
+      officerBadge: officer?.badge_number || badge,
+      issuedAt: c.issued_at,
+      apprehensionMode: "attended",
+      enforcementAction: "top_issued",
+      evidenceUrls: c.evidence_url ? parseEvidenceUrls(c.evidence_url) : [],
+    };
+    setSelectedSlipData(slip);
+    setShowSlipModal(true);
+  };
 
   // Generate 14-day output chart data
   const chartData = useMemo(() => {
@@ -462,7 +491,7 @@ export function OfficerDetailPage() {
                 </div>
               </div>
             ) : telemetryView === "map" ? (
-              <div className="mt-4 h-[250px] w-full overflow-hidden rounded-2xl border border-border bg-background relative shadow-inner">
+              <div className="mt-4 h-[340px] md:h-[380px] w-full overflow-hidden rounded-2xl border border-border bg-background relative shadow-inner">
                 <ClientOnly
                   fallback={
                     <div className="grid h-full place-items-center bg-background">
@@ -484,9 +513,6 @@ export function OfficerDetailPage() {
                     />
                   </Suspense>
                 </ClientOnly>
-                <div className="absolute bottom-2 left-2 z-[400] rounded-lg bg-black/80 backdrop-blur px-2 py-1 font-mono-tab text-[9px] text-white/70 border border-white/10">
-                  GPS Sector: {officer.district || "District 1"}
-                </div>
               </div>
             ) : (
               <div className="mt-4 flex flex-col gap-3.5 text-xs">
@@ -834,12 +860,21 @@ export function OfficerDetailPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <button
-                          onClick={() => setSelectedCitation(c)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-primary transition-colors"
-                        >
-                          <Eye className="size-3" /> View Evidence
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedCitation(c)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-primary transition-colors cursor-pointer"
+                          >
+                            <Eye className="size-3" /> View Evidence
+                          </button>
+                          <button
+                            onClick={() => handleOpenRoadsideSlip(c)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Print 80mm Roadside Thermal OVR Slip"
+                          >
+                            <Printer className="size-3" /> Thermal Slip
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1173,6 +1208,13 @@ export function OfficerDetailPage() {
           </Dialog.Portal>
         </Dialog.Root>
       )}
+
+      {/* Roadside Thermal Slip Dialog for Historical Citations */}
+      <RoadsideThermalSlipDialog
+        open={showSlipModal}
+        onOpenChange={setShowSlipModal}
+        slip={selectedSlipData}
+      />
     </div>
   );
 }

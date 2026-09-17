@@ -13,6 +13,8 @@ import {
   Battery,
   ChevronRight,
   Sparkles,
+  Compass,
+  Printer,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -150,6 +152,32 @@ function OfficerTerminalHome() {
           </div>
         </div>
 
+        {/* Sector Corridor & Geofencing Card */}
+        <Link
+          to="/officers/$badge"
+          params={{ badge: currentOfficer?.badge_number || "104" }}
+          className="panel flex items-center justify-between rounded-3xl border border-primary/30 bg-primary/5 p-4 shadow-md transition-all hover:bg-primary/10 hover:border-primary/50 group"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="grid size-11 place-items-center rounded-2xl bg-primary/20 text-primary border border-primary/30 group-hover:scale-105 transition-transform">
+              <Compass className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-foreground text-sm">Sector A · Culiat Corridor</h3>
+                <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-mono-tab font-bold text-emerald-400 border border-emerald-500/30">
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  IN BOUNDS
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Commonwealth · Tandang Sora Beat · Open Sector Map
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="size-4 text-primary group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+
         {/* Primary Action Tiles */}
         <div className="grid grid-cols-2 gap-4">
           <Link
@@ -173,8 +201,8 @@ function OfficerTerminalHome() {
               <FileSignature className="size-7" />
             </div>
             <div>
-              <h3 className="font-bold text-foreground text-sm">Issue Citation</h3>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Manual Traffic Ticket</p>
+              <h3 className="font-bold text-foreground text-sm">Issue E-Citation</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">80mm Thermal Slip & QR</p>
             </div>
           </Link>
         </div>
