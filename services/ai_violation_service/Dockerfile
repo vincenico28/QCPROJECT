@@ -27,6 +27,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-bake YOLOv8n model weights so container starts offline instantly
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
 # Copy application code and model weights
 COPY . .
 
