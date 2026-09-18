@@ -79,6 +79,7 @@ export function SignInScreen({
     setInfo(null);
 
     let sent = false;
+    let lastErrorMessage = "";
 
     // 1. Primary: Direct high-speed Server SMTP Gateway (uses verified Gmail App Password)
     try {
@@ -90,6 +91,7 @@ export function SignInScreen({
       }
     } catch (serverErr: any) {
       console.warn("[Server 2FA dispatch attempt]:", serverErr);
+      lastErrorMessage = serverErr?.message || "";
     }
 
     // 2. Fallback: Supabase Auth OTP (only if server direct dispatch failed)
@@ -103,6 +105,9 @@ export function SignInScreen({
         sent = true;
       } catch (sbErr: any) {
         console.error("[Supabase 2FA fallback error]:", sbErr);
+        if (!lastErrorMessage) {
+          lastErrorMessage = sbErr?.message || "";
+        }
       }
     }
 
@@ -115,7 +120,11 @@ export function SignInScreen({
         toast.success(`6-digit 2FA security code sent to ${cleanTarget}`);
       }
     } else {
-      setError("Unable to dispatch 2FA OTP code. Please check your SMTP settings or try again.");
+      setError(
+        lastErrorMessage
+          ? `2FA Dispatch Failed: ${lastErrorMessage}`
+          : "Unable to dispatch 2FA OTP code. Please verify SMTP environment variables on your server."
+      );
     }
   }
 

@@ -500,17 +500,11 @@ export async function send2FAOtpEmail({
       };
     } catch (err: any) {
       console.error("[2FA OTP] SMTP transmission error:", err?.message || err);
+      throw new Error(`SMTP Error: ${err?.message || "Failed to transmit email via SMTP"}`);
     }
   }
 
-  // Simulation fallback if SMTP is temporarily unreachable
-  console.log(`[2FA OTP Fallback] Simulated OTP transmission for ${recipientEmail}: Code = ${otpCode}`);
-  return {
-    success: true,
-    delivered: true,
-    provider: "simulated",
-    messageId: `OTP-${Date.now()}`,
-    subject,
-    html,
-  };
+  // If SMTP is not configured in production environment
+  console.error(`[2FA OTP] SMTP credentials not found in environment (SMTP_USER or SMTP_PASS missing). Cannot dispatch to ${recipientEmail}`);
+  throw new Error("SMTP credentials missing on server. Please configure SMTP_USER and SMTP_PASS in your hosting environment.");
 }
