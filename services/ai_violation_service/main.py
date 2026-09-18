@@ -37,14 +37,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("[Microservice Initialization] Starting AI modules...")
-detector = YoloTrafficDetector(model_name="yolov8n.pt", conf_thresh=0.30)
-tracker = VehicleTracker(iou_dist_threshold=75.0, max_age=15)
-anpr = PlateRecognizer()
-rules_engine = TrafficRulesEngine()
-evidence_gen = EvidenceGenerator()
-db_service = SupabaseDataService()
+print("[Microservice Initialization] Starting FastAPI app...")
+detector = None
+tracker = None
+anpr = None
+rules_engine = None
+evidence_gen = None
+db_service = None
 executor = ThreadPoolExecutor(max_workers=4)
+
+def get_ai_modules():
+    global detector, tracker, anpr, rules_engine, evidence_gen, db_service
+    if detector is None:
+        print("[Microservice Initialization] Lazy-loading AI modules (YOLOv8, Tracker, ANPR, Supabase)...")
+        detector = YoloTrafficDetector(model_name="yolov8n.pt", conf_thresh=0.30)
+        tracker = VehicleTracker(iou_dist_threshold=75.0, max_age=15)
+        anpr = PlateRecognizer()
+        rules_engine = TrafficRulesEngine()
+        evidence_gen = EvidenceGenerator()
+        db_service = SupabaseDataService()
+        print("[Microservice Initialization] AI modules loaded successfully!")
+    return detector, tracker, anpr, rules_engine, evidence_gen, db_service
+
+# Pre-load in background thread so server starts listening on PORT immediately
+executor.submit(get_ai_modules)
 
 START_TIME = time.time()
 PROCESSED_FRAMES = 0
@@ -83,13 +99,13 @@ def health_check():
         "status": "online",
         "service": "QC Flow Guardian AI Traffic Sentry",
         "model": "Ultralytics YOLOv8n + OpenCV 5.0.0",
-        "yolo_active": detector.is_yolo_available,
+        "yolo_active": detector.is_yolo_available if detector else False,
         "opencv_version": cv2.__version__,
         "uptime_seconds": uptime_sec,
         "frames_processed": PROCESSED_FRAMES,
         "violations_committed": COMMITTED_VIOLATIONS_COUNT,
-        "active_tracks_count": len(tracker.tracks),
-        "db_connected": db_service.client is not None,
+        "active_tracks_count": len(tracker.tracks) if tracker else 0,
+        "db_connected": (db_service.client is not None) if db_service else False,
     }
 
 @app.post("/detect/frame")
@@ -103,8 +119,10 @@ def detect_frame(payload: FrameDetectionRequest):
     t_start = time.time()
     PROCESSED_FRAMES += 1
 
+    det, trk, anpr_mod, r_engine, evid, db = get_ai_modules()
+
     # Update dynamic calibration parameters from client
-    rules_engine.update_parameters(
+    r_engine.update_parameters(
         stop_line_y=payload.stop_line_y,
         bus_lane_x_max=payload.bus_lane_x_max,
         speed_limit_kmh=payload.speed_limit_kmh
@@ -129,15 +147,15 @@ def detect_frame(payload: FrameDetectionRequest):
     h, w = frame.shape[:2]
 
     # 2. Run YOLO Detection (Vehicles + Traffic Light Detection)
-    raw_detections, detected_signal = detector.detect(frame)
+    raw_detections, detected_signal = det.detect(frame)
     t_yolo = time.time()
 
     # 3. Multi-Object Tracking & Motion Vector Estimation
-    tracked_vehicles = tracker.update(raw_detections)
+    tracked_vehicles = trk.update(raw_detections)
     t_track = time.time()
 
     # 4. Evaluate Virtual Enforcement Rules
-    detected_violations = rules_engine.evaluate_violations(
+    detected_violations = r_engine.evaluate_violations(
         tracked_vehicles=tracked_vehicles,
         signal_state=payload.signal_state or "GREEN",
         detected_signal_state=detected_signal,
@@ -165,7 +183,7 @@ def detect_frame(payload: FrameDetectionRequest):
             if payload.target_model:
                 veh["class_name"] = payload.target_model
         else:
-            plate_info = anpr.extract_plate(frame, veh["bbox"], v_cls, payload.target_plate)
+            plate_info = anpr_mod.extract_plate(frame, veh["bbox"], v_cls, payload.target_plate)
 
         recognized_plates[tid] = {
             "plate_number": plate_info["plate_number"],
@@ -197,10 +215,10 @@ def detect_frame(payload: FrameDetectionRequest):
             LAST_GLOBAL_COMMIT_TIME = now_ts
 
             # Create watermarked evidence snapshot with 2x ANPR crop
-            plate_crop_info = anpr.extract_plate(frame, vio["bbox"], veh_model, plate_num)
+            plate_crop_info = anpr_mod.extract_plate(frame, vio["bbox"], veh_model, plate_num)
             plate_crop_info["plate_number"] = plate_num
 
-            _, evidence_data_url = evidence_gen.create_evidence_snapshot(
+            _, evidence_data_url = evid.create_evidence_snapshot(
                 frame=frame,
                 violation=vio,
                 plate_data=plate_crop_info,
@@ -233,7 +251,7 @@ def detect_frame(payload: FrameDetectionRequest):
 
             # Asynchronous background persistence to Supabase (does not block /detect/frame)
             executor.submit(
-                db_service.commit_violation_and_citation,
+                db.commit_violation_and_citation,
                 plate_number=plate_num,
                 violation_type=vio["violation_type"],
                 location=payload.location or "Commonwealth Ave cor. Tandang Sora",
@@ -280,7 +298,8 @@ def commit_violation_direct(payload: ViolationCommitRequest):
     now_ts = time.time()
     PLATE_COOLDOWNS[payload.plate_number] = now_ts + 15.0
     LAST_GLOBAL_COMMIT_TIME = now_ts
-    res = db_service.commit_violation_and_citation(
+    _, _, _, _, _, db = get_ai_modules()
+    res = db.commit_violation_and_citation(
         plate_number=payload.plate_number,
         violation_type=payload.violation_type,
         location=payload.location,
