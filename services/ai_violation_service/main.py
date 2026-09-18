@@ -91,6 +91,8 @@ class ViolationCommitRequest(BaseModel):
     fine_amount: Optional[float] = 1000.0
     vehicle_model: Optional[str] = "Ford Raptor black"
 
+@app.get("/")
+@app.get("/ping")
 @app.get("/health")
 def health_check():
     """Health check returning AI engine status, versions, and hardware telemetry."""
