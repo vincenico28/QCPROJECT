@@ -36,9 +36,5 @@ COPY . .
 # Expose API port
 EXPOSE 8000
 
-# Container healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
-
-# Start FastAPI entrypoint
+# Start FastAPI entrypoint via run.py
 CMD ["python", "run.py"]
