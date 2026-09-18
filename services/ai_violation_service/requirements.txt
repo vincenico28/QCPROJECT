@@ -1,6 +1,6 @@
 # QC Flow Guardian - Real-Time AI Traffic Violation Detection Microservice
 # Python Dependencies
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0
 ultralytics>=8.2.0
 torch>=2.0.0
 torchvision>=0.15.0
