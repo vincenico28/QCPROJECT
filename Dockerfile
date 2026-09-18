@@ -8,9 +8,9 @@ WORKDIR /app
 # Install libc compatibility for native bindings
 RUN apk add --no-cache libc6-compat
 
-# Install dependencies using clean install
-COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline --no-audit
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit
 
 # Copy application source code
 COPY . .
