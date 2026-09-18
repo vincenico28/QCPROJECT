@@ -152,3 +152,133 @@ export function hasRoleAccess(role: SystemRole, pathname: string): boolean {
   // Default allow if unspecified
   return true;
 }
+
+/**
+ * Baseline role capabilities seeded for Quezon City operations
+ */
+export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
+  super_admin: ["*"],
+  admin: [
+    "dashboard:view",
+    "cameras:view",
+    "cameras:manage",
+    "violations:view",
+    "violations:manage",
+    "citations:view",
+    "citations:manage",
+    "officers:view",
+    "officers:manage",
+    "dispatches:view",
+    "dispatches:manage",
+    "disputes:view",
+    "disputes:manage",
+    "finance:view",
+    "finance:manage",
+    "audit_logs:view",
+    "settings:manage",
+    "employees:manage",
+    "ai_training:manage",
+  ],
+  dispatcher: [
+    "dashboard:view",
+    "cameras:view",
+    "cameras:manage",
+    "violations:view",
+    "violations:manage",
+    "citations:view",
+    "officers:view",
+    "dispatches:view",
+    "dispatches:manage",
+    "map:view",
+  ],
+  officer: [
+    "officer:terminal",
+    "cameras:view",
+    "violations:view",
+    "violations:create",
+    "citations:view",
+    "citations:create",
+    "dispatches:view",
+  ],
+  finance: [
+    "dashboard:view",
+    "citations:view",
+    "citations:manage",
+    "finance:view",
+    "finance:manage",
+    "reports:view",
+  ],
+  adjudicator: [
+    "dashboard:view",
+    "violations:view",
+    "citations:view",
+    "disputes:view",
+    "disputes:manage",
+  ],
+  citizen: [
+    "citizen:lookup",
+    "citizen:pay",
+    "citizen:dispute",
+    "citizen:profile",
+  ],
+};
+
+/**
+ * Checks if user has a required permission given their active permissions list
+ */
+export function hasPermission(
+  role: SystemRole,
+  userPermissions: string[],
+  requiredPermission: string
+): boolean {
+  if (role === "super_admin") return true;
+  if (userPermissions.includes("*")) return true;
+  return userPermissions.includes(requiredPermission);
+}
+
+/**
+ * Resolves a fallback role from user attributes if DB query has not completed
+ */
+export function resolveFallbackRole(
+  email?: string | null,
+  metadataRole?: string | null
+): SystemRole {
+  if (metadataRole && metadataRole in SYSTEM_ROLES) {
+    return metadataRole as SystemRole;
+  }
+  if (!email) return "citizen";
+
+  const lower = email.toLowerCase().trim();
+  if (
+    lower === "escalavincenico28@gmail.com" ||
+    lower === "duquestevenjohn@gmail.com" ||
+    lower.startsWith("superadmin") ||
+    lower.includes("super.admin")
+  ) {
+    return "super_admin";
+  }
+  if (lower.startsWith("dispatcher") || lower.includes("dispatch")) {
+    return "dispatcher";
+  }
+  if (lower.startsWith("officer") || lower.includes("enforcer")) {
+    return "officer";
+  }
+  if (
+    lower.startsWith("finance") ||
+    lower.startsWith("cashier") ||
+    lower.includes("treasury")
+  ) {
+    return "finance";
+  }
+  if (
+    lower.startsWith("tab") ||
+    lower.startsWith("adjudicat") ||
+    lower.includes("legal")
+  ) {
+    return "adjudicator";
+  }
+  if (lower.startsWith("admin") || lower.includes("qc.gov.ph")) {
+    return "admin";
+  }
+  return "citizen";
+}

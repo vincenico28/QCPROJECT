@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { soundEffects } from "@/lib/sound-effects";
 import { FileDisputeDialog } from "@/components/citations/file-dispute-dialog";
 
 export const Route = createFileRoute("/portal/pay/$citationId")({
@@ -72,13 +73,13 @@ function PaymentPage() {
   const [qrZoomMode, setQrZoomMode] = useState<"card" | "qr-only">("card");
 
   // Recipient GCash Account Configuration from Environment Variables
-  const gcashAccountName = (import.meta as any).env.VITE_GCASH_ACCOUNT_NAME || "Quezon City DPOS Treasury";
-  const gcashAccountNumber = (import.meta as any).env.VITE_GCASH_ACCOUNT_NUMBER || "0917-882-9411";
+  const gcashAccountName = (import.meta as any).env.VITE_GCASH_ACCOUNT_NAME || "Steven john A. Duque";
+  const gcashAccountNumber = (import.meta as any).env.VITE_GCASH_ACCOUNT_NUMBER || "0992-606-2210";
   const envQr = (import.meta as any).env?.VITE_GCASH_QR_IMAGE;
   const gcashCustomQr =
     envQr && envQr.trim() !== "" && envQr !== "/my-gcash-qr.png" && envQr !== "/assets/my-gcash-qr.png"
       ? envQr
-      : DEFAULT_GCASH_QR;
+      : (DEFAULT_GCASH_QR || "/my-gcash-qr.png");
 
   // Form Fields
   const [payerName, setPayerName] = useState("Juan Dela Cruz");
@@ -219,6 +220,7 @@ function PaymentPage() {
       queryClient.invalidateQueries({ queryKey: ["citations"] });
       queryClient.invalidateQueries({ queryKey: ["citation", citNumber] });
 
+      soundEffects.playPaymentCleared();
       toast.success("Payment settlement verified!", {
         description: `Official Clearance certificate and Receipt generated for ${citNumber}.`,
       });
@@ -629,10 +631,10 @@ function PaymentPage() {
                   <MethodButton
                     active={method === "gcash"}
                     onClick={() => setMethod("gcash")}
-                    title="GCash"
-                    sub="e-Wallet / QR Ph"
+                    title="GCash / InstaPay"
+                    sub="e-Wallet / QR Ph / Bank"
                     icon={Smartphone}
-                    badge="QR Ph Official"
+                    badge="InstaPay Certified"
                   />
                   <MethodButton
                     active={method === "maya"}
@@ -716,7 +718,7 @@ function PaymentPage() {
                           </div>
 
                           <span className="font-mono-tab text-[9px] font-black text-blue-950 mt-1.5 uppercase tracking-wider">
-                            QR Ph · GCash
+                            InstaPay · QR Ph · GCash
                           </span>
                         </div>
 
@@ -734,14 +736,14 @@ function PaymentPage() {
                       <div className="flex flex-col gap-2 text-center sm:text-left flex-1">
                         <div className="flex items-center justify-center sm:justify-start gap-2">
                           <span className="rounded bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/40">
-                            Scan to Pay with GCash
+                            Scan to Pay with Any Bank / e-Wallet
                           </span>
                           <span className="font-mono-tab text-[10px] text-muted-foreground">
                             Official Treasury Account
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Scan the official QR Ph code using your <strong>GCash App</strong> (or any QR Ph compliant e-wallet/banking app).
+                          Scan the official InstaPay QR code using your <strong>GCash App</strong>, <strong>Maya</strong>, or any InstaPay / QR Ph compliant banking app.
                         </p>
 
                         {/* Recipient Account Details with 1-click Copy */}
@@ -1185,13 +1187,13 @@ function PaymentPage() {
               </div>
               <div>
                 <DialogTitle className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  Official GCash QR Ph
+                  Official InstaPay / QR Ph
                   <span className="text-[10px] uppercase font-mono-tab bg-blue-500/20 text-blue-400 border border-blue-500/40 px-1.5 py-0.5 rounded">
                     High Resolution
                   </span>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Point your GCash app scanner at the code below
+                  Point your GCash, Maya, or any banking app scanner at the code below
                 </DialogDescription>
               </div>
             </div>
@@ -1293,7 +1295,7 @@ function PaymentPage() {
               </div>
 
               <p className="text-[11px] text-center text-muted-foreground leading-relaxed mt-0.5">
-                💡 <strong>Tip for mobile motorists:</strong> Download or screenshot this QR, open GCash, tap <strong>Scan QR</strong>, and choose <strong>Upload QR from Photos</strong>.
+                💡 <strong>Tip for mobile motorists:</strong> Download or screenshot this QR, open GCash or any mobile banking app, tap <strong>Scan QR</strong>, and choose <strong>Upload QR from Photos</strong>.
               </p>
             </div>
           </div>

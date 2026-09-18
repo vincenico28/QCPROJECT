@@ -48,7 +48,7 @@ type CamFilter = (typeof FILTERS)[number];
 
 function CamerasPage() {
   const { data: cameras = [], isLoading } = useCameras();
-  const { data: violations = [] } = useViolations(200);
+  const { data: violations = [] } = useViolations(500);
   const { role } = useAuth();
   const [filter, setFilter] = useState<CamFilter>("all");
   const [q, setQ] = useState("");
@@ -122,7 +122,7 @@ function CamerasPage() {
             <MapPin className="size-3.5 text-primary" />
             GIS Map View
           </Link>
-          {(role === "admin" || role === "dispatcher" || true) && (
+          {(role === "super_admin" || role === "admin" || role === "dispatcher") && (
             <DeployCameraDialog
               trigger={
                 <button className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all">
@@ -231,12 +231,16 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
     <div className="panel group flex flex-col justify-between overflow-hidden rounded-2xl border border-border shadow-xl transition-all hover:border-primary/50 hover:shadow-2xl">
       <div>
         {/* Stream Simulation Header Frame */}
-        <div className="relative h-44 overflow-hidden border-b border-border bg-black">
+        <Link
+          to="/cameras/$code"
+          params={{ code: camera.code }}
+          className="relative h-44 overflow-hidden border-b border-border bg-black block cursor-pointer group/stream"
+        >
           <img
             src={`/assets/cctv-${((parseInt(camera.code.replace(/\D/g, "") || "1") % 3) + 1)}.jpg`}
             alt={`Live stream for ${camera.code}`}
             className={cn(
-              "size-full object-cover transition-transform duration-500 group-hover:scale-105",
+              "size-full object-cover transition-transform duration-500 group-hover/stream:scale-105",
               !online && "grayscale opacity-40"
             )}
             onError={(e) => {
@@ -267,10 +271,12 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
 
             <div className="flex items-center justify-between text-[10px] font-mono-tab text-white/90">
               <span>FPS: {online ? "60.0" : "0.0"} · 4K UHD</span>
-              <span>ANPR: ACTIVE</span>
+              <span className="opacity-0 group-hover/stream:opacity-100 transition-opacity text-primary font-bold bg-black/70 px-2 py-0.5 rounded border border-primary/30 backdrop-blur-sm flex items-center gap-1">
+                Open Stream <ArrowUpRight className="size-3" />
+              </span>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Card Body */}
         <div className="p-5 flex flex-col gap-3">
@@ -332,7 +338,7 @@ function CameraCard({ camera, detections }: { camera: Camera; detections: number
           params={{ code: camera.code }}
           className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
         >
-          Node Diagnostics
+          Live 4K Sentinel
           <ArrowUpRight className="size-3.5" />
         </Link>
       </div>

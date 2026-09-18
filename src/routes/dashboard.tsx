@@ -12,6 +12,7 @@ import {
 } from "@/lib/data/traffic";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { getPrimaryEvidenceUrl } from "@/lib/storage";
 import {
   ArrowUpRight,
   TrendingUp,
@@ -559,7 +560,7 @@ function CommandDashboard() {
               <ViolationFeedItem
                 key={v.id}
                 violation={v}
-                image={FEED_IMAGES[i % FEED_IMAGES.length]}
+                image={getPrimaryEvidenceUrl(v.evidence_url) || FEED_IMAGES[i % FEED_IMAGES.length]}
               />
             ))}
           {!vLoading && violations.length === 0 && (
@@ -699,7 +700,11 @@ function CctvTile({
   const dot = feed.status === "alert" ? "bg-warning animate-pulse" : "bg-emerald-400";
 
   return (
-    <div className="group relative aspect-video overflow-hidden rounded-3xl border border-border bg-panel shadow-xl">
+    <Link
+      to="/cameras/$code"
+      params={{ code: feed.code }}
+      className="group relative aspect-video overflow-hidden rounded-3xl border border-border bg-panel shadow-xl transition-all duration-300 hover:border-primary/50 hover:shadow-primary/10 block cursor-pointer"
+    >
       <img
         src={feed.img}
         alt={`CCTV feed from ${feed.location}`}
@@ -727,12 +732,17 @@ function CctvTile({
         <p className="font-mono-tab text-[10px] font-bold text-white/70">
           {feed.code} | {feed.location}
         </p>
-        <p className={cn("flex items-center gap-2 text-xs font-bold text-white", badgeTone)}>
-          <span className={cn("size-1.5 rounded-full", dot)} />
-          {feed.label}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className={cn("flex items-center gap-2 text-xs font-bold text-white", badgeTone)}>
+            <span className={cn("size-1.5 rounded-full", dot)} />
+            {feed.label}
+          </p>
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[11px] font-bold text-primary bg-black/60 px-2 py-0.5 rounded-lg border border-primary/20 backdrop-blur">
+            Live Stream <ArrowUpRight className="size-3" />
+          </span>
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -743,7 +753,7 @@ function ViolationFeedItem({ violation, image }: { violation: Violation; image: 
     <article className="p-5 transition-colors hover:bg-panel-elevated/50">
       <div className="relative mb-3 aspect-video overflow-hidden rounded-2xl border border-border">
         <img
-          src={image}
+          src={getPrimaryEvidenceUrl(image)}
           alt={`AI detection: ${violation.violation_type}`}
           className="size-full object-cover"
           width={600}

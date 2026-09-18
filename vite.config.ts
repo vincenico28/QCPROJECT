@@ -8,7 +8,7 @@ export default defineConfig({
     tanstackStart({
       server: {
         // @ts-expect-error - preset is valid in nitro/vinxi but missing in beta types
-        preset: "vercel",
+        preset: process.env.NITRO_PRESET || "node-server",
         entry: "src/server.ts"
       }
     }),

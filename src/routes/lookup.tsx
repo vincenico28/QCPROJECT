@@ -61,6 +61,12 @@ export const Route = createFileRoute("/lookup")({
 
 const SAMPLE_LOOKUPS = [
   {
+    label: "NBA-1121 · Ford Raptor (Live AI Apprehensions)",
+    plate: "NBA-1121",
+    ref: "",
+    status: "unpaid",
+  },
+  {
     label: "NDB-8921 · Red Light (Unpaid)",
     plate: "NDB-8921",
     ref: "NOV-2026-QC-00129",

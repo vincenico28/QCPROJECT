@@ -113,7 +113,7 @@ export function useEmailLogs() {
   useEffect(() => {
     try {
       const channel = supabase
-        .channel("realtime-email-logs")
+        .channel(`realtime-email-logs_${Math.random().toString(36).substring(2, 9)}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "email_logs" },

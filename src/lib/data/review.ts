@@ -610,3 +610,23 @@ export function useAddManualViolation() {
     },
   });
 }
+
+/**
+ * Normalized offense matcher to ensure UI filter chips (e.g. "Red Light", "Overspeeding")
+ * match database representations ("Red Light Crossing", "Exceeding Speed Limit", etc.)
+ */
+export function matchesOffenseFilter(actualOffense: string | undefined | null, filter: string): boolean {
+  if (!filter || filter === "All Offenses") return true;
+  if (!actualOffense) return false;
+  const actual = actualOffense.toLowerCase().trim();
+  const f = filter.toLowerCase().trim();
+  if (actual === f) return true;
+  if (f === "red light" && actual.includes("red light")) return true;
+  if (f === "overspeeding" && (actual.includes("speed") || actual.includes("overspeeding"))) return true;
+  if (f === "counterflow" && actual.includes("counterflow")) return true;
+  if (f.includes("parking") && actual.includes("parking")) return true;
+  if (f.includes("yellow box") && actual.includes("yellow box")) return true;
+  if (f.includes("bus") && (actual.includes("bus") || actual.includes("busway"))) return true;
+  if (f.includes("helmet") && actual.includes("helmet")) return true;
+  return actual.includes(f) || f.includes(actual);
+}

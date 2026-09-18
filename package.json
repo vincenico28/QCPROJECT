@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "ai:start": "python services/ai_violation_service/run.py",
+    "ai:install": "pip install -r services/ai_violation_service/requirements.txt",
     "build": "vite build && nitro build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
@@ -57,6 +59,7 @@
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^0.575.0",
+    "nodemailer": "^10.0.10",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
@@ -75,6 +78,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@types/node": "^22.16.5",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",

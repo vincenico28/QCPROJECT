@@ -35,6 +35,7 @@ import { useDisputes, useUpdateDispute, type Dispute } from "@/lib/data/disputes
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { timeAgo, formatPeso } from "@/lib/data/traffic";
+import { getPrimaryEvidenceUrl } from "@/lib/storage";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
 
@@ -486,7 +487,7 @@ function DisputeCard({
           <div className="mt-4 rounded-xl border border-border bg-black/50 p-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
-                src={citation.evidenceUrl}
+                src={getPrimaryEvidenceUrl(citation.evidenceUrl)}
                 alt="Intersection CCTV Evidence"
                 className="size-14 rounded-lg object-cover border border-white/10 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => setEvidencePreviewOpen(true)}
@@ -672,7 +673,7 @@ function DisputeCard({
               <div className="mt-4 relative overflow-hidden rounded-2xl border border-white/10 bg-black">
                 {citation?.evidenceUrl && (
                   <img
-                    src={citation.evidenceUrl}
+                    src={getPrimaryEvidenceUrl(citation.evidenceUrl)}
                     alt="Optical ANPR evidence"
                     className="w-full h-80 object-cover"
                   />
@@ -705,7 +706,7 @@ function DisputeCard({
                 <div className="flex items-center gap-2">
                   {citation?.evidenceUrl && (
                     <a
-                      href={citation.evidenceUrl}
+                      href={getPrimaryEvidenceUrl(citation.evidenceUrl)}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-foreground hover:bg-panel-elevated hover:text-primary transition-colors"
@@ -848,7 +849,7 @@ function OfficialResolutionOrderModal({
                   </span>
                 </div>
                 <img
-                  src={citation.evidenceUrl}
+                  src={getPrimaryEvidenceUrl(citation.evidenceUrl)}
                   alt="Optical Evidence Exhibit"
                   className="h-40 w-full object-cover rounded-lg border border-white/10 print:border-neutral-300"
                 />

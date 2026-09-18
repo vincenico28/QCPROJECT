@@ -163,7 +163,7 @@ export function useDisputes() {
   useEffect(() => {
     try {
       const channel = supabase
-        .channel("realtime-disputes")
+        .channel(`realtime-disputes_${Math.random().toString(36).substring(2, 9)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "disputes" }, () => {
           qc.invalidateQueries({ queryKey: ["disputes"] });
           qc.invalidateQueries({ queryKey: ["citizen-disputes"] });

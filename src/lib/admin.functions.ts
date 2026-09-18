@@ -17,15 +17,25 @@ async function verifyAdminCaller(token: string) {
 
   const userId = authData.user.id;
 
-  // 2. Verify admin role
+  // 2. Verify admin role or super admin credentials
+  const email = (authData.user.email || "").toLowerCase().trim();
+  const isSuperAdminEmail =
+    email === "escalavincenico28@gmail.com" ||
+    email === "duquestevenjohn@gmail.com" ||
+    email.startsWith("superadmin");
+
+  if (isSuperAdminEmail) {
+    return { supabaseAdmin, user: authData.user };
+  }
+
   const { data: roleData, error: roleErr } = await (supabaseAdmin as any)
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["super_admin", "admin"])
     .maybeSingle();
 
-  if (roleErr || !roleData) throw new Error("Forbidden: Requires admin role");
+  if (roleErr || !roleData) throw new Error("Forbidden: Requires admin clearance");
   
   return { supabaseAdmin, user: authData.user };
 }
@@ -65,7 +75,15 @@ export const listSystemUsers = createServerFn({ method: "POST" })
 const assignRoleSchema = z.object({
   token: z.string(),
   targetUserId: z.string(),
-  role: z.enum(["admin", "dispatcher", "officer", "citizen"]),
+  role: z.enum([
+    "super_admin",
+    "admin",
+    "dispatcher",
+    "officer",
+    "finance",
+    "adjudicator",
+    "citizen",
+  ]),
 });
 
 export const assignUserRole = createServerFn({ method: "POST" })

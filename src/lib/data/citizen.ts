@@ -171,7 +171,7 @@ export function useCitizenProfile() {
   useEffect(() => {
     try {
       const channel = supabase
-        .channel("realtime-citizen-sync")
+        .channel(`realtime-citizen-sync_${Math.random().toString(36).substring(2, 9)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
           qc.invalidateQueries({ queryKey: ["citizen-profile"] });
           qc.invalidateQueries({ queryKey: ["citations"] });

@@ -17,6 +17,8 @@ import {
   CreditCard,
   Scale,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -29,6 +31,7 @@ import {
 import { fineFor, useIssueCitation, useReviewViolation } from "@/lib/data/review";
 import { formatPeso, timeAgo, useOfficers, useCitations, type Violation, useVehicleLookup } from "@/lib/data/traffic";
 import { cn } from "@/lib/utils";
+import { parseEvidenceUrls, getPrimaryEvidenceUrl } from "@/lib/storage";
 
 export function ViolationReviewDialog({
   violation,
@@ -42,6 +45,7 @@ export function ViolationReviewDialog({
   const [officerId, setOfficerId] = useState("");
   const [vehicleModel, setVehicleModel] = useState("Private Vehicle / Sedan");
   const [zoomEvidence, setZoomEvidence] = useState(false);
+  const [activeFrameIndex, setActiveFrameIndex] = useState(0);
 
   const { data: officers = [] } = useOfficers();
   const { data: vehicleInfo, isLoading: lookingUpVehicle } = useVehicleLookup(violation?.plate_number ?? "");
@@ -58,6 +62,8 @@ export function ViolationReviewDialog({
     setOffense(violation.violation_type);
     setAmount(fineFor(violation.violation_type));
     setOfficerId("");
+    setActiveFrameIndex(0);
+    setZoomEvidence(false);
   }, [violation]);
 
   useEffect(() => {
@@ -135,44 +141,107 @@ export function ViolationReviewDialog({
         <div className="grid gap-5 sm:grid-cols-2">
           {/* Left Column: Evidence & OCR */}
           <div className="flex flex-col gap-3">
-            <div className="relative overflow-hidden rounded-xl border border-border bg-black">
-              {v.evidence_url ? (
-                <div className="relative group">
-                  <img
-                    src={v.evidence_url}
-                    alt={`Evidence capture for ${v.plate_number}`}
-                    className={cn(
-                      "h-48 w-full object-cover transition-transform duration-300",
-                      zoomEvidence && "scale-125"
+            {(() => {
+              const frames = parseEvidenceUrls(v.evidence_url);
+              const activeFrameUrl = frames[activeFrameIndex] || frames[0] || "/assets/violation-1.jpg";
+              return (
+                <>
+                  <div className="relative overflow-hidden rounded-xl border border-border bg-black">
+                    {v.evidence_url ? (
+                      <div className="relative group">
+                        <img
+                          src={activeFrameUrl}
+                          alt={`Evidence capture for ${v.plate_number} frame ${activeFrameIndex + 1}`}
+                          className={cn(
+                            "h-48 w-full object-cover transition-transform duration-300",
+                            zoomEvidence && "scale-125"
+                          )}
+                          loading="lazy"
+                        />
+                        {/* OCR ANPR Bounding Box Overlay */}
+                        <div className="absolute inset-x-6 bottom-4 rounded-lg border-2 border-emerald-400/80 bg-black/70 p-2 backdrop-blur-sm">
+                          <div className="flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
+                            <span className="flex items-center gap-1 font-bold">
+                              <ScanLine className="size-3" /> ANPR OCR: {v.plate_number}
+                            </span>
+                            <span className="font-bold">
+                              {conf}% MATCH
+                              {frames.length > 1 && ` · [${activeFrameIndex + 1}/${frames.length}]`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Multi-Frame Navigation Controls */}
+                        {frames.length > 1 && (
+                          <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveFrameIndex((prev) => (prev > 0 ? prev - 1 : frames.length - 1));
+                              }}
+                              className="pointer-events-auto rounded-full bg-black/75 p-1.5 text-white/80 hover:bg-black hover:text-white border border-white/20 transition-all backdrop-blur-sm"
+                              title="Previous evidence frame"
+                            >
+                              <ChevronLeft className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveFrameIndex((prev) => (prev < frames.length - 1 ? prev + 1 : 0));
+                              }}
+                              className="pointer-events-auto rounded-full bg-black/75 p-1.5 text-white/80 hover:bg-black hover:text-white border border-white/20 transition-all backdrop-blur-sm"
+                              title="Next evidence frame"
+                            >
+                              <ChevronRight className="size-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid h-48 place-items-center text-xs text-subtle">
+                        <Camera className="size-6 text-subtle mb-1" />
+                        No evidence frame available
+                      </div>
                     )}
-                    loading="lazy"
-                  />
-                  {/* OCR ANPR Bounding Box Overlay */}
-                  <div className="absolute inset-x-6 bottom-4 rounded-lg border-2 border-emerald-400/80 bg-black/70 p-2 backdrop-blur-sm">
-                    <div className="flex items-center justify-between text-[10px] font-mono-tab text-emerald-400">
-                      <span className="flex items-center gap-1 font-bold">
-                        <ScanLine className="size-3" /> ANPR OCR: {v.plate_number}
-                      </span>
-                      <span className="font-bold">{conf}% MATCH</span>
-                    </div>
+                    {v.evidence_url && (
+                      <button
+                        type="button"
+                        onClick={() => setZoomEvidence(!zoomEvidence)}
+                        className="absolute top-2 right-2 rounded-lg bg-black/60 border border-white/10 px-2 py-1 text-[10px] font-mono-tab text-white/80 hover:text-white z-10"
+                      >
+                        {zoomEvidence ? "Reset Zoom" : "2x Optical Zoom"}
+                      </button>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="grid h-48 place-items-center text-xs text-subtle">
-                  <Camera className="size-6 text-subtle mb-1" />
-                  No evidence frame available
-                </div>
-              )}
-              {v.evidence_url && (
-                <button
-                  type="button"
-                  onClick={() => setZoomEvidence(!zoomEvidence)}
-                  className="absolute top-2 right-2 rounded-lg bg-black/60 border border-white/10 px-2 py-1 text-[10px] font-mono-tab text-white/80 hover:text-white"
-                >
-                  {zoomEvidence ? "Reset Zoom" : "2x Optical Zoom"}
-                </button>
-              )}
-            </div>
+
+                  {/* Multi-Frame Thumbnails */}
+                  {frames.length > 1 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {frames.map((frameUrl, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setActiveFrameIndex(idx)}
+                          className={cn(
+                            "relative h-12 w-16 shrink-0 overflow-hidden rounded-lg border transition-all",
+                            activeFrameIndex === idx
+                              ? "border-emerald-500 ring-2 ring-emerald-500/50"
+                              : "border-white/10 opacity-70 hover:opacity-100 hover:border-white/30"
+                          )}
+                        >
+                          <img src={frameUrl} alt={`Frame ${idx + 1}`} className="size-full object-cover" />
+                          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 font-mono-tab text-[8px] font-bold text-white">
+                            #{idx + 1}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Camera & Location Metadata */}
             <div className="rounded-xl border border-white/5 bg-background/50 p-3 flex flex-col gap-2 text-xs">

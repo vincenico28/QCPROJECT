@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useCitations, formatPeso, timeAgo, type Citation, useUpdateCitationStatus, useCreateCitation, useVehicleLookup } from "@/lib/data/traffic";
-import { fineFor, formatOffenseItems, parseCitationOffenses, splitOffenses } from "@/lib/data/review";
+import { fineFor, formatOffenseItems, parseCitationOffenses, splitOffenses, matchesOffenseFilter } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -150,7 +150,7 @@ const OFFENSE_TYPES = [
 ] as const;
 
 function CitationsPage() {
-  const { data: citations = [], isLoading } = useCitations(200);
+  const { data: citations = [], isLoading } = useCitations(500);
   const updateStatus = useUpdateCitationStatus();
   const createCitation = useCreateCitation();
 
@@ -293,16 +293,19 @@ function CitationsPage() {
     return citations.filter((c) => {
       if (status === "citizen") {
         if (!c.isCitizenRegistered) return false;
-      } else if (status !== "all" && c.status !== status) {
+      } else if (status === "unpaid") {
+        const cs = (c.status || "").toLowerCase();
+        if (cs !== "unpaid" && cs !== "issued") return false;
+      } else if (status !== "all" && (c.status || "").toLowerCase() !== status.toLowerCase()) {
         return false;
       }
-      if (offenseFilter !== "All Offenses" && c.offense !== offenseFilter) return false;
+      if (!matchesOffenseFilter(c.offense, offenseFilter)) return false;
       if (!q) return true;
-      const n = q.toLowerCase();
+      const n = q.toLowerCase().trim();
       return (
-        c.citation_number.toLowerCase().includes(n) ||
-        c.plate_number.toLowerCase().includes(n) ||
-        c.offense.toLowerCase().includes(n) ||
+        (c.citation_number || "").toLowerCase().includes(n) ||
+        (c.plate_number || "").toLowerCase().includes(n) ||
+        (c.offense || "").toLowerCase().includes(n) ||
         (c.vehicle_model ?? "").toLowerCase().includes(n) ||
         (c.officer_name ?? "").toLowerCase().includes(n) ||
         (c.citizenName ?? "").toLowerCase().includes(n) ||
@@ -314,10 +317,13 @@ function CitationsPage() {
 
   const stats = useMemo(() => {
     const total = citations.reduce((s, c) => s + Number(c.amount), 0);
-    const paid = citations.filter((c) => c.status === "paid");
+    const paid = citations.filter((c) => (c.status || "").toLowerCase() === "paid");
     const paidSum = paid.reduce((s, c) => s + Number(c.amount), 0);
     const unpaidSum = citations
-      .filter((c) => c.status === "unpaid" || c.status === "overdue")
+      .filter((c) => {
+        const cs = (c.status || "").toLowerCase();
+        return cs === "unpaid" || cs === "issued" || cs === "overdue";
+      })
       .reduce((s, c) => s + Number(c.amount), 0);
     const collectionRate = total > 0 ? (paidSum / total) * 100 : 0;
     return {
@@ -329,10 +335,13 @@ function CitationsPage() {
       counts: {
         all: citations.length,
         citizen: citations.filter((c) => c.isCitizenRegistered).length,
-        unpaid: citations.filter((c) => c.status === "unpaid").length,
+        unpaid: citations.filter((c) => {
+          const cs = (c.status || "").toLowerCase();
+          return cs === "unpaid" || cs === "issued";
+        }).length,
         paid: paid.length,
-        contested: citations.filter((c) => c.status === "contested").length,
-        overdue: citations.filter((c) => c.status === "overdue").length,
+        contested: citations.filter((c) => (c.status || "").toLowerCase() === "contested").length,
+        overdue: citations.filter((c) => (c.status || "").toLowerCase() === "overdue").length,
       } as Record<StatusFilter, number>,
     };
   }, [citations]);

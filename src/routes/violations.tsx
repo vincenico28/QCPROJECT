@@ -3,8 +3,9 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useViolations, useCitations, timeAgo, type Violation, type Citation, formatPeso } from "@/lib/data/traffic";
 import { ViolationReviewDialog } from "@/components/violations/violation-review-dialog";
-import { useBulkReviewViolations, useAddManualViolation, fineFor } from "@/lib/data/review";
+import { useBulkReviewViolations, useAddManualViolation, fineFor, matchesOffenseFilter } from "@/lib/data/review";
 import { cn } from "@/lib/utils";
+import { getPrimaryEvidenceUrl } from "@/lib/storage";
 import {
   Filter,
   Search,
@@ -71,8 +72,8 @@ const VIOLATION_TYPES = [
 ] as const;
 
 function ViolationsPage() {
-  const { data: violations = [], isLoading } = useViolations(100);
-  const { data: citations = [] } = useCitations(200);
+  const { data: violations = [], isLoading } = useViolations(500);
+  const { data: citations = [] } = useCitations(500);
   const bulkReview = useBulkReviewViolations();
   const addManual = useAddManualViolation();
 
@@ -309,15 +310,15 @@ function ViolationsPage() {
 
   const filtered = useMemo(() => {
     return violations.filter((v) => {
-      if (status !== "all" && v.status !== status) return false;
-      if (offenseFilter !== "All Offenses" && v.violation_type !== offenseFilter) return false;
+      if (status !== "all" && (v.status || "").toLowerCase() !== status.toLowerCase()) return false;
+      if (!matchesOffenseFilter(v.violation_type, offenseFilter)) return false;
       if (!q) return true;
-      const needle = q.toLowerCase();
+      const needle = q.toLowerCase().trim();
       return (
-        v.plate_number.toLowerCase().includes(needle) ||
-        v.violation_type.toLowerCase().includes(needle) ||
-        v.location.toLowerCase().includes(needle) ||
-        (v.camera_code && v.camera_code.toLowerCase().includes(needle))
+        (v.plate_number || "").toLowerCase().includes(needle) ||
+        (v.violation_type || "").toLowerCase().includes(needle) ||
+        (v.location || "").toLowerCase().includes(needle) ||
+        (v.camera_code ?? "").toLowerCase().includes(needle)
       );
     });
   }, [violations, status, offenseFilter, q]);
@@ -325,9 +326,9 @@ function ViolationsPage() {
   const counts = useMemo(() => {
     return {
       all: violations.length,
-      pending: violations.filter((v) => v.status === "pending").length,
-      confirmed: violations.filter((v) => v.status === "confirmed").length,
-      dismissed: violations.filter((v) => v.status === "dismissed").length,
+      pending: violations.filter((v) => (v.status || "").toLowerCase() === "pending").length,
+      confirmed: violations.filter((v) => (v.status || "").toLowerCase() === "confirmed").length,
+      dismissed: violations.filter((v) => (v.status || "").toLowerCase() === "dismissed").length,
     } as Record<StatusFilter, number>;
   }, [violations]);
 
@@ -680,7 +681,7 @@ function ViolationsPage() {
                     {/* Interactive Evidence Viewfinder Preview */}
                     <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-inner group">
                       <img
-                        src={manualEvidenceUrl}
+                        src={getPrimaryEvidenceUrl(manualEvidenceUrl)}
                         alt="Evidence Frame"
                         className="size-full object-cover"
                       />
@@ -1029,7 +1030,7 @@ function ViolationRow({
           title="Inspect Evidence Frame"
         >
           {v.evidence_url ? (
-            <img src={v.evidence_url} alt="Evidence" className="size-full object-cover group-hover:scale-110 transition-transform" />
+            <img src={getPrimaryEvidenceUrl(v.evidence_url)} alt="Evidence" className="size-full object-cover group-hover:scale-110 transition-transform" />
           ) : (
             <div className="grid size-full place-items-center text-subtle">
               <Camera className="size-4" />

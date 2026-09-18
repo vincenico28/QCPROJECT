@@ -1,5 +1,5 @@
 export default {
-  preset: "vercel",
+  preset: process.env.NITRO_PRESET || "node-server",
   handlers: [
     {
       route: "/**",

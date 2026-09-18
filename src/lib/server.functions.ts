@@ -36,15 +36,19 @@ function applyCitationIdentifierFilter<T>(query: T, identifier: string): T {
 // 1. VIOLATIONS
 // -------------------------------------------------------------
 export const serverFetchViolations = createServerFn({ method: "GET" })
-  .validator((limit: unknown) => (typeof limit === "number" ? limit : 50))
+  .validator((input: unknown) => {
+    const raw = typeof input === "number" ? input : typeof (input as any)?.data === "number" ? (input as any).data : Number(input);
+    return !isNaN(raw) && raw > 0 ? raw : 500;
+  })
   .handler(async ({ data: limit }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const numLimit = typeof limit === "number" && limit > 0 ? limit : 500;
     try {
       const { data, error } = await supabaseAdmin
         .from("violations")
         .select("*")
         .order("detected_at", { ascending: false })
-        .limit(limit);
+        .limit(numLimit);
       if (!error && data) {
         return data;
       }
@@ -56,16 +60,20 @@ export const serverFetchViolations = createServerFn({ method: "GET" })
 
 
 export const serverFetchCitations = createServerFn({ method: "GET" })
-  .validator((limit: unknown) => (typeof limit === "number" ? limit : 50))
+  .validator((input: unknown) => {
+    const raw = typeof input === "number" ? input : typeof (input as any)?.data === "number" ? (input as any).data : Number(input);
+    return !isNaN(raw) && raw > 0 ? raw : 500;
+  })
   .handler(async ({ data: limit }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const numLimit = typeof limit === "number" && limit > 0 ? limit : 500;
     try {
       const [citsRes, cvRes, profRes, vehRes] = await Promise.all([
         supabaseAdmin
           .from("citations")
           .select("*, violations(evidence_url, location, camera_code)")
           .order("issued_at", { ascending: false })
-          .limit(limit),
+          .limit(numLimit),
         supabaseAdmin.from("citizen_vehicles").select("*"),
         supabaseAdmin.from("citizen_profiles").select("*"),
         supabaseAdmin.from("vehicles").select("plate_number, registered_owner, risk_level, lto_alarm_tagged"),
@@ -73,39 +81,22 @@ export const serverFetchCitations = createServerFn({ method: "GET" })
 
       const data = citsRes.data;
       if (!citsRes.error && data) {
-        // Group by violation_id to deduplicate any duplicate records
-        const seenViolations = new Set<string>();
+        // In-memory deduplication ONLY if identical citation_number or id occurs twice
+        const seenIds = new Set<string>();
+        const seenCitationNumbers = new Set<string>();
         const uniqueList: any[] = [];
-        const duplicateIdsToDelete: string[] = [];
 
-        // Sort so paid citations or earlier issued ones are preserved
+        // Sort so latest issued ones are prioritized
         const sorted = [...data].sort((a, b) => {
-          if (a.status === "paid" && b.status !== "paid") return -1;
-          if (b.status === "paid" && a.status !== "paid") return 1;
-          return new Date(a.issued_at).getTime() - new Date(b.issued_at).getTime();
+          return new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime();
         });
 
         for (const c of sorted) {
-          if (c.violation_id) {
-            if (seenViolations.has(c.violation_id)) {
-              duplicateIdsToDelete.push(c.id);
-              continue;
-            }
-            seenViolations.add(c.violation_id);
-          }
+          if (c.id && seenIds.has(c.id)) continue;
+          if (c.citation_number && seenCitationNumbers.has(c.citation_number)) continue;
+          if (c.id) seenIds.add(c.id);
+          if (c.citation_number) seenCitationNumbers.add(c.citation_number);
           uniqueList.push(c);
-        }
-
-        // Background purge of duplicate IDs from database if any exist
-        if (duplicateIdsToDelete.length > 0) {
-          Promise.resolve(
-            supabaseAdmin
-              .from("citations")
-              .delete()
-              .in("id", duplicateIdsToDelete)
-          )
-            .then(() => console.log(`[Deduplication] Purged ${duplicateIdsToDelete.length} duplicate citation rows.`))
-            .catch((e: any) => console.warn("[Deduplication] Could not purge duplicate rows:", e));
         }
 
         // Build quick lookup maps for citizen motorist linkage
@@ -472,6 +463,7 @@ async function dispatchPaymentReceiptNotice(
     payerEmail?: string;
     amount?: number;
     receiptNumber?: string;
+    clearanceNumber?: string;
     method?: string;
   }
 ) {
@@ -480,12 +472,26 @@ async function dispatchPaymentReceiptNotice(
     const motorist = await findCitizenMotoristForPlate(plateNumber);
     const recipientEmail = options?.payerEmail || motorist?.email || `motorist.${citationNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@motorist.qc.gov.ph`;
     const recipientName = options?.payerName || motorist?.fullName || "Verified Motorist";
+    const receiptNo = options?.receiptNumber || `OR-2026-${citationNumber.replace(/[^0-9]/g, "").slice(-6) || "882101"}`;
+    const clearanceNo = options?.clearanceNumber || `QC-CLR-2026-${citationNumber.replace(/[^0-9]/g, "").slice(-6) || "882101"}`;
+
+    const { sendRealSettlementEmail } = await import("@/lib/email.service.server");
+    const emailResult = await sendRealSettlementEmail({
+      citationNumber,
+      plateNumber,
+      receiptNumber: receiptNo,
+      clearanceNumber: clearanceNo,
+      amount: options?.amount || 2000,
+      recipientEmail,
+      recipientName,
+      paymentMethod: options?.method,
+    });
 
     await supabaseAdmin.from("email_logs").insert({
       recipient_email: recipientEmail,
       recipient_name: recipientName,
       citation_number: citationNumber,
-      subject: `Official Electronic Receipt & LTO Clearance: ${citationNumber}`,
+      subject: emailResult.subject,
       template_name: "Payment Receipt",
       status: "delivered",
       sent_at: new Date().toISOString(),
@@ -496,7 +502,7 @@ async function dispatchPaymentReceiptNotice(
       actor_role: "finance",
       action: "AUTO_PAYMENT_CLEARANCE_DISPATCHED",
       target_resource: `Citation: ${citationNumber} (Plate: ${plateNumber})`,
-      details: `Official Electronic Receipt and LTO Clearance confirmation dispatched to ${recipientName} (${recipientEmail})${options?.receiptNumber ? ` · Ref: ${options.receiptNumber}` : ""}`,
+      details: `Official Electronic Receipt and LTO Clearance confirmation dispatched to ${recipientName} (${recipientEmail})${options?.receiptNumber ? ` · Ref: ${options.receiptNumber}` : ""} · Engine: ${emailResult.provider}`,
     });
   } catch (err) {
     console.warn("[dispatchPaymentReceiptNotice]", err);
@@ -542,10 +548,10 @@ export const serverSaveCitation = createServerFn({ method: "POST" })
     const { ensureEvidenceUploadedToSupabase } = await import("@/lib/storage");
     const evidenceUrl = rawEvidence
       ? await ensureEvidenceUploadedToSupabase(rawEvidence, {
-          plateNumber: plate,
-          category: data.offense,
-          folder: "citations",
-        })
+        plateNumber: plate,
+        category: data.offense,
+        folder: "citations",
+      })
       : null;
 
     // 1. DEDUPLICATION: If a citation already exists for this violation, return it idempotently
@@ -1326,9 +1332,13 @@ const dispatchSettlementNoticeSchema = z.object({
   citationNumber: z.string().trim().min(3),
   plateNumber: z.string().trim().min(2),
   receiptNumber: z.string().trim().min(3),
+  clearanceNumber: z.string().optional(),
+  recipientName: z.string().optional(),
   amount: z.number().positive(),
   recipientEmail: z.string().email().optional().or(z.literal("")),
   recipientPhone: z.string().trim().optional().or(z.literal("")),
+  paymentMethod: z.string().optional(),
+  originUrl: z.string().optional(),
   sendEmail: z.boolean().default(true),
   sendSms: z.boolean().default(true),
 });
@@ -1341,26 +1351,80 @@ export const serverDispatchSettlementNotice = createServerFn({ method: "POST" })
     const dispatchedChannels: string[] = [];
     const dispatchId = `DSP-2026-${Math.floor(100000 + Math.random() * 900000)}`;
     const nowIso = new Date().toISOString();
+    let emailDispatchInfo: {
+      provider: string;
+      delivered: boolean;
+      messageId?: string;
+      subject: string;
+      html: string;
+    } | null = null;
+    let emlContent: string | null = null;
 
-    // 1. Dispatch Email Notice
+    // 1. Dispatch Real Email Notice
     if (data.sendEmail && data.recipientEmail && data.recipientEmail.includes("@")) {
       try {
         const motorist = await findCitizenMotoristForPlate(data.plateNumber);
-        const recipientName = motorist?.fullName || data.plateNumber.toUpperCase();
+        const recipientName = data.recipientName || motorist?.fullName || "Verified Motorist";
+
+        const { sendRealSettlementEmail, generateEmlMessage } = await import("@/lib/email.service.server");
+        const emailResult = await sendRealSettlementEmail({
+          citationNumber: data.citationNumber,
+          plateNumber: data.plateNumber,
+          receiptNumber: data.receiptNumber,
+          clearanceNumber: data.clearanceNumber,
+          amount: data.amount,
+          recipientEmail: data.recipientEmail.trim().toLowerCase(),
+          recipientName,
+          recipientPhone: data.recipientPhone,
+          paymentMethod: data.paymentMethod,
+          originUrl: data.originUrl,
+        });
+
+        emlContent = generateEmlMessage(
+          {
+            citationNumber: data.citationNumber,
+            plateNumber: data.plateNumber,
+            receiptNumber: data.receiptNumber,
+            clearanceNumber: data.clearanceNumber,
+            amount: data.amount,
+            recipientEmail: data.recipientEmail.trim().toLowerCase(),
+            recipientName,
+            paymentMethod: data.paymentMethod,
+          },
+          emailResult.html
+        );
+
+        emailDispatchInfo = {
+          provider: emailResult.provider,
+          delivered: emailResult.delivered,
+          messageId: emailResult.messageId,
+          subject: emailResult.subject,
+          html: emailResult.html,
+        };
 
         await supabaseAdmin.from("email_logs").insert({
           recipient_email: data.recipientEmail.trim().toLowerCase(),
           recipient_name: recipientName,
           citation_number: data.citationNumber,
-          subject: `Official Electronic Receipt & LTO Clearance: ${data.citationNumber}`,
+          subject: emailResult.subject,
           template_name: "Payment Receipt",
           status: "delivered",
         });
-        dispatchedChannels.push(`Email (${data.recipientEmail.trim()})`);
+
+        const providerLabel =
+          emailResult.provider === "resend"
+            ? "Resend API"
+            : emailResult.provider === "smtp"
+              ? "SMTP Gateway"
+              : "Direct Delivery Gateway";
+
+        dispatchedChannels.push(`Email (${providerLabel} -> ${data.recipientEmail.trim()})`);
       } catch (err: any) {
         console.warn("[Settlement Dispatch] Email log error:", err?.message || err);
       }
     }
+
+    const smsMessage = `QC DPOS & MMDA NCAP Clearance: Official Receipt ${data.receiptNumber} issued for ${data.plateNumber.toUpperCase()} (NOV: ${data.citationNumber}). Fine of PHP ${data.amount.toLocaleString()} SETTLED. LTO LTMS Registration Hold has been LIFTED. Clearance ref: ${data.clearanceNumber || "QC-CLR-2026"}.`;
 
     // 2. Dispatch SMS Notice (Tracked in audit_logs)
     if (data.sendSms && data.recipientPhone && data.recipientPhone.length >= 7) {
@@ -1396,6 +1460,9 @@ export const serverDispatchSettlementNotice = createServerFn({ method: "POST" })
       dispatchId,
       dispatchedAt: nowIso,
       dispatchedChannels,
+      emailInfo: emailDispatchInfo,
+      emlContent,
+      smsText: smsMessage,
       message: `Official e-Receipt and LTO Clearance dispatched successfully via ${dispatchedChannels.join(" & ") || "Digital Portal"}.`,
     };
   });
@@ -2091,7 +2158,7 @@ export const serverVerifyPayment = createServerFn({ method: "POST" })
   .validator((data: unknown) => verifyPaymentSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    
+
     // 1. Update Payment status and verified reference number
     const updatePayload: any = {
       status: "verified",
@@ -2481,10 +2548,10 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
             receiptNumber,
             failureReason: isFailed
               ? ((payment as any)?.failure_reason ||
-                 (payment as any)?.notes ||
-                 (payment?.status === "rejected"
-                   ? "Payment reference was declined by QC Treasury Cashier. Fine remains unpaid."
-                   : "Online transaction did not push through (payment gateway declined or timed out)"))
+                (payment as any)?.notes ||
+                (payment?.status === "rejected"
+                  ? "Payment reference was declined by QC Treasury Cashier. Fine remains unpaid."
+                  : "Online transaction did not push through (payment gateway declined or timed out)"))
               : undefined,
           },
         };
@@ -3029,7 +3096,7 @@ export const serverFetchCommandDashboardMetrics = createServerFn({ method: "GET"
         .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
 
       const pendingCitations = citationsList
-        .filter((c: any) => c.status === "unpaid" || c.status === "pending").length;
+        .filter((c: any) => c.status === "unpaid" || c.status === "pending" || c.status === "issued").length;
 
       const activeCameras = camerasList.filter((c: any) => c.status !== "offline").length;
 
@@ -3385,7 +3452,9 @@ export const serverFetchRegisteredVehicles = createServerFn({ method: "GET" })
                 lto_alarm_tagged: isAlarm,
                 updated_at: new Date().toISOString(),
               }, { onConflict: "plate_number" });
-            } catch {}
+            } catch (syncErr) {
+              console.warn("[Vehicles] Background vehicle sync upsert failed:", syncErr);
+            }
           })();
         }
       }
@@ -3633,6 +3702,132 @@ export const serverLookupVehicleDetails = createServerFn({ method: "POST" })
       unpaidCitationsCount: lto.unsettledCitationsCount,
       outstandingAmount: 0,
       isCitizenRegistered: false,
+    };
+  });
+
+// -------------------------------------------------------------
+// TWO-FACTOR AUTHENTICATION (2FA) 6-DIGIT OTP DISPATCH & VERIFY
+// -------------------------------------------------------------
+const activeOtpStore = new Map<string, { code: string; expiresAt: number; attempts: number }>();
+
+const send2FAOtpSchema = z.object({
+  email: z.string().email(),
+});
+
+export const serverDispatch2FAOtp = createServerFn({ method: "POST" })
+  .validator((data: unknown) => send2FAOtpSchema.parse(data))
+  .handler(async ({ data }) => {
+    const cleanEmail = data.email.toLowerCase().trim();
+    // Generate secure 6-digit numeric OTP code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 1 * 60 * 1000; // 1 minute (60 seconds)
+
+    activeOtpStore.set(cleanEmail, {
+      code: otpCode,
+      expiresAt,
+      attempts: 0,
+    });
+
+    console.log(`[2FA OTP Engine] Generated 6-digit code for ${cleanEmail}: ${otpCode}`);
+
+    try {
+      const { send2FAOtpEmail } = await import("@/lib/email.service.server");
+      const result = await send2FAOtpEmail({
+        recipientEmail: cleanEmail,
+        otpCode,
+      });
+
+      // Audit log entry
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        await supabaseAdmin.from("audit_logs").insert({
+          actor_name: cleanEmail,
+          actor_role: "auth_challenge",
+          action: "2FA_OTP_CHALLENGE_ISSUED",
+          target_resource: "Command Center 2FA",
+          details: `6-digit OTP code dispatched via ${result.provider}. Message ID: ${result.messageId || "N/A"}`,
+        });
+      } catch {
+        // Non-blocking
+      }
+
+      return {
+        success: true,
+        provider: result.provider,
+        expiresInSeconds: 60,
+        message: "A 6-digit security code has been transmitted via SMTP to your official email.",
+      };
+    } catch (err: any) {
+      console.error("[2FA OTP Engine] Failed to dispatch OTP:", err);
+      throw new Error(`Failed to transmit 2FA code: ${err?.message || err}`);
+    }
+  });
+
+const verify2FAOtpSchema = z.object({
+  email: z.string().email(),
+  code: z.string().min(6).max(6),
+});
+
+export const serverVerify2FAOtp = createServerFn({ method: "POST" })
+  .validator((data: unknown) => verify2FAOtpSchema.parse(data))
+  .handler(async ({ data }) => {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const cleanCode = data.code.trim();
+
+    const stored = activeOtpStore.get(cleanEmail);
+
+    if (!stored) {
+      return {
+        success: false,
+        error: "No active 2FA code found. Please request a new security code.",
+      };
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      activeOtpStore.delete(cleanEmail);
+      return {
+        success: false,
+        error: "This 2FA code has expired. Please request a new code.",
+      };
+    }
+
+    stored.attempts += 1;
+    if (stored.attempts > 5) {
+      activeOtpStore.delete(cleanEmail);
+      return {
+        success: false,
+        error: "Too many failed attempts. For your security, please request a new code.",
+      };
+    }
+
+    if (stored.code !== cleanCode) {
+      return {
+        success: false,
+        error: "Invalid 6-digit code. Please verify the code in your email.",
+      };
+    }
+
+    // Code verified! Remove from pending store
+    activeOtpStore.delete(cleanEmail);
+
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: cleanEmail,
+        actor_role: "auth_verified",
+        action: "2FA_CLEARANCE_VERIFIED",
+        target_resource: "Command Center Access",
+        details: "Operator successfully completed 6-digit Two-Factor Authentication via SMTP.",
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return {
+      success: true,
+      verified: true,
+      email: cleanEmail,
+      message: "2FA Security Clearance Verified.",
     };
   });
 

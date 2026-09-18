@@ -35,3 +35,10 @@ dist-ssr
 # Environment variables
 .env
 .env.*
+
+# Python and AI model weights
+__pycache__/
+*.pyc
+*.pt
+*.onnx
+

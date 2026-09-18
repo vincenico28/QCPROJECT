@@ -142,7 +142,7 @@ export function useDispatches(limit = 50) {
   useEffect(() => {
     try {
       const channel = supabase
-        .channel("realtime-dispatches")
+        .channel(`realtime-dispatches_${Math.random().toString(36).substring(2, 9)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => {
           qc.invalidateQueries({ queryKey: ["dispatches"] });
         })

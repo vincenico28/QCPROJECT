@@ -7,6 +7,7 @@ import { SignInScreen } from "@/components/auth/sign-in-screen";
 import { supabase } from "@/integrations/supabase/client";
 
 import { SYSTEM_ROLES, hasRoleAccess, type SystemRole } from "@/lib/rbac";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const NAV = [
   { to: "/officer", label: "Terminal", icon: LayoutDashboard, exact: true },
@@ -36,15 +37,15 @@ export function OfficerShell({ children }: { children: ReactNode }) {
     // Basic protection
     return (
       <div className="grid min-h-dvh place-items-center bg-background text-center px-6">
-        <div className="max-w-md panel p-8 rounded-2xl border border-border">
-          <h2 className="text-xl font-bold text-foreground">Unauthorized Access</h2>
+        <div className="max-w-md p-8 rounded-3xl border border-border bg-card shadow-2xl">
+          <h2 className="font-display text-xl font-extrabold text-foreground">Unauthorized Access</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Your current role (<span className="font-semibold text-primary">{role}</span>) does not have field officer privileges.
           </p>
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               to="/dashboard"
-              className="w-full sm:w-auto rounded-lg bg-panel-elevated border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-panel"
+              className="w-full sm:w-auto rounded-full bg-secondary border border-border px-5 py-2.5 text-sm font-bold text-secondary-foreground hover:bg-secondary/80"
             >
               Command Center
             </Link>
@@ -53,7 +54,7 @@ export function OfficerShell({ children }: { children: ReactNode }) {
                 await supabase.auth.signOut();
                 window.location.href = "/";
               }}
-              className="w-full sm:w-auto rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
+              className="w-full sm:w-auto rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
             >
               Sign out
             </button>
@@ -66,21 +67,24 @@ export function OfficerShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground pb-16 sm:pb-0 sm:pl-20">
       {/* Mobile Top Bar */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md sm:hidden">
-        <div className="flex items-center gap-2">
-          <img src="/favico2.png" alt="QC Logo" className="size-6 object-contain" />
-          <span className="font-semibold tracking-tight">QC Field Ops</span>
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl sm:hidden">
+        <div className="flex items-center gap-2.5">
+          <img src="/favico2.png" alt="QC Logo" className="size-8 object-contain" />
+          <span className="font-display text-sm font-extrabold tracking-tight">QC Field Ops</span>
         </div>
-        <button
-          onClick={async () => {
-            await supabase.auth.signOut();
-            window.location.href = "/";
-          }}
-          className="grid size-8 place-items-center rounded-full bg-panel-elevated text-subtle hover:text-danger"
-          aria-label="Sign out"
-        >
-          <LogOut className="size-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = "/";
+            }}
+            className="grid size-9 place-items-center rounded-full bg-secondary text-muted-foreground hover:text-destructive"
+            aria-label="Sign out"
+          >
+            <LogOut className="size-4" />
+          </button>
+        </div>
       </header>
 
       {/* Desktop Sidebar (Optional fallback if viewed on desktop) */}
@@ -112,13 +116,14 @@ export function OfficerShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="mt-auto flex flex-col gap-3">
+        <div className="mt-auto flex flex-col items-center gap-3">
+          <ThemeToggle />
           <button
             onClick={async () => {
               await supabase.auth.signOut();
               window.location.href = "/";
             }}
-            className="grid size-10 place-items-center rounded-xl text-subtle transition-colors hover:bg-panel-elevated hover:text-danger"
+            className="grid size-10 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
             aria-label="Sign out"
           >
             <LogOut className="size-5" strokeWidth={1.75} />

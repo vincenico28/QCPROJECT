@@ -104,7 +104,7 @@ export function TvDisplayPage() {
     [dispatches]
   );
 
-  const onlineCameras = cameras.filter((c) => c.status === "online").length || 14;
+  const onlineCameras = cameras.filter((c) => c.status !== "offline").length || (cameras.length > 0 ? cameras.length : 14);
 
   // Realtime clock
   useEffect(() => {

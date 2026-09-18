@@ -36,14 +36,18 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Megaphone,
+  Database,
+  RefreshCw,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { SignInScreen } from "@/components/auth/sign-in-screen";
 import { supabase } from "@/integrations/supabase/client";
 import { DispatchDialog } from "@/components/dispatch/dispatch-dialog";
 import { NotificationsMenu } from "@/components/layout/notifications-menu";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CommandPalette, useCommandPalette } from "@/components/layout/command-palette";
 import { SYSTEM_ROLES, hasRoleAccess, type SystemRole } from "@/lib/rbac";
 import * as Popover from "@radix-ui/react-popover";
@@ -118,10 +122,23 @@ const NAV_GROUPS: NavGroup[] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { session, loading, user, role, roleDef, setSimulatedRole } = useAuth();
+  const {
+    session,
+    loading,
+    user,
+    role,
+    roleDef,
+    permissions,
+    isDbSynced,
+    roleSource,
+    refreshRole,
+    isTwoFactorVerified,
+    setTwoFactorVerified,
+  } = useAuth();
   const email = user?.email ?? null;
   const palette = useCommandPalette();
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+  const [clearancePopoverOpen, setClearancePopoverOpen] = useState(false);
+  const [isRefreshingRole, setIsRefreshingRole] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Public pages render without the operations chrome or auth gate.
@@ -143,7 +160,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!session) return <SignInScreen />;
+  // Mandatory 2FA Gate: All command center operators must be signed in AND 2FA verified
+  if (!session || !isTwoFactorVerified) {
+    return (
+      <SignInScreen
+        session={session}
+        isTwoFactorPending={!!session && !isTwoFactorVerified}
+        onVerified={() => setTwoFactorVerified(true)}
+      />
+    );
+  }
 
   // Check RBAC clearance for the current path
   const isAuthorized = hasRoleAccess(role, pathname);
@@ -392,89 +418,155 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </button>
 
-            {/* Interactive RBAC Role Clearance Switcher */}
-            <Popover.Root open={roleSwitcherOpen} onOpenChange={setRoleSwitcherOpen}>
+            {/* Verified Database-Driven RBAC Security Clearance Badge */}
+            <Popover.Root open={clearancePopoverOpen} onOpenChange={setClearancePopoverOpen}>
               <Popover.Trigger asChild>
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center gap-2 rounded-lg border px-3 py-1.5 shadow-sm transition-colors hover:border-primary/50",
+                    "group relative flex items-center gap-2.5 rounded-xl border px-3 py-1.5 shadow-sm transition-all hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-primary/20",
                     roleDef.badgeColor
                   )}
+                  title="Official Security Clearance & Database RBAC Identity"
                 >
-                  <ShieldCheck className="size-4 shrink-0" />
+                  <div className="relative flex size-4 shrink-0 items-center justify-center">
+                    <ShieldCheck className="size-4" />
+                    <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  </div>
                   <div className="flex flex-col text-left">
-                    <span className="font-mono-tab text-[9px] uppercase tracking-widest opacity-70 leading-none">
-                      Active Clearance
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono-tab text-[9px] uppercase tracking-widest opacity-80 leading-none">
+                        Active Clearance
+                      </span>
+                      <span className="inline-flex items-center rounded bg-emerald-500/20 px-1 py-0.2 font-mono-tab text-[8px] font-bold text-emerald-400">
+                        DB SYNCED
+                      </span>
+                    </div>
                     <span className="font-mono-tab text-xs font-bold leading-tight">
                       {roleDef.label}
                     </span>
                   </div>
-                  <ChevronDown className="size-3.5 opacity-60 ml-0.5" />
+                  <ChevronDown className="size-3.5 opacity-60 ml-0.5 transition-transform group-data-[state=open]:rotate-180" />
                 </button>
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
                   align="end"
                   sideOffset={8}
-                  className="z-50 w-80 rounded-2xl border border-border bg-panel p-3 shadow-2xl backdrop-blur-xl"
+                  className="z-50 w-88 max-w-[92vw] rounded-2xl border border-border bg-panel p-4 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150"
                 >
-                  <div className="mb-2.5 px-2 pt-1">
-                    <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-primary">
-                      Role-Based Access Control (RBAC)
+                  {/* Header */}
+                  <div className="flex items-start justify-between border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn("grid size-9 place-items-center rounded-xl border", roleDef.badgeColor)}>
+                        <ShieldCheck className="size-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono-tab text-xs font-bold text-foreground">
+                            {roleDef.label}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground line-clamp-1">
+                          {roleDef.department}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono-tab text-[9px] font-bold text-emerald-400">
+                      <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      DB ACTIVE
                     </span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Switch active security clearance to test role-scoped permissions:
-                    </p>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    {(Object.keys(SYSTEM_ROLES) as SystemRole[]).map((rKey) => {
-                      const r = SYSTEM_ROLES[rKey];
-                      const isCurrent = role === rKey;
-                      return (
-                        <button
-                          key={rKey}
-                          onClick={() => {
-                            setSimulatedRole(rKey);
-                            setRoleSwitcherOpen(false);
-                          }}
-                          className={cn(
-                            "flex items-start gap-2.5 rounded-xl p-2.5 text-left transition-colors",
-                            isCurrent
-                              ? "bg-panel-elevated border border-border/80"
-                              : "hover:bg-panel-elevated/60"
-                          )}
+
+                  {/* Database Governance Callout */}
+                  <div className="mt-3 rounded-xl border border-border/60 bg-panel-elevated/70 p-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-wider flex items-center gap-1">
+                        <Database className="size-3 text-primary" /> Authority Source
+                      </span>
+                      <span className="font-mono-tab text-[10px] font-semibold text-foreground">
+                        public.user_roles
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-wider">
+                        Authenticated
+                      </span>
+                      <span className="font-mono-tab text-[10px] text-foreground truncate max-w-[190px]" title={email || "Authenticated Operator"}>
+                        {email || "Operations Staff"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="font-mono-tab text-[10px] uppercase tracking-wider">
+                        Access Realm
+                      </span>
+                      <span className="font-mono-tab text-[10px] font-semibold text-primary uppercase">
+                        {roleDef.portal} Ops Command
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Role Operational Scope */}
+                  <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                    {roleDef.description}
+                  </p>
+
+                  {/* Active DB Permissions List */}
+                  <div className="mt-3 pt-3 border-t border-border/60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle">
+                        Enforced DB Permissions ({permissions.length})
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                      {permissions.slice(0, 10).map((perm) => (
+                        <span
+                          key={perm}
+                          className="rounded-md border border-border/80 bg-background/60 px-1.5 py-0.5 font-mono-tab text-[9px] text-foreground/80"
                         >
-                          <span
-                            className={cn(
-                              "mt-0.5 size-2.5 rounded-full shrink-0",
-                              rKey === "super_admin" ? "bg-purple-500" :
-                              rKey === "admin" ? "bg-blue-500" :
-                              rKey === "dispatcher" ? "bg-emerald-500" :
-                              rKey === "officer" ? "bg-amber-500" :
-                              rKey === "finance" ? "bg-cyan-500" :
-                              rKey === "adjudicator" ? "bg-indigo-500" : "bg-neutral-400"
-                            )}
-                          />
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-foreground">
-                                {r.label}
-                              </span>
-                              {isCurrent && (
-                                <span className="rounded bg-primary/20 px-1.5 py-0.2 text-[9px] font-mono-tab text-primary">
-                                  ACTIVE
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-muted-foreground line-clamp-1">
-                              {r.department}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          {perm}
+                        </span>
+                      ))}
+                      {permissions.length > 10 && (
+                        <span className="rounded-md bg-panel-elevated px-1.5 py-0.5 font-mono-tab text-[9px] text-muted-foreground">
+                          +{permissions.length - 10} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Re-sync & Settings Actions */}
+                  <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={isRefreshingRole}
+                      onClick={async () => {
+                        setIsRefreshingRole(true);
+                        try {
+                          await refreshRole();
+                          toast.success("Security clearance re-synchronized with PostgreSQL database");
+                        } catch {
+                          toast.error("Failed to re-sync permissions");
+                        } finally {
+                          setIsRefreshingRole(false);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel-elevated hover:bg-panel-elevated/80 px-2.5 py-1.5 font-mono-tab text-[10px] font-bold text-foreground transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("size-3", isRefreshingRole && "animate-spin")} />
+                      Re-sync Clearance
+                    </button>
+
+                    <Link
+                      to="/settings"
+                      onClick={() => setClearancePopoverOpen(false)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 px-2.5 py-1.5 font-mono-tab text-[10px] font-bold text-primary transition-colors"
+                    >
+                      <Settings2 className="size-3" />
+                      RBAC Policies
+                    </Link>
                   </div>
                 </Popover.Content>
               </Popover.Portal>
@@ -501,6 +593,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               }
             />
             <NotificationsMenu />
+            <ThemeToggle />
           </div>
         </header>
 
@@ -554,7 +647,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/violations")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">AI Violations Review</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">AI Violations Review</h1>
         <p className="text-xs text-subtle">
           Real-time YOLOv11 camera detections, confidence scoring, and citation verification.
         </p>
@@ -564,7 +657,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/citations")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Digital Citations & NOV Ledger</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Digital Citations & NOV Ledger</h1>
         <p className="text-xs text-subtle">
           Notices of Violation (NOV), penalty settlement status, and LTO clearance certificates.
         </p>
@@ -574,7 +667,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/cameras")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Live Camera Grid & ANPR</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Live Camera Grid & ANPR</h1>
         <p className="text-xs text-subtle">
           Real-time CCTV optical feeds, speed enforcement nodes, and IoT sensor health.
         </p>
@@ -584,7 +677,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/map")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">GIS Spatial Operations Map</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">GIS Spatial Operations Map</h1>
         <p className="text-xs text-subtle">
           Live incident clustering, camera telemetry overlays, and active field officer GPS tracking.
         </p>
@@ -594,7 +687,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/vehicles")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Motorist Vehicle Registry</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Motorist Vehicle Registry</h1>
         <p className="text-xs text-subtle">
           LTO LTMS database integration, repeat offender records, and hotlist registration alarms.
         </p>
@@ -604,7 +697,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/officers/shifts")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Officer Shifts & Live GPS</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Officer Shifts & Live GPS</h1>
         <p className="text-xs text-subtle">
           Real-time patrol unit coordinates, battery telemetry, and sector assignments.
         </p>
@@ -614,7 +707,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/officers")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Field Enforcers & Personnel</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Field Enforcers & Personnel</h1>
         <p className="text-xs text-subtle">
           Duty roster, enforcer service records, and citation performance metrics.
         </p>
@@ -624,7 +717,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/dispatch-hotline")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">911 Emergency Hotline Intake</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">911 Emergency Hotline Intake</h1>
         <p className="text-xs text-subtle">
           Citizen distress call queue, priority triage, and rapid response unit deployments.
         </p>
@@ -634,7 +727,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/dispatch")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Tactical Incident Dispatch</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Tactical Incident Dispatch</h1>
         <p className="text-xs text-subtle">
           Incident response coordination, unit assignments, and field status telemetry.
         </p>
@@ -644,7 +737,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/disputes")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Traffic Adjudication Board (TAB)</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Traffic Adjudication Board (TAB)</h1>
         <p className="text-xs text-subtle">
           Citizen citation appeals, evidence deliberations, and formal resolution docket orders.
         </p>
@@ -654,7 +747,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/transport")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Public Transport Coordination</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Public Transport Coordination</h1>
         <p className="text-xs text-subtle">
           PUV route capacity, jeepney and bus terminal flow, and illegal terminal detection.
         </p>
@@ -664,7 +757,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/finance-analytics")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Executive Financial Analytics</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Executive Financial Analytics</h1>
         <p className="text-xs text-subtle">
           Multi-stream revenue forecasting, collection trends, and municipal budget allocations.
         </p>
@@ -674,7 +767,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/finance")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Treasury & Cashier Reconciliations</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Treasury & Cashier Reconciliations</h1>
         <p className="text-xs text-subtle">
           Over-the-counter payments, cashier drawer balancing, and daily settlement audits.
         </p>
@@ -684,7 +777,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/reports")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Statutory Executive Reports</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Statutory Executive Reports</h1>
         <p className="text-xs text-subtle">
           Quezon City statutory violation logs, revenue audit summaries, and official CSV exports.
         </p>
@@ -694,7 +787,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/analytics/heatmaps")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Predictive Spatial AI Heatmaps</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Predictive Spatial AI Heatmaps</h1>
         <p className="text-xs text-subtle">
           GIS incident density calculations, 24-hour predictive traffic risk zones, and choke-point forecasts.
         </p>
@@ -704,7 +797,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/analytics")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Operational Traffic Analytics</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Operational Traffic Analytics</h1>
         <p className="text-xs text-subtle">
           Corridor velocity trends, violation distribution charts, and hourly congestion index.
         </p>
@@ -714,7 +807,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/ai-training")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">YOLOv11 AI Training & Fine-Tuning</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">YOLOv11 AI Training & Fine-Tuning</h1>
         <p className="text-xs text-subtle">
           Dataset annotation, model fine-tuning checkpoints, and inference accuracy benchmarks.
         </p>
@@ -724,7 +817,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/infrastructure")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Predictive Infrastructure Health</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Predictive Infrastructure Health</h1>
         <p className="text-xs text-subtle">
           Traffic light controllers, sensor loop degradation, and automated maintenance work orders.
         </p>
@@ -734,7 +827,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/iot")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">IoT Edge Nodes & Telemetry</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">IoT Edge Nodes & Telemetry</h1>
         <p className="text-xs text-subtle">
           Edge compute nodes, live camera telemetry streaming, and remote hardware reboot watchdogs.
         </p>
@@ -744,7 +837,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/automation")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Automated Rules Engine</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Automated Rules Engine</h1>
         <p className="text-xs text-subtle">
           Autonomous IF-THIS-THEN-THAT protocols for instant dispatches and motorist advisories.
         </p>
@@ -754,7 +847,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/developer")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Developer API Portal</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Developer API Portal</h1>
         <p className="text-xs text-subtle">
           API token management, webhook feeds for Waze and MMDA, and integration documentation.
         </p>
@@ -764,7 +857,7 @@ function PageHeading({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/communications")) {
     return (
       <div>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">Official Communications Dispatcher</h1>
+        <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">Official Communications Dispatcher</h1>
         <p className="text-xs text-subtle">
           Automated email notices of violation, official electronic receipts, and emergency broadcast dispatch.
         </p>

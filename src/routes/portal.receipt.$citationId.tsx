@@ -32,6 +32,8 @@ import {
   Share2,
   AlertOctagon,
   RotateCcw,
+  Eye,
+  Download,
 } from "lucide-react";
 import { useCitation, formatPeso } from "@/lib/data/traffic";
 import { parseCitationOffenses } from "@/lib/data/review";
@@ -103,7 +105,17 @@ function ReceiptPage() {
     dispatchId: string;
     channels: string[];
     timestamp: string;
+    emailInfo?: {
+      provider: string;
+      delivered: boolean;
+      messageId?: string;
+      subject: string;
+      html: string;
+    } | null;
+    emlContent?: string | null;
+    smsText?: string;
   } | null>(null);
+  const [showEmailPreviewModal, setShowEmailPreviewModal] = useState(false);
 
   // Auto-populate settlement clearance dispatch contacts from citation or citizen session
   useEffect(() => {
@@ -122,11 +134,11 @@ function ReceiptPage() {
         // Ignore session parse error
       }
 
-      if (candidateEmail && !dispatchEmail) {
-        setDispatchEmail(candidateEmail);
+      if (candidateEmail) {
+        setDispatchEmail((prev) => prev || candidateEmail);
       }
-      if (candidatePhone && !dispatchPhone) {
-        setDispatchPhone(candidatePhone);
+      if (candidatePhone) {
+        setDispatchPhone((prev) => prev || candidatePhone);
       }
     }
   }, [citation]);
@@ -252,9 +264,13 @@ function ReceiptPage() {
           citationNumber: citation?.citation_number || citationId,
           plateNumber: plate,
           receiptNumber: receiptNo,
+          clearanceNumber: clearanceNo,
+          recipientName: registeredOwner || citation?.citizenName || "Verified Motorist",
+          paymentMethod: resolvedPaymentMethod,
           amount,
           recipientEmail: sendEmail ? dispatchEmail.trim() : "",
           recipientPhone: sendSms ? dispatchPhone.trim() : "",
+          originUrl: typeof window !== "undefined" ? window.location.origin : undefined,
           sendEmail,
           sendSms,
         },
@@ -264,6 +280,9 @@ function ReceiptPage() {
         dispatchId: res.dispatchId,
         channels: res.dispatchedChannels,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        emailInfo: res.emailInfo,
+        emlContent: res.emlContent,
+        smsText: res.smsText,
       });
 
       toast.success("Settlement Dispatched!", {
@@ -277,6 +296,50 @@ function ReceiptPage() {
     } finally {
       setIsDispatching(false);
     }
+  };
+
+  const handleDownloadEml = () => {
+    if (!dispatchResult?.emlContent) return;
+    const blob = new Blob([dispatchResult.emlContent], { type: "message/rfc822;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `QC_Clearance_OR_${receiptNo}.eml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("e-OR and Clearance .EML file downloaded", {
+      description: "Opens directly in Apple Mail, Microsoft Outlook, or Thunderbird.",
+    });
+  };
+
+  const handleOpenEmailClient = () => {
+    const subject = encodeURIComponent(
+      dispatchResult?.emailInfo?.subject ||
+        `Official Electronic Receipt & LTO Clearance: ${citationId} [Plate ${plate}]`
+    );
+    const body = encodeURIComponent(
+      `Mabuhay!\n\n` +
+      `Here is the official Electronic Official Receipt (e-OR) and LTO Clearance Pass for Notice of Violation ${citationId}.\n\n` +
+      `Vehicle Plate: ${plate}\n` +
+      `Receipt Number: ${receiptNo}\n` +
+      `Clearance Certificate No: ${clearanceNo}\n` +
+      `Amount Settled: PHP ${amount.toLocaleString()}.00\n` +
+      `LTO LTMS Registration Alarm: CLEARED FOR RENEWAL\n\n` +
+      `View verified official digital copy: ${typeof window !== "undefined" ? window.location.href : ""}\n\n` +
+      `Quezon City Department of Public Order and Safety (DPOS)`
+    );
+    window.location.href = `mailto:${dispatchEmail}?subject=${subject}&body=${body}`;
+  };
+
+  const handleSendSmsApp = () => {
+    const cleanPhone = dispatchPhone.replace(/[\s-]/g, "");
+    const body = encodeURIComponent(
+      dispatchResult?.smsText ||
+        `QC DPOS e-Clearance: Official Receipt ${receiptNo} issued for ${plate}. Fine of PHP ${amount.toLocaleString()} SETTLED. LTO LTMS Hold LIFTED. Ref: ${clearanceNo}.`
+    );
+    window.location.href = `sms:${cleanPhone}?body=${body}`;
   };
 
   return (
@@ -893,14 +956,72 @@ function ReceiptPage() {
           </form>
 
           {dispatchResult && (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-emerald-300">
-              <span className="flex items-center gap-2 font-medium">
-                <BadgeCheck className="size-4 text-emerald-400 shrink-0" />
-                Dispatched to: {dispatchResult.channels.join(" and ")}
-              </span>
-              <span className="font-mono-tab text-[10px] text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
-                Ref: {dispatchResult.dispatchId}
-              </span>
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/30 p-4 sm:p-5 flex flex-col gap-3 shadow-lg">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-emerald-300 border-b border-emerald-500/20 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <BadgeCheck className="size-4.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white block text-sm">
+                      Official Transmission Complete
+                    </span>
+                    <span className="text-[11px] text-emerald-300/80">
+                      Dispatched to: {dispatchResult.channels.join(" and ")}
+                    </span>
+                  </div>
+                </div>
+                <span className="font-mono-tab text-[10px] text-emerald-400 bg-emerald-500/20 px-2.5 py-1 rounded-full border border-emerald-500/30 font-semibold">
+                  Ref: {dispatchResult.dispatchId}
+                </span>
+              </div>
+
+              {/* Action Buttons: Preview Email, Download EML, Open Mail Client, SMS */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {dispatchResult.emailInfo?.html && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailPreviewModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Eye className="size-3.5" />
+                    <span>Preview Dispatched Email</span>
+                  </button>
+                )}
+
+                {dispatchResult.emlContent && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadEml}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Download className="size-3.5 text-primary" />
+                    <span>Download Official .EML File</span>
+                  </button>
+                )}
+
+                {dispatchEmail && (
+                  <button
+                    type="button"
+                    onClick={handleOpenEmailClient}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Mail className="size-3.5 text-emerald-400" />
+                    <span>Launch in Mail App</span>
+                  </button>
+                )}
+
+                {dispatchPhone && (
+                  <button
+                    type="button"
+                    onClick={handleSendSmsApp}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="size-3.5 text-amber-400" />
+                    <span>Text Clearance to Phone</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -992,6 +1113,76 @@ function ReceiptPage() {
                 Scan this cryptographically verified QR code during LTO LTMS registration renewal or roadside police checkpoints.
               </p>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* ========================================================================= */}
+      {/* EMAIL PREVIEW MODAL */}
+      {/* ========================================================================= */}
+      <Dialog open={showEmailPreviewModal} onOpenChange={setShowEmailPreviewModal}>
+        <DialogContent className="max-w-2xl w-[95vw] p-0 overflow-hidden bg-panel border-border text-white rounded-3xl shadow-2xl max-h-[90vh] flex flex-col">
+          <div className="p-4 border-b border-border/60 flex items-center justify-between bg-black/40">
+            <div className="flex items-center gap-2.5">
+              <div className="size-9 rounded-xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <Mail className="size-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm font-bold text-white flex items-center gap-1.5">
+                  Official Electronic Receipt & Clearance Email
+                  <span className="text-[9px] uppercase font-mono-tab bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-1 py-0.2 rounded">
+                    Delivered
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="text-[11px] text-muted-foreground">
+                  Recipient: <span className="text-white font-mono">{dispatchEmail}</span> · Notice {citation?.citation_number || citationId}
+                </DialogDescription>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {dispatchResult?.emlContent && (
+                <button
+                  type="button"
+                  onClick={handleDownloadEml}
+                  className="hidden sm:inline-flex items-center gap-1 rounded-lg border border-border bg-white/5 hover:bg-white/10 px-2.5 py-1.5 text-xs text-white cursor-pointer"
+                  title="Download .EML file"
+                >
+                  <Download className="size-3.5" />
+                  <span>.EML</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto bg-slate-900/60 p-4">
+            {dispatchResult?.emailInfo?.html ? (
+              <div className="rounded-xl overflow-hidden shadow-inner border border-white/10 bg-white">
+                <iframe
+                  srcDoc={dispatchResult.emailInfo.html}
+                  title="Official e-OR Email Preview"
+                  className="w-full h-[520px] border-0"
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            ) : (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                No email HTML preview available.
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 border-t border-border/60 bg-black/40 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="size-3.5 text-emerald-400" />
+              Quezon City DPOS & MMDA NCAP Automated Gateway
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowEmailPreviewModal(false)}
+              className="rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
+            >
+              Close Preview
+            </button>
           </div>
         </DialogContent>
       </Dialog>

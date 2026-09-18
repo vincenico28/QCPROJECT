@@ -57,7 +57,7 @@ export function useFinanceQueue() {
 
   useEffect(() => {
     const channel = supabase
-      .channel("finance_realtime_sync")
+      .channel(`finance_realtime_sync_${Math.random().toString(36).substring(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => {
         qc.invalidateQueries({ queryKey: ["finance-queue"] });
       })

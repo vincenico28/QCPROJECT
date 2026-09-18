@@ -1,0 +1,56 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qc-flow-guardian-web
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NITRO_PRESET=node-server
+      # Uses relative proxy path through Nginx
+      - VITE_AI_SERVICE_URL=/ai
+    depends_on:
+      - ai-service
+    networks:
+      - qc-network
+
+  ai-service:
+    build:
+      context: ./services/ai_violation_service
+      dockerfile: Dockerfile
+    container_name: qc-flow-guardian-ai
+    restart: unless-stopped
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+    networks:
+      - qc-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: qc-flow-guardian-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+      - ai-service
+    networks:
+      - qc-network
+
+networks:
+  qc-network:
+    driver: bridge

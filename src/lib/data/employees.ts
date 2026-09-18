@@ -225,10 +225,10 @@ export function useCreateEmployee() {
 
       MOCK_EMPLOYEES.unshift(newEmp);
 
-      // Attempt to register in Supabase Auth if connected (non-blocking)
+      // Attempt to register in Supabase Auth & user_roles if connected (non-blocking)
       try {
         if (input.password) {
-          await supabase.auth.signUp({
+          const { data: signUpData } = await supabase.auth.signUp({
             email: input.email,
             password: input.password,
             options: {
@@ -239,6 +239,17 @@ export function useCreateEmployee() {
               },
             },
           });
+
+          if (signUpData?.user?.id) {
+            try {
+              await (supabase as any).from("user_roles").upsert({
+                user_id: signUpData.user.id,
+                role: input.role,
+              }, { onConflict: "user_id,role" });
+            } catch (roleSyncErr) {
+              console.warn("Could not save to user_roles table:", roleSyncErr);
+            }
+          }
         }
 
         await supabase.from("audit_logs").insert({

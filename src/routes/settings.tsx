@@ -1,6 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Settings2, Shield, BrainCircuit, Users, Save, CheckCircle2, XCircle, Lock, ShieldCheck, UserCheck } from "lucide-react";
+import {
+  Settings2,
+  Shield,
+  BrainCircuit,
+  Users,
+  Save,
+  CheckCircle2,
+  XCircle,
+  Lock,
+  ShieldCheck,
+  UserCheck,
+  Database,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { SYSTEM_ROLES, type SystemRole } from "@/lib/rbac";
 import { useAuth } from "@/hooks/use-auth";
@@ -32,8 +45,9 @@ const MODULES = [
 ];
 
 function SettingsPage() {
-  const { role, setSimulatedRole } = useAuth();
+  const { role, roleDef, permissions, isDbSynced, refreshRole } = useAuth();
   const [selectedRoleForDetail, setSelectedRoleForDetail] = useState<SystemRole>("admin");
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [autoTicketThreshold, setAutoTicketThreshold] = useState(85);
   const [manualReviewThreshold, setManualReviewThreshold] = useState(60);
@@ -89,9 +103,10 @@ function SettingsPage() {
               <p className="text-xs text-muted-foreground">Strict permission boundary definitions for Command and Citizen portals</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono-tab text-[10px] uppercase tracking-widest text-muted-foreground">
-              Current Active Clearance:
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono-tab text-[10px] font-bold text-emerald-400">
+              <Database className="size-3" />
+              {isDbSynced ? "DATABASE ENFORCED" : "SYNCING WITH DB"}
             </span>
             <span className={cn("rounded-lg border px-2.5 py-1 text-xs font-bold", SYSTEM_ROLES[role].badgeColor)}>
               {SYSTEM_ROLES[role].label}
@@ -203,15 +218,34 @@ function SettingsPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setSimulatedRole(selectedRoleForDetail);
-              toast.success(`Active clearance switched to: ${SYSTEM_ROLES[selectedRoleForDetail].label}`);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary border border-primary/40 px-3 py-1.5 text-xs font-bold transition-colors shrink-0"
-          >
-            Simulate This Role
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={isSyncing}
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await refreshRole();
+                  toast.success("Active clearance re-synchronized from database.");
+                } catch {
+                  toast.error("Failed to re-sync permissions");
+                } finally {
+                  setIsSyncing(false);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel-elevated hover:bg-panel-elevated/80 px-3 py-1.5 text-xs font-bold text-foreground transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
+              Re-sync DB
+            </button>
+            <Link
+              to="/employees"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary border border-primary/40 px-3 py-1.5 text-xs font-bold transition-colors shrink-0"
+            >
+              <Users className="size-3.5" />
+              Manage Personnel Roles
+            </Link>
+          </div>
         </div>
       </div>
 
