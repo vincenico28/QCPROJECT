@@ -80,7 +80,7 @@ CREATE POLICY "citations_update"
   ON public.citations
   FOR UPDATE
   USING (id IS NOT NULL)
-  WITH CHECK (status IN ('pending', 'paid', 'unpaid', 'contested', 'waived', 'overdue'));
+  WITH CHECK (status IN ('pending', 'paid', 'unpaid', 'contested', 'waived', 'overdue', 'payment_pending', 'payment_failed'));
 
 CREATE POLICY "citations_delete"
   ON public.citations
