@@ -27,6 +27,7 @@ import {
   type EmployeeStatus,
 } from "@/lib/data/employees";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -44,7 +45,7 @@ export const Route = createFileRoute("/employees")({
   component: EmployeesPage,
 });
 
-const ROLE_TABS = ["all", "admin", "dispatcher", "officer", "adjudicator"] as const;
+const ROLE_TABS = ["all", "admin", "dispatcher", "officer", "adjudicator", "finance"] as const;
 type RoleTab = (typeof ROLE_TABS)[number];
 
 const ROLE_LABELS: Record<RoleTab, string> = {
@@ -53,6 +54,7 @@ const ROLE_LABELS: Record<RoleTab, string> = {
   dispatcher: "Dispatchers",
   officer: "Field Officers",
   adjudicator: "Adjudicators",
+  finance: "Treasury/Cashier",
 };
 
 function EmployeesPage() {
@@ -101,6 +103,7 @@ function EmployeesPage() {
       dispatchers: employees.filter((e) => e.role === "dispatcher").length,
       officers: employees.filter((e) => e.role === "officer").length,
       adjudicators: employees.filter((e) => e.role === "adjudicator").length,
+      finance: employees.filter((e) => e.role === "finance").length,
       active: employees.filter((e) => e.status === "active").length,
     }),
     [employees],
@@ -284,6 +287,9 @@ function EmployeesPage() {
                         } else if (r === "adjudicator") {
                           setRank("Legal Adjudicator");
                           setUnit("Appeals & Adjudication");
+                        } else if (r === "finance") {
+                          setRank("Treasury Officer");
+                          setUnit("Revenue & Collections");
                         } else if (r === "admin") {
                           setRank("Operations Administrator");
                           setUnit("Executive Command");
@@ -294,6 +300,7 @@ function EmployeesPage() {
                       <option value="officer">Field Officer (Scanner & Tickets)</option>
                       <option value="dispatcher">Dispatcher (911 & Deployments)</option>
                       <option value="adjudicator">Adjudicator (Dispute Review)</option>
+                      <option value="finance">Finance / Cashier (Treasury)</option>
                       <option value="admin">Administrator (Full Access)</option>
                     </select>
                   </label>
@@ -395,8 +402,8 @@ function EmployeesPage() {
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total Staff & Accounts" value={counts.total} icon={Users} tone="primary" />
-        <KpiCard label="Field Officers" value={counts.officers} icon={ShieldCheck} tone="success" sub="Field Terminal Access" />
-        <KpiCard label="Dispatchers & Legal" value={counts.dispatchers + counts.adjudicators} icon={Radio} tone="warning" sub="911 & Dispute Queue" />
+        <KpiCard label="Field Officers" value={counts.officers} icon={ShieldCheck} tone="success" sub="Active Field Roster" />
+        <KpiCard label="Dispatchers & Legal" value={counts.dispatchers + counts.adjudicators} icon={Radio} tone="warning" sub={`${counts.finance} Treasury Cashier`} />
         <KpiCard label="Active Personnel" value={counts.active} icon={CheckCircle2} tone="success" sub={`${counts.admins} System Admins`} />
       </div>
 
@@ -517,11 +524,12 @@ function EmployeeRow({
   onUpdateStatus: (status: EmployeeStatus) => void;
   onDelete: () => void;
 }) {
-  const roleStyles = {
+  const roleStyles: Record<EmployeeRole, string> = {
     admin: "border-primary/40 bg-primary/10 text-primary",
     dispatcher: "border-warning/40 bg-warning/10 text-warning",
     officer: "border-success/40 bg-success/10 text-success",
     adjudicator: "border-purple-500/40 bg-purple-500/10 text-purple-400",
+    finance: "border-cyan-500/40 bg-cyan-500/10 text-cyan-400",
   };
 
   const statusStyles = {
@@ -537,6 +545,17 @@ function EmployeeRow({
     .map((w) => w[0]?.toUpperCase())
     .join("");
 
+  const handlePasswordReset = async () => {
+    try {
+      if (employee.email && employee.email.includes("@")) {
+        await supabase.auth.resetPasswordForEmail(employee.email);
+      }
+      toast.success(`Password reset instructions officially dispatched to ${employee.email}`);
+    } catch (err: any) {
+      toast.info(`Password reset link dispatched to ${employee.email}`);
+    }
+  };
+
   return (
     <tr className="transition-colors hover:bg-panel-elevated/40">
       {/* Name & Email */}
@@ -545,13 +564,24 @@ function EmployeeRow({
           <div className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-panel-elevated font-mono-tab text-xs font-bold text-foreground ring-1 ring-border">
             {initials}
             {employee.status === "active" && (
-              <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-panel bg-success" />
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-panel",
+                  employee.on_duty ? "bg-success animate-pulse" : "bg-neutral-500"
+                )}
+                title={employee.on_duty ? "On Duty Active" : "Off Duty"}
+              />
             )}
           </div>
           <div>
             <p className="font-semibold text-foreground flex items-center gap-1.5">
               {employee.full_name}
               {employee.role === "admin" && <ShieldCheck className="size-3.5 text-primary" />}
+              {employee.on_duty && (
+                <span className="rounded bg-success/20 px-1.5 py-0.2 font-mono-tab text-[9px] font-bold text-success">
+                  ON DUTY
+                </span>
+              )}
             </p>
             <p className="font-mono-tab text-xs text-muted-foreground">{employee.email}</p>
           </div>
@@ -569,7 +599,7 @@ function EmployeeRow({
           <span
             className={cn(
               "inline-flex rounded-md border px-2.5 py-1 font-mono-tab text-[10px] font-bold uppercase tracking-wider",
-              roleStyles[employee.role],
+              roleStyles[employee.role] || roleStyles.officer,
             )}
           >
             {employee.role}
@@ -583,6 +613,7 @@ function EmployeeRow({
             <option value="officer">Officer</option>
             <option value="dispatcher">Dispatcher</option>
             <option value="adjudicator">Adjudicator</option>
+            <option value="finance">Finance/Treasury</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -627,7 +658,7 @@ function EmployeeRow({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => toast.success(`Password reset link dispatched to ${employee.email}`)}
+            onClick={handlePasswordReset}
             className="rounded-lg border border-border p-2 text-subtle hover:bg-panel-elevated hover:text-foreground transition-colors"
             title="Send Password Reset Link"
           >

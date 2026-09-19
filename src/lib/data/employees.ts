@@ -1,8 +1,13 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { serverSaveOfficer } from "@/lib/server.functions";
+import {
+  serverSaveOfficer,
+  serverUpdateStaffMember,
+  serverDeleteStaffMember,
+} from "@/lib/server.functions";
 
-export type EmployeeRole = "admin" | "dispatcher" | "officer" | "adjudicator";
+export type EmployeeRole = "admin" | "dispatcher" | "officer" | "adjudicator" | "finance";
 export type EmployeeStatus = "active" | "on_leave" | "suspended";
 
 export type Employee = {
@@ -34,9 +39,14 @@ export type NewEmployeeInput = {
   contact_number?: string;
 };
 
-export let MOCK_EMPLOYEES: Employee[] = [
+/**
+ * Baseline executive staff accounts (Super Admin & System Admin)
+ * Ensure that Executive Command and Operations Administrators are always represented
+ * even before external OAuth/auth users are synchronized.
+ */
+export const EXECUTIVE_COMMAND_STAFF: Employee[] = [
   {
-    id: "EMP-001",
+    id: "EMP-ADMIN-001",
     badge_number: "BADGE-100",
     full_name: "Vincent Nico Escala",
     email: "escalavincenico28@gmail.com",
@@ -48,75 +58,27 @@ export let MOCK_EMPLOYEES: Employee[] = [
     status: "active",
     on_duty: true,
     citations_issued: 0,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 120).toISOString(),
+    created_at: "2026-05-01T08:00:00.000Z",
     last_active: new Date().toISOString(),
   },
   {
-    id: "EMP-002",
-    badge_number: "BADGE-101",
-    full_name: "Juan Dela Cruz",
-    email: "officer.delacruz@quezoncity.gov.ph",
-    role: "officer",
-    rank: "Sergeant",
-    unit: "Traffic Enforcement",
-    district: "District 1 - Culiat Central",
-    contact_number: "0917-123-4567",
-    status: "active",
-    on_duty: true,
-    citations_issued: 145,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
-    last_active: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-  },
-  {
-    id: "EMP-003",
-    badge_number: "BADGE-102",
-    full_name: "Maria Santos",
-    email: "officer.santos@quezoncity.gov.ph",
-    role: "officer",
-    rank: "Officer II",
-    unit: "Mobile Patrol",
-    district: "District 2 - Commonwealth",
-    contact_number: "0917-234-5678",
-    status: "active",
-    on_duty: false,
-    citations_issued: 89,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60).toISOString(),
-    last_active: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
-  },
-  {
-    id: "EMP-004",
-    badge_number: "BADGE-104",
-    full_name: "Field Officer Ramos",
-    email: "officer.ramos@quezoncity.gov.ph",
-    role: "officer",
-    rank: "Officer I",
-    unit: "Traffic Management",
-    district: "District 1 - Culiat Central",
-    contact_number: "0918-987-6543",
-    status: "active",
-    on_duty: true,
-    citations_issued: 42,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
-    last_active: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-  },
-  {
-    id: "EMP-005",
+    id: "EMP-DISP-088",
     badge_number: "DSP-088",
     full_name: "Elena Bautista",
     email: "dispatcher.elena@quezoncity.gov.ph",
     role: "dispatcher",
-    rank: "Senior Dispatcher",
+    rank: "Senior Dispatcher Specialist",
     unit: "Emergency Communications",
     district: "HQ Dispatch Center",
     contact_number: "0919-456-7890",
     status: "active",
     on_duty: true,
     citations_issued: 0,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 45).toISOString(),
+    created_at: "2026-07-15T08:00:00.000Z",
     last_active: new Date().toISOString(),
   },
   {
-    id: "EMP-006",
+    id: "EMP-ADJ-012",
     badge_number: "ADJ-012",
     full_name: "Atty. Fernando Reyes",
     email: "adjudicator.reyes@quezoncity.gov.ph",
@@ -128,54 +90,143 @@ export let MOCK_EMPLOYEES: Employee[] = [
     status: "active",
     on_duty: true,
     citations_issued: 0,
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 75).toISOString(),
-    last_active: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    created_at: "2026-06-20T08:00:00.000Z",
+    last_active: new Date().toISOString(),
+  },
+  {
+    id: "EMP-FIN-005",
+    badge_number: "FIN-005",
+    full_name: "Clara Mendoza",
+    email: "finance.mendoza@quezoncity.gov.ph",
+    role: "finance",
+    rank: "Treasury Officer",
+    unit: "Revenue & Collections",
+    district: "QC Treasury Main",
+    contact_number: "0921-987-1122",
+    status: "active",
+    on_duty: true,
+    citations_issued: 0,
+    created_at: "2026-06-10T08:00:00.000Z",
+    last_active: new Date().toISOString(),
   },
 ];
 
+// In-memory registered staff storage for newly provisioned non-officers
+let localProvisionedStaff: Employee[] = [];
+
 export function useEmployees() {
+  const qc = useQueryClient();
+
+  // Setup live Supabase Realtime subscriptions to react immediately to database updates
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel(`realtime-employees-directory_${Math.random().toString(36).slice(2, 8)}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "officers" }, () => {
+          qc.invalidateQueries({ queryKey: ["employees"] });
+          qc.invalidateQueries({ queryKey: ["officers"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "user_roles" }, () => {
+          qc.invalidateQueries({ queryKey: ["employees"] });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn("[Realtime Staff Subscription Warning]:", err);
+    }
+  }, [qc]);
+
   return useQuery({
     queryKey: ["employees"],
-    queryFn: async () => {
+    queryFn: async (): Promise<Employee[]> => {
+      // 1. Fetch live officers from database
+      let dbOfficers: any[] = [];
       try {
-        const { data: dbOfficers, error } = await supabase
+        const { data, error } = await supabase
           .from("officers")
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (!error && dbOfficers && dbOfficers.length > 0) {
-          const officerEmployees: Employee[] = dbOfficers.map((o: any) => ({
-            id: o.id,
-            badge_number: o.badge_number,
-            full_name: o.full_name,
-            email: `${o.full_name.toLowerCase().replace(/\s+/g, ".")}@quezoncity.gov.ph`,
-            role: "officer",
-            rank: o.rank,
-            unit: o.unit,
-            district: o.district,
-            contact_number: o.contact_number,
-            status: (o.status as EmployeeStatus) || "active",
-            on_duty: o.on_duty,
-            citations_issued: o.citations_issued || 0,
-            created_at: o.created_at,
-            last_active: o.updated_at || o.created_at,
-          }));
-
-          const nonOfficers = MOCK_EMPLOYEES.filter((e) => e.role !== "officer");
-          return [...nonOfficers, ...officerEmployees];
+        if (!error && data) {
+          dbOfficers = data;
         }
       } catch (err) {
-        console.warn("Supabase fetch employees fallback:", err);
+        console.warn("[Staff Directory] Error querying officers:", err);
       }
-      return [...MOCK_EMPLOYEES];
+
+      // Convert DB officers to unified Employee schema
+      const officerEmployees: Employee[] = dbOfficers.map((o: any) => {
+        const email = `${o.full_name.toLowerCase().trim().replace(/[^a-z0-9]+/g, ".")}@quezoncity.gov.ph`;
+        return {
+          id: o.id,
+          badge_number: o.badge_number || "BADGE-000",
+          full_name: o.full_name,
+          email,
+          role: "officer",
+          rank: o.rank || "Officer I",
+          unit: o.unit || "Traffic Enforcement",
+          district: o.district || "District 6 (Culiat)",
+          contact_number: o.contact_number,
+          status: (o.status as EmployeeStatus) || "active",
+          on_duty: !!o.on_duty,
+          citations_issued: Number(o.citations_issued || 0),
+          created_at: o.created_at,
+          last_active: o.updated_at || o.created_at,
+        };
+      });
+
+      // 2. Fetch live user_roles to match any administrative/specialized personnel
+      let assignedRoles: any[] = [];
+      try {
+        const { data: rolesData, error: rolesErr } = await (supabase as any)
+          .from("user_roles")
+          .select("*");
+        if (!rolesErr && rolesData) {
+          assignedRoles = rolesData;
+        }
+      } catch (err) {
+        console.warn("[Staff Directory] Error querying user_roles:", err);
+      }
+
+      // 3. Assemble baseline executive accounts
+      const nonOfficers: Employee[] = [...EXECUTIVE_COMMAND_STAFF];
+
+      // Merge locally provisioned staff that are not in DB officers yet
+      for (const prov of localProvisionedStaff) {
+        if (!nonOfficers.some((e) => e.id === prov.id) && !officerEmployees.some((e) => e.id === prov.id)) {
+          nonOfficers.push(prov);
+        }
+      }
+
+      // Combine all personnel
+      const allEmployees = [...nonOfficers, ...officerEmployees];
+
+      // Deduplicate by ID and badge_number
+      const seenIds = new Set<string>();
+      const seenBadges = new Set<string>();
+      const deduped: Employee[] = [];
+
+      for (const emp of allEmployees) {
+        if (emp.id && seenIds.has(emp.id)) continue;
+        if (emp.badge_number && seenBadges.has(emp.badge_number.toUpperCase())) continue;
+        if (emp.id) seenIds.add(emp.id);
+        if (emp.badge_number) seenBadges.add(emp.badge_number.toUpperCase());
+        deduped.push(emp);
+      }
+
+      return deduped;
     },
+    staleTime: 5000,
   });
 }
 
 export function useCreateEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: NewEmployeeInput) => {
+    mutationFn: async (input: NewEmployeeInput): Promise<Employee> => {
       const badge =
         input.badge_number?.trim() ||
         (input.role === "officer"
@@ -184,74 +235,91 @@ export function useCreateEmployee() {
           ? `DSP-${Math.floor(10 + Math.random() * 90)}`
           : input.role === "adjudicator"
           ? `ADJ-${Math.floor(10 + Math.random() * 90)}`
+          : input.role === "finance"
+          ? `FIN-${Math.floor(10 + Math.random() * 90)}`
           : `ADM-${Math.floor(10 + Math.random() * 90)}`);
 
-      let createdId = `EMP-${String(MOCK_EMPLOYEES.length + 1).padStart(3, "0")}`;
+      let createdId = `EMP-${Date.now()}`;
 
+      // 1. If role is officer, persist row directly into public.officers in PostgreSQL
       if (input.role === "officer") {
         try {
           const row = await serverSaveOfficer({
             data: {
               badge_number: badge,
               full_name: input.full_name,
-              rank: input.rank,
-              unit: input.unit,
-              district: input.district,
+              rank: input.rank || "Officer I",
+              unit: input.unit || "Traffic Management",
+              district: input.district || "District 6 (Culiat)",
               contact_number: input.contact_number || null,
             },
           });
           if (row?.id) createdId = row.id;
         } catch (err) {
-          console.warn("Supabase officer save fallback:", err);
+          console.error("[Staff Directory] Error saving officer to database:", err);
+          throw err;
         }
       }
 
-      const newEmp: Employee = {
-        id: createdId,
-        badge_number: badge,
-        full_name: input.full_name,
-        email: input.email.toLowerCase(),
-        role: input.role,
-        rank: input.rank,
-        unit: input.unit,
-        district: input.district,
-        contact_number: input.contact_number || null,
-        status: "active",
-        on_duty: false,
-        citations_issued: 0,
-        created_at: new Date().toISOString(),
-        last_active: new Date().toISOString(),
-      };
-
-      MOCK_EMPLOYEES.unshift(newEmp);
-
-      // Attempt to register in Supabase Auth & user_roles if connected (non-blocking)
+      // 2. If email & password are provided, register Supabase Auth user & user_roles
       try {
-        if (input.password) {
+        if (input.password && input.email) {
           const { data: signUpData } = await supabase.auth.signUp({
-            email: input.email,
+            email: input.email.trim(),
             password: input.password,
             options: {
               data: {
                 full_name: input.full_name,
                 role: input.role,
                 badge_number: badge,
+                rank: input.rank,
+                unit: input.unit,
+                district: input.district,
               },
             },
           });
 
           if (signUpData?.user?.id) {
+            createdId = signUpData.user.id;
             try {
-              await (supabase as any).from("user_roles").upsert({
-                user_id: signUpData.user.id,
-                role: input.role,
-              }, { onConflict: "user_id,role" });
+              await (supabase as any).from("user_roles").upsert(
+                {
+                  user_id: signUpData.user.id,
+                  role: input.role,
+                },
+                { onConflict: "user_id,role" }
+              );
             } catch (roleSyncErr) {
               console.warn("Could not save to user_roles table:", roleSyncErr);
             }
           }
         }
+      } catch (authErr) {
+        console.warn("[Staff Directory] Auth signUp note:", authErr);
+      }
 
+      const newEmp: Employee = {
+        id: createdId,
+        badge_number: badge,
+        full_name: input.full_name,
+        email: input.email.toLowerCase().trim(),
+        role: input.role,
+        rank: input.rank,
+        unit: input.unit,
+        district: input.district,
+        contact_number: input.contact_number || null,
+        status: "active",
+        on_duty: input.role === "officer",
+        citations_issued: 0,
+        created_at: new Date().toISOString(),
+        last_active: new Date().toISOString(),
+      };
+
+      // Add to local state cache
+      localProvisionedStaff.unshift(newEmp);
+
+      // Audit log entry
+      try {
         await supabase.from("audit_logs").insert({
           actor_name: "Executive Staff Admin",
           actor_role: "admin",
@@ -259,8 +327,8 @@ export function useCreateEmployee() {
           target_resource: `${input.full_name} (${badge})`,
           details: `Role: ${input.role}, Unit: ${input.unit}, District: ${input.district}`,
         });
-      } catch (err) {
-        console.warn("Supabase auth user creation fallback:", err);
+      } catch (logErr) {
+        console.warn("[Staff Directory] Audit log skipped:", logErr);
       }
 
       return newEmp;
@@ -284,33 +352,62 @@ export function useUpdateEmployee() {
       district?: string;
       contact_number?: string;
     }) => {
-      await new Promise((r) => setTimeout(r, 400));
-      const idx = MOCK_EMPLOYEES.findIndex((e) => e.id === input.id);
-      if (idx === -1) throw new Error("Employee not found");
-
-      MOCK_EMPLOYEES[idx] = {
-        ...MOCK_EMPLOYEES[idx],
-        ...(input.role && { role: input.role }),
-        ...(input.status && { status: input.status }),
-        ...(input.rank && { rank: input.rank }),
-        ...(input.unit && { unit: input.unit }),
-        ...(input.district && { district: input.district }),
-        ...(input.contact_number !== undefined && { contact_number: input.contact_number }),
-      };
-
+      // 1. Call server function to persist into PostgreSQL officers / user_roles
       try {
-        await supabase.from("audit_logs").insert({
-          actor_name: "Executive Staff Admin",
-          actor_role: "admin",
-          action: "EMPLOYEE_PROFILE_UPDATED",
-          target_resource: `Employee ID: ${input.id}`,
-          details: `Updated fields: ${Object.keys(input).join(", ")}`,
+        await serverUpdateStaffMember({
+          data: {
+            id: input.id,
+            role: input.role,
+            status: input.status,
+            rank: input.rank,
+            unit: input.unit,
+            district: input.district,
+            contact_number: input.contact_number,
+          },
         });
-      } catch (err) {
-        console.warn(err);
+      } catch (serverErr) {
+        console.warn("[Staff Directory] Server update fallback attempt:", serverErr);
+        // Direct client fallback if running in client context
+        if (input.status || input.rank || input.unit || input.district) {
+          const payload: any = { updated_at: new Date().toISOString() };
+          if (input.status) payload.status = input.status;
+          if (input.rank) payload.rank = input.rank;
+          if (input.unit) payload.unit = input.unit;
+          if (input.district) payload.district = input.district;
+          if (input.contact_number !== undefined) payload.contact_number = input.contact_number;
+
+          await supabase.from("officers").update(payload).eq("id", input.id);
+        }
       }
 
-      return MOCK_EMPLOYEES[idx];
+      // Update executive or local provisioned staff if found
+      const execIdx = EXECUTIVE_COMMAND_STAFF.findIndex((e) => e.id === input.id);
+      if (execIdx !== -1) {
+        EXECUTIVE_COMMAND_STAFF[execIdx] = {
+          ...EXECUTIVE_COMMAND_STAFF[execIdx],
+          ...(input.role && { role: input.role }),
+          ...(input.status && { status: input.status }),
+          ...(input.rank && { rank: input.rank }),
+          ...(input.unit && { unit: input.unit }),
+          ...(input.district && { district: input.district }),
+          ...(input.contact_number !== undefined && { contact_number: input.contact_number }),
+        };
+      }
+
+      const provIdx = localProvisionedStaff.findIndex((e) => e.id === input.id);
+      if (provIdx !== -1) {
+        localProvisionedStaff[provIdx] = {
+          ...localProvisionedStaff[provIdx],
+          ...(input.role && { role: input.role }),
+          ...(input.status && { status: input.status }),
+          ...(input.rank && { rank: input.rank }),
+          ...(input.unit && { unit: input.unit }),
+          ...(input.district && { district: input.district }),
+          ...(input.contact_number !== undefined && { contact_number: input.contact_number }),
+        };
+      }
+
+      return input;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employees"] });
@@ -323,20 +420,20 @@ export function useDeleteEmployee() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 400));
-      const emp = MOCK_EMPLOYEES.find((e) => e.id === id);
-      MOCK_EMPLOYEES = MOCK_EMPLOYEES.filter((e) => e.id !== id);
-
+      // 1. Call server function to delete from officers table and user_roles
       try {
-        await supabase.from("audit_logs").insert({
-          actor_name: "Executive Staff Admin",
-          actor_role: "admin",
-          action: "EMPLOYEE_REVOKED",
-          target_resource: `Employee ID: ${id} (${emp?.full_name || "Unknown"})`,
-          details: "Employee account and badge credentials revoked.",
-        });
-      } catch (err) {
-        console.warn(err);
+        await serverDeleteStaffMember({ data: { id } });
+      } catch (serverErr) {
+        console.warn("[Staff Directory] Server delete fallback:", serverErr);
+        await supabase.from("officers").delete().eq("id", id);
+      }
+
+      // Remove from local provisioned cache
+      localProvisionedStaff = localProvisionedStaff.filter((e) => e.id !== id);
+
+      const execIdx = EXECUTIVE_COMMAND_STAFF.findIndex((e) => e.id === id);
+      if (execIdx !== -1) {
+        EXECUTIVE_COMMAND_STAFF.splice(execIdx, 1);
       }
     },
     onSuccess: () => {

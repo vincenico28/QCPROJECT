@@ -847,6 +847,137 @@ export const serverToggleOfficerDuty = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+const updateStaffMemberSchema = z.object({
+  id: z.string(),
+  role: z.enum(["admin", "super_admin", "dispatcher", "officer", "finance", "adjudicator", "citizen"]).optional(),
+  status: z.enum(["active", "on_leave", "suspended"]).optional(),
+  rank: z.string().optional(),
+  unit: z.string().optional(),
+  district: z.string().optional(),
+  contact_number: z.string().nullable().optional(),
+});
+
+export const serverUpdateStaffMember = createServerFn({ method: "POST" })
+  .validator((data: unknown) => updateStaffMemberSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = new Date().toISOString();
+
+    // 1. Try to update in officers table if the record exists there
+    const { data: existingOfficer } = await supabaseAdmin
+      .from("officers")
+      .select("id")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (existingOfficer) {
+      const updatePayload: Record<string, any> = { updated_at: now };
+      if (data.status) updatePayload.status = data.status;
+      if (data.rank) updatePayload.rank = data.rank;
+      if (data.unit) updatePayload.unit = data.unit;
+      if (data.district) updatePayload.district = data.district;
+      if (data.contact_number !== undefined) updatePayload.contact_number = data.contact_number;
+
+      const { error: officerErr } = await (supabaseAdmin as any)
+        .from("officers")
+        .update(updatePayload)
+        .eq("id", data.id);
+
+      if (officerErr) {
+        console.error("[Supabase Error: Update Officer]", officerErr);
+        throw new Error(`Failed to update officer: ${officerErr.message}`);
+      }
+    }
+
+    // 2. If a role change was provided, sync to user_roles
+    if (data.role) {
+      try {
+        await (supabaseAdmin as any)
+          .from("user_roles")
+          .upsert({
+            user_id: data.id,
+            role: data.role,
+            updated_at: now,
+          }, { onConflict: "user_id,role" });
+      } catch (roleErr) {
+        console.warn("[Staff Directory] Error updating user_roles:", roleErr);
+      }
+    }
+
+    // 3. Log audit event
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: "Executive Staff Admin",
+        actor_role: "admin",
+        action: "EMPLOYEE_RECORD_MUTATED",
+        target_resource: `Personnel ID: ${data.id}`,
+        details: `Updated fields: ${Object.keys(data).filter(k => k !== "id").join(", ")} | Status: ${data.status || "unchanged"} | Role: ${data.role || "unchanged"}`,
+      });
+    } catch (auditErr) {
+      console.warn("[Staff Directory] Audit log skipped:", auditErr);
+    }
+
+    return { success: true };
+  });
+
+const deleteStaffMemberSchema = z.object({
+  id: z.string(),
+});
+
+export const serverDeleteStaffMember = createServerFn({ method: "POST" })
+  .validator((data: unknown) => deleteStaffMemberSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch officer name before deletion if exists
+    let staffName = data.id;
+    const { data: off } = await supabaseAdmin
+      .from("officers")
+      .select("full_name, badge_number")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (off) {
+      staffName = `${off.full_name} (${off.badge_number})`;
+      // Delete or set to suspended
+      const { error } = await supabaseAdmin
+        .from("officers")
+        .delete()
+        .eq("id", data.id);
+
+      if (error) {
+        console.error("[Supabase Error: Delete Officer]", error);
+        throw new Error(`Failed to delete officer: ${error.message}`);
+      }
+    }
+
+    // Also revoke any role from user_roles
+    try {
+      await (supabaseAdmin as any)
+        .from("user_roles")
+        .delete()
+        .eq("user_id", data.id);
+    } catch (roleErr) {
+      console.warn("[Staff Directory] Revoke role error:", roleErr);
+    }
+
+    // Audit log
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: "Executive Staff Admin",
+        actor_role: "admin",
+        action: "EMPLOYEE_RECORD_REVOKED",
+        target_resource: `Personnel: ${staffName}`,
+        details: "Personnel record and system access credentials permanently decommissioned.",
+      });
+    } catch (auditErr) {
+      console.warn("[Staff Directory] Audit log skipped:", auditErr);
+    }
+
+    return { success: true };
+  });
+
+
 // -------------------------------------------------------------
 // 4. CAMERAS
 // -------------------------------------------------------------
