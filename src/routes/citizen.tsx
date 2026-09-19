@@ -345,7 +345,7 @@ function CitizenPortal() {
   const [activeTab, setActiveTab] = useState<"vehicles" | "ncap" | "pass" | "traffic" | "hazard" | "disputes" | "rewards">("ncap");
 
   // Tab 1 NCAP Filtering & Batch Settle State
-  const [novFilterStatus, setNovFilterStatus] = useState<"all" | "unpaid" | "settled" | "failed" | "appealed">("all");
+  const [novFilterStatus, setNovFilterStatus] = useState<"all" | "unpaid" | "pending" | "settled" | "failed" | "appealed">("all");
   const [novFilterPlate, setNovFilterPlate] = useState<string>("all");
   const [novSearchQuery, setNovSearchQuery] = useState<string>("");
   const [batchSettleModalOpen, setBatchSettleModalOpen] = useState(false);
@@ -426,21 +426,55 @@ function CitizenPortal() {
   }
 
   const allCitations = currentCitizen.citations || [];
-  const unpaidOnlyCitations = allCitations.filter((c) => c.status === "unpaid");
-  const settledCitations = allCitations.filter((c) => c.status === "settled" || c.paymentDetails?.status === "verified");
-  const failedCitations = allCitations.filter((c) => c.status === "payment_failed" || c.paymentDetails?.status === "failed");
+  const failedCitations = allCitations.filter(
+    (c) => c.status === "payment_failed" || c.paymentDetails?.status === "failed",
+  );
+  const pendingCitations = allCitations.filter(
+    (c) =>
+      c.status === "payment_pending" ||
+      (c.paymentDetails?.status === "pending_verification" && c.status !== "payment_failed"),
+  );
+  const settledCitations = allCitations.filter(
+    (c) =>
+      (c.status === "settled" || c.paymentDetails?.status === "verified") &&
+      c.status !== "payment_failed" &&
+      c.status !== "payment_pending" &&
+      c.paymentDetails?.status !== "pending_verification" &&
+      c.paymentDetails?.status !== "failed",
+  );
   const appealedCitations = allCitations.filter((c) => c.status === "appealed");
+  const unpaidOnlyCitations = allCitations.filter(
+    (c) =>
+      c.status === "unpaid" &&
+      c.paymentDetails?.status !== "verified" &&
+      c.paymentDetails?.status !== "pending_verification" &&
+      c.paymentDetails?.status !== "failed",
+  );
 
   // Citations with outstanding liability (regular unpaid + failed payment attempts)
-  const unpaidCitations = allCitations.filter((c) => c.status === "unpaid" || c.status === "payment_failed");
+  const unpaidCitations = allCitations.filter(
+    (c) => c.status === "unpaid" || c.status === "payment_failed",
+  );
   const totalUnpaid = unpaidCitations.reduce((sum, c) => sum + c.amount + (c.surcharge || 0), 0);
 
   // Filtered Citations for Tab 1
   const filteredCitations = allCitations.filter((c) => {
-    if (novFilterStatus === "unpaid" && c.status !== "unpaid") return false;
-    if (novFilterStatus === "settled" && c.status !== "settled" && c.paymentDetails?.status !== "verified") return false;
-    if (novFilterStatus === "failed" && c.status !== "payment_failed" && c.paymentDetails?.status !== "failed") return false;
-    if (novFilterStatus === "appealed" && c.status !== "appealed") return false;
+    const isCitFailed = c.status === "payment_failed" || c.paymentDetails?.status === "failed";
+    const isCitPending =
+      !isCitFailed &&
+      (c.status === "payment_pending" || c.paymentDetails?.status === "pending_verification");
+    const isCitSettled =
+      !isCitFailed &&
+      !isCitPending &&
+      (c.status === "settled" || c.paymentDetails?.status === "verified");
+    const isCitAppealed = c.status === "appealed";
+    const isCitUnpaid = !isCitSettled && !isCitFailed && !isCitPending && !isCitAppealed;
+
+    if (novFilterStatus === "unpaid" && !isCitUnpaid) return false;
+    if (novFilterStatus === "pending" && !isCitPending) return false;
+    if (novFilterStatus === "settled" && !isCitSettled) return false;
+    if (novFilterStatus === "failed" && !isCitFailed) return false;
+    if (novFilterStatus === "appealed" && !isCitAppealed) return false;
 
     if (novFilterPlate !== "all") {
       const p1 = c.plateNumber.toUpperCase().replace(/[\s-]/g, "");
@@ -871,6 +905,18 @@ function CitizenPortal() {
                     Unpaid ({unpaidOnlyCitations.length})
                   </button>
                   <button
+                    onClick={() => setNovFilterStatus("pending")}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5",
+                      novFilterStatus === "pending"
+                        ? "bg-amber-400 text-black font-bold shadow"
+                        : "bg-amber-400/10 text-amber-400 hover:bg-amber-400/20",
+                    )}
+                  >
+                    <Clock className="size-3" />
+                    Pending Review ({pendingCitations.length})
+                  </button>
+                  <button
                     onClick={() => setNovFilterStatus("settled")}
                     className={cn(
                       "rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5",
@@ -967,9 +1013,14 @@ function CitizenPortal() {
 
               {filteredCitations.length > 0 ? (
                 filteredCitations.map((c) => {
-                  const isPaymentVerified = c.status === "settled" || c.paymentDetails?.status === "verified";
                   const isPaymentFailed = c.status === "payment_failed" || c.paymentDetails?.status === "failed";
-                  const isPaymentPending = c.status === "payment_pending" || c.paymentDetails?.status === "pending_verification";
+                  const isPaymentPending =
+                    !isPaymentFailed &&
+                    (c.status === "payment_pending" || c.paymentDetails?.status === "pending_verification");
+                  const isPaymentVerified =
+                    !isPaymentFailed &&
+                    !isPaymentPending &&
+                    (c.status === "settled" || c.paymentDetails?.status === "verified");
                   const isAppealed = c.status === "appealed";
                   const isUnpaid = !isPaymentVerified && !isPaymentFailed && !isPaymentPending && !isAppealed;
 
@@ -1397,6 +1448,17 @@ function CitizenPortal() {
                                 <Receipt className="size-3.5" /> Official e-OR Receipt
                               </Link>
                             </>
+                          )}
+
+                          {isPaymentPending && (
+                            <Link
+                              to="/portal/receipt/$citationId"
+                              params={{ citationId: c.novNumber || c.id }}
+                              search={{ status: "pending" }}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition-all"
+                            >
+                              <Clock className="size-3.5" /> View Verification Status
+                            </Link>
                           )}
                         </div>
 

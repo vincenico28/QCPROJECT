@@ -210,31 +210,53 @@ function PaymentPage() {
         },
       });
 
-      await updateCitation.mutateAsync({
-        citationId: citNumber,
-        status: "paid",
-      });
+      const isManualGateway = method === "gcash" || method === "maya";
 
       queryClient.invalidateQueries({ queryKey: ["finance-queue"] });
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["citations"] });
       queryClient.invalidateQueries({ queryKey: ["citation", citNumber] });
+      queryClient.invalidateQueries({ queryKey: ["citizen-profile"] });
 
-      soundEffects.playPaymentCleared();
-      toast.success("Payment settlement verified!", {
-        description: `Official Clearance certificate and Receipt generated for ${citNumber}.`,
-      });
+      if (isManualGateway) {
+        soundEffects.playPaymentCleared();
+        toast.info("Payment Proof Submitted for Verification!", {
+          description: `GCash Reference #${gcashRefNumber.trim()} has been forwarded to QC Treasury Cashier for reconciliation.`,
+        });
 
-      navigate({
-        to: "/portal/receipt/$citationId",
-        params: { citationId: citNumber },
-        search: {
-          method: method,
-          provider: method === "gcash" ? "gcash_qrph" : method,
-          email: payerEmail || undefined,
-          phone: mobileNumber || undefined,
-        },
-      });
+        navigate({
+          to: "/portal/receipt/$citationId",
+          params: { citationId: citNumber },
+          search: {
+            method: method,
+            provider: method === "gcash" ? "gcash_qrph" : method,
+            email: payerEmail || undefined,
+            phone: mobileNumber || undefined,
+            status: "pending",
+          },
+        });
+      } else {
+        await updateCitation.mutateAsync({
+          citationId: citNumber,
+          status: "paid",
+        });
+
+        soundEffects.playPaymentCleared();
+        toast.success("Payment settlement verified!", {
+          description: `Official Clearance certificate and Receipt generated for ${citNumber}.`,
+        });
+
+        navigate({
+          to: "/portal/receipt/$citationId",
+          params: { citationId: citNumber },
+          search: {
+            method: method,
+            provider: method,
+            email: payerEmail || undefined,
+            phone: mobileNumber || undefined,
+          },
+        });
+      }
     } catch (err) {
       console.error("[Payment Error]", err);
       const errMsg = err instanceof Error ? err.message : "Payment gateway authorization declined or connection timed out";

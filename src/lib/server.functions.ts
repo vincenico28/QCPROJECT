@@ -1177,9 +1177,11 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       // We log warning but don't strictly fail the user if the payment log fails for some reason
     }
 
+    const citationTargetStatus = isManualGateway ? "payment_pending" : "paid";
+
     let updateCitQ = supabaseAdmin
       .from("citations")
-      .update({ status: "paid" });
+      .update({ status: citationTargetStatus });
     updateCitQ = applyCitationIdentifierFilter(updateCitQ, data.citationNumber);
     const { error } = await updateCitQ;
 
@@ -1192,59 +1194,63 @@ export const processPaymentCheckout = createServerFn({ method: "POST" })
       await supabaseAdmin.from("audit_logs").insert({
         actor_name: data.payerName,
         actor_role: "citizen",
-        action: "CITATION_ONLINE_SETTLED",
+        action: isManualGateway ? "PAYMENT_SUBMITTED_FOR_VERIFICATION" : "CITATION_ONLINE_SETTLED",
         target_resource: `Citation: ${data.citationNumber} (Plate: ${data.plateNumber})`,
-        details: `Amount: PHP ${data.amount}, Method: ${data.paymentMethod.toUpperCase()}, Ref: ${receiptNumber}`,
+        details: `Amount: PHP ${data.amount}, Method: ${data.paymentMethod.toUpperCase()}, Ref: ${receiptNumber}${isManualGateway ? " (Awaiting Treasury Reconciliation)" : " (Auto Verified)"}`,
       });
 
-      // Automatically log official payment receipt notification in communications
+      // Automatically log payment notification in communications
       try {
         await supabaseAdmin.from("email_logs").insert({
           recipient_email: data.payerEmail || `${data.plateNumber.toLowerCase().replace(/[\s-]/g, "")}@motorist.qc.gov.ph`,
           recipient_name: data.payerName || "Registered Motorist",
           citation_number: data.citationNumber,
-          subject: `Official Electronic Receipt & LTO Clearance: ${data.citationNumber}`,
-          template_name: "Payment Receipt",
+          subject: isManualGateway
+            ? `Payment Proof Received · Pending Treasury Verification: ${data.citationNumber}`
+            : `Official Electronic Receipt & LTO Clearance: ${data.citationNumber}`,
+          template_name: isManualGateway ? "Payment Submission Acknowledgement" : "Payment Receipt",
           status: "delivered",
         });
       } catch (logNoticeErr) {
         console.warn("[Payment Checkout] Notification log notice:", logNoticeErr);
       }
 
-      // Clear vehicle LTO alarms if no unpaid citations remain
-      const compact = data.plateNumber.replace(/[\s-]/g, "").toUpperCase();
-      const { data: allCitations } = await supabaseAdmin
-        .from("citations")
-        .select("id, status, plate_number")
-        .neq("citation_number", data.citationNumber);
+      // Clear vehicle LTO alarms ONLY if payment is verified (automated gateway) and no unpaid citations remain
+      if (!isManualGateway) {
+        const compact = data.plateNumber.replace(/[\s-]/g, "").toUpperCase();
+        const { data: allCitations } = await supabaseAdmin
+          .from("citations")
+          .select("id, status, plate_number")
+          .neq("citation_number", data.citationNumber);
 
-      const remainingUnpaid = (allCitations || []).filter(
-        (c: any) =>
-          c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
-          (c.status === "unpaid" || c.status === "overdue" || c.status === "pending")
-      );
-
-      if (remainingUnpaid.length === 0) {
-        const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
-        const matchingVeh = (allVehs || []).find(
-          (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+        const remainingUnpaid = (allCitations || []).filter(
+          (c: any) =>
+            c.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact &&
+            (c.status === "unpaid" || c.status === "overdue" || c.status === "pending" || c.status === "payment_pending" || c.status === "payment_failed")
         );
-        if (matchingVeh) {
-          await supabaseAdmin
-            .from("vehicles")
-            .update({ lto_alarm_tagged: false, risk_level: "Clean" })
-            .eq("plate_number", matchingVeh.plate_number);
-        }
 
-        const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
-        const matchingCv = (allCv || []).filter(
-          (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
-        );
-        for (const cv of matchingCv) {
-          await supabaseAdmin
-            .from("citizen_vehicles")
-            .update({ lto_alarm_status: "CLEARED" })
-            .eq("id", cv.id);
+        if (remainingUnpaid.length === 0) {
+          const { data: allVehs } = await supabaseAdmin.from("vehicles").select("plate_number");
+          const matchingVeh = (allVehs || []).find(
+            (v: any) => v.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+          );
+          if (matchingVeh) {
+            await supabaseAdmin
+              .from("vehicles")
+              .update({ lto_alarm_tagged: false, risk_level: "Clean" })
+              .eq("plate_number", matchingVeh.plate_number);
+          }
+
+          const { data: allCv } = await supabaseAdmin.from("citizen_vehicles").select("id, plate_number");
+          const matchingCv = (allCv || []).filter(
+            (cv: any) => cv.plate_number.replace(/[\s-]/g, "").toUpperCase() === compact
+          );
+          for (const cv of matchingCv) {
+            await supabaseAdmin
+              .from("citizen_vehicles")
+              .update({ lto_alarm_status: "CLEARED" })
+              .eq("id", cv.id);
+          }
         }
       }
     } catch (err) {
@@ -2462,9 +2468,18 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           const cCompact = (c.plate_number || "").replace(/[\s-]/g, "").toUpperCase();
           if (cCompact !== vCompact) return false;
           const citPayment = matchedPayments.find(
-            (p: any) => (p.citation_id === c.citation_number || p.citation_id === c.id) && p.status === "verified"
+            (p: any) => p.citation_id === c.citation_number || p.citation_id === c.id
           );
-          const isCitPaid = c.status === "paid" || c.status === "settled" || !!citPayment;
+          const payStatus = citPayment?.status;
+          // If payment was rejected or failed, or citation marked payment_failed/unpaid/overdue, it is definitely unpaid
+          if (payStatus === "rejected" || payStatus === "failed" || c.status === "payment_failed") {
+            return true;
+          }
+          // If payment is pending verification, fine is not yet cleared
+          if (payStatus === "pending_verification" || c.status === "payment_pending") {
+            return true;
+          }
+          const isCitPaid = payStatus === "verified" || ((c.status === "paid" || c.status === "settled") && payStatus !== "rejected" && payStatus !== "pending_verification");
           return !isCitPaid && c.status !== "appealed" && c.status !== "dismissed";
         });
         return {
@@ -2484,30 +2499,37 @@ export const serverFetchCitizenProfile = createServerFn({ method: "POST" })
           (p: any) => p.citation_id === cmdNov || p.citation_id === cmdId
         );
 
-        const isPaid = cmd.status === "paid" || cmd.status === "settled" || payment?.status === "verified";
+        // Strict priority evaluation:
+        // 1. REJECTED / DECLINED / FAILED payments ALWAYS result in payment_failed and unpaid fine
         const isFailed =
-          cmd.status === "payment_failed" ||
-          cmd.status === "failed" ||
+          payment?.status === "rejected" ||
           payment?.status === "failed" ||
-          payment?.status === "rejected";
-        const isPendingVerification = payment?.status === "pending_verification";
+          cmd.status === "payment_failed" ||
+          cmd.status === "failed";
+
+        // 2. PENDING VERIFICATION payments (e.g. submitted GCash/Maya waiting for Treasury)
+        const isPendingVerification =
+          !isFailed &&
+          (payment?.status === "pending_verification" || cmd.status === "payment_pending");
+
+        // 3. VERIFIED SETTLED payments
+        const isPaid =
+          !isFailed &&
+          !isPendingVerification &&
+          (payment?.status === "verified" || cmd.status === "paid" || cmd.status === "settled");
 
         let paymentStatus: "verified" | "failed" | "pending_verification" | "none" = "none";
-        if (isPaid) {
-          paymentStatus = "verified";
-        } else if (isFailed) {
-          paymentStatus = "failed";
-        } else if (isPendingVerification) {
-          paymentStatus = "pending_verification";
-        }
-
         let citationStatus: "unpaid" | "settled" | "appealed" | "payment_failed" | "payment_pending" = "unpaid";
-        if (isPaid) {
-          citationStatus = "settled";
-        } else if (isFailed) {
+
+        if (isFailed) {
+          paymentStatus = "failed";
           citationStatus = "payment_failed";
         } else if (isPendingVerification) {
+          paymentStatus = "pending_verification";
           citationStatus = "payment_pending";
+        } else if (isPaid) {
+          paymentStatus = "verified";
+          citationStatus = "settled";
         } else if (cmd.status === "appealed" || cmd.status === "contested" || cmd.status === "disputed") {
           citationStatus = "appealed";
         } else {

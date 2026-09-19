@@ -56,6 +56,7 @@ type ReceiptSearch = {
   method?: string;
   email?: string;
   phone?: string;
+  status?: string;
 };
 
 export const Route = createFileRoute("/portal/receipt/$citationId")({
@@ -65,6 +66,7 @@ export const Route = createFileRoute("/portal/receipt/$citationId")({
     method: typeof search.method === "string" ? search.method : undefined,
     email: typeof search.email === "string" ? search.email : undefined,
     phone: typeof search.phone === "string" ? search.phone : undefined,
+    status: typeof search.status === "string" ? search.status : undefined,
   }),
   head: ({ params }) => ({
     meta: [
@@ -207,6 +209,16 @@ function ReceiptPage() {
     !stripeVerified &&
     !search.session_id &&
     (citation?.status === "payment_failed" || citation?.status === "failed");
+
+  const isPendingPayment =
+    !stripeVerified &&
+    !search.session_id &&
+    !isFailedPayment &&
+    (search.status === "pending" ||
+      citation?.status === "payment_pending" ||
+      ((search.method === "gcash" || search.method === "maya") &&
+        citation?.status !== "paid" &&
+        citation?.status !== "settled"));
 
   const parsedOffenses = parseCitationOffenses(citation?.offense, amount);
 
@@ -403,6 +415,58 @@ function ReceiptPage() {
               >
                 <RotateCcw className="size-3.5" />
                 Retry Payment Now ({formatPeso(amount)})
+              </Link>
+            </div>
+          </div>
+        ) : isPendingPayment ? (
+          <div className="w-full rounded-3xl border-2 border-amber-500/40 bg-gradient-to-b from-amber-950/40 via-panel to-panel p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center gap-5">
+            <div className="grid size-16 place-items-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-inner">
+              <Clock className="size-9" />
+            </div>
+
+            <div className="space-y-2 max-w-md">
+              <span className="rounded-full bg-amber-500/20 px-3 py-1 text-[10px] font-mono-tab font-bold text-amber-300 border border-amber-500/40 uppercase tracking-wider">
+                Proof Submitted · Pending Treasury Verification
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Payment Verification in Progress
+              </h2>
+              <p className="text-xs text-amber-100/80 leading-relaxed">
+                Your payment submission for Notice of Violation <strong className="text-white font-mono-tab">{citationId}</strong> has been received and queued in the QC Treasury Cashier reconciliation queue. Official e-OR and LTO clearance certificates are issued once verified.
+              </p>
+
+              <div className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5 text-xs text-left space-y-2 mt-3 font-mono-tab">
+                <div className="flex justify-between">
+                  <span className="text-white/50">Notice Number:</span>
+                  <span className="font-bold text-white">{citationId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Vehicle Plate:</span>
+                  <span className="font-bold text-white">{plate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Amount Submitted:</span>
+                  <span className="font-black text-amber-300 text-sm">{formatPeso(amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Verification Status:</span>
+                  <span className="font-bold text-amber-400 flex items-center gap-1">
+                    <Clock className="size-3" /> Queued for Cashier Verification
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">LTO Hold:</span>
+                  <span className="font-medium text-white/70">Will lift immediately upon verification</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 w-full pt-2">
+              <Link
+                to="/citizen"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-500/20 hover:brightness-110 transition-all"
+              >
+                Return to Citizen Portal Hub
               </Link>
             </div>
           </div>
