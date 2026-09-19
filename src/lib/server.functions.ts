@@ -3095,39 +3095,56 @@ export const serverFetchCommandDashboardMetrics = createServerFn({ method: "GET"
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const [vRes, cRes, oRes, camRes] = await Promise.all([
+      // Start of today in local/ISO for daily violation tracking
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartIso = todayStart.toISOString();
+
+      const [vRes, cRes, oRes, camRes, allCitationsAggRes, todayVioCountRes] = await Promise.all([
         supabaseAdmin.from("violations").select("id, status, confidence, detected_at, created_at, violation_type, location, plate_number, evidence_url, camera_code", { count: "exact" }).order("detected_at", { ascending: false }).limit(20),
         supabaseAdmin.from("citations").select("id, citation_number, status, amount, issued_at, offense, plate_number, vehicle_model, officer_name", { count: "exact" }).order("issued_at", { ascending: false }).limit(25),
-        supabaseAdmin.from("officers").select("*"),
+        supabaseAdmin.from("officers").select("id, full_name, badge_number, rank, unit, district, on_duty, citations_issued"),
         supabaseAdmin.from("cameras").select("*"),
+        // Comprehensive dataset of all citations for accurate revenue & pending status aggregation
+        supabaseAdmin.from("citations").select("amount, status, issued_at"),
+        // Exact count of violations captured today
+        supabaseAdmin.from("violations").select("id", { count: "exact", head: true }).gte("detected_at", todayStartIso),
       ]);
 
       const violationsList = vRes.data || [];
       const citationsList = cRes.data || [];
       const officersList = oRes.data || [];
       const camerasList = camRes.data || [];
+      const allCitations = allCitationsAggRes.data || [];
 
       // Calculate real totals
       const totalViolationsCount = vRes.count ?? violationsList.length;
-      const totalCitationsCount = cRes.count ?? citationsList.length;
+      const todayViolationsCount = todayVioCountRes.count ?? violationsList.filter((v: any) => {
+        const d = v.detected_at || v.created_at;
+        return d && new Date(d) >= todayStart;
+      }).length;
+
       const activeOfficers = officersList.filter((o: any) => o.on_duty !== false).length;
       const totalOfficers = officersList.length || 10;
 
-      const settlementRevenue = citationsList
+      // Accurate revenue from full database (paid or settled)
+      const settlementRevenue = allCitations
         .filter((c: any) => c.status === "paid" || c.status === "settled")
         .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
 
-      const pendingCitations = citationsList
-        .filter((c: any) => c.status === "unpaid" || c.status === "pending" || c.status === "issued").length;
+      // Accurate pending citations count from full database
+      const pendingCitations = allCitations
+        .filter((c: any) => c.status === "unpaid" || c.status === "pending" || c.status === "issued" || c.status === "overdue" || c.status === "payment_pending").length;
 
       const activeCameras = camerasList.filter((c: any) => c.status !== "offline").length;
 
       return {
-        dailyViolations: totalViolationsCount > 0 ? totalViolationsCount : violationsList.length,
+        dailyViolations: todayViolationsCount > 0 ? todayViolationsCount : (totalViolationsCount > 0 ? totalViolationsCount : violationsList.length),
+        totalViolations: totalViolationsCount,
         activeOfficers,
         totalOfficers,
         settlementRevenue,
-        pendingCitations: pendingCitations > 0 ? pendingCitations : (totalCitationsCount - citationsList.filter((c: any) => c.status === "paid").length),
+        pendingCitations,
         activeCameras: activeCameras > 0 ? activeCameras : camerasList.length,
         totalCameras: camerasList.length || 6,
         cameras: camerasList,

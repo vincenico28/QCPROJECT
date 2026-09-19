@@ -4,6 +4,7 @@ import {
   useViolations,
   useCitations,
   useCameras,
+  useOfficers,
   useCreateCitation,
   useCommandDashboardMetrics,
   formatPeso,
@@ -181,11 +182,16 @@ function CommandDashboard() {
   const roleConfig = ROLE_INFO[role] || ROLE_INFO.admin;
   const RoleIcon = roleConfig.icon;
 
+  const { data: officers = [] } = useOfficers();
+
   const kpis = useMemo(() => {
     if (metrics) {
       return {
         violations: metrics.dailyViolations,
-        officers: { current: metrics.activeOfficers, total: metrics.totalOfficers },
+        officers: { 
+          current: metrics.activeOfficers, 
+          total: metrics.totalOfficers || officers.length || 10 
+        },
         revenue: metrics.settlementRevenue,
         pending: metrics.pendingCitations,
         activeCameras: metrics.activeCameras,
@@ -196,17 +202,79 @@ function CommandDashboard() {
     const revenue = citations
       .filter((c) => c.status === "paid" || c.status === "settled")
       .reduce((sum, c) => sum + Number(c.amount || 0), 0);
-    const pending = citations.filter((c) => c.status === "pending" || c.status === "unpaid").length;
+    const pending = citations.filter((c) => c.status === "pending" || c.status === "unpaid" || c.status === "payment_pending").length;
     const activeCameras = cameras.filter((c) => c.status !== "offline").length;
+    const activeOfficers = officers.filter((o) => o.on_duty !== false).length;
     return {
       violations: violations.length,
-      officers: { current: 3, total: 4 },
+      officers: { current: activeOfficers || 3, total: officers.length || 4 },
       revenue,
       pending,
-      activeCameras,
+      activeCameras: activeCameras || cameras.length || 6,
       totalCameras: cameras.length || 6,
     };
-  }, [metrics, violations, citations, cameras]);
+  }, [metrics, violations, citations, cameras, officers]);
+
+  // Dynamic GIS Pins based on actual active database records and mapMode
+  const dynamicMapPins = useMemo(() => {
+    if (mapMode === "anpr") {
+      const activeCams = cameras.length > 0 ? cameras : (metrics?.cameras || []);
+      const pinCoords = [
+        { top: "32%", left: "40%" },
+        { top: "54%", left: "58%" },
+        { top: "45%", left: "28%" },
+        { top: "64%", left: "48%" },
+        { top: "25%", left: "68%" },
+        { top: "70%", left: "32%" },
+      ];
+      return activeCams.slice(0, 6).map((cam, idx) => ({
+        top: pinCoords[idx % pinCoords.length].top,
+        left: pinCoords[idx % pinCoords.length].left,
+        tone: cam.status === "alert" ? "warning" as const : cam.status === "offline" ? "danger" as const : "accent" as const,
+        label: `${cam.code || "CAM"} · ${cam.location?.slice(0, 20) || "Optical Node"}`,
+      }));
+    }
+
+    if (mapMode === "patrols") {
+      const activeEnforcers = officers.filter((o) => o.on_duty !== false);
+      const pinCoords = [
+        { top: "42%", left: "35%" },
+        { top: "58%", left: "52%" },
+        { top: "30%", left: "55%" },
+        { top: "68%", left: "42%" },
+        { top: "48%", left: "70%" },
+      ];
+      const list = activeEnforcers.length > 0 ? activeEnforcers : [
+        { badge_number: "QC-ENF-102", rank: "Traffic Enforcer II" },
+        { badge_number: "QC-ENF-105", rank: "Mobile Patrol Lead" },
+        { badge_number: "QC-ENF-108", rank: "Motorcycle Marshal" },
+      ];
+      return list.slice(0, 5).map((enf: any, idx) => ({
+        top: pinCoords[idx % pinCoords.length].top,
+        left: pinCoords[idx % pinCoords.length].left,
+        tone: "success" as const,
+        label: `Unit ${enf.badge_number} · ${enf.rank || "Patrol"}`,
+      }));
+    }
+
+    // Default: "hotspots" (Violations & Congestion)
+    const recentVios = violations.length > 0 ? violations : (metrics?.recentViolations || []);
+    const pinCoords = [
+      { top: "34%", left: "42%", tone: "danger" as const, defaultLabel: "EDSA Congestion Point" },
+      { top: "52%", left: "55%", tone: "warning" as const, defaultLabel: "Commonwealth Overpass" },
+      { top: "46%", left: "30%", tone: "accent" as const, defaultLabel: "Mindanao Ave Corridor" },
+      { top: "62%", left: "48%", tone: "success" as const, defaultLabel: "Tandang Sora Flow" },
+    ];
+    return pinCoords.map((coord, idx) => {
+      const matchedVio = recentVios[idx];
+      return {
+        top: coord.top,
+        left: coord.left,
+        tone: coord.tone,
+        label: matchedVio ? `${matchedVio.violation_type} · ${matchedVio.location?.slice(0, 22)}` : coord.defaultLabel,
+      };
+    });
+  }, [mapMode, cameras, metrics?.cameras, officers, violations, metrics?.recentViolations]);
 
   const liveFeeds = useMemo(() => {
     const defaultImages = [cctv1, cctv2, cctv3];
@@ -309,19 +377,20 @@ function CommandDashboard() {
       <KpiCard
         label="Daily Violations"
         value={kpis.violations.toLocaleString()}
-        delta={kpis.violations > 0 ? "+Live Feed" : "Normal"}
+        secondary={metrics?.totalViolations ? `(${metrics.totalViolations.toLocaleString()} Total DB)` : undefined}
+        delta={kpis.violations > 0 ? "+Live Realtime" : "Normal"}
         deltaKind={kpis.violations > 0 ? "danger" : "success"}
         icon={Activity}
-        sub="Auto-captured by Optical Sentinel"
+        sub="Auto-captured by Optical Sentinel (Today)"
       />
       <KpiCard
         label="Active Enforcers"
         value={String(kpis.officers.current)}
-        secondary={`/ ${kpis.officers.total} Active`}
+        secondary={`/ ${kpis.officers.total} On-Duty`}
         delta={`${Math.round((kpis.officers.current / Math.max(1, kpis.officers.total)) * 100)}% Coverage`}
         deltaKind="success"
         icon={ShieldCheck}
-        sub="Patrol sectors online"
+        sub="QC Traffic Sector Patrols"
       />
       <KpiCard
         label="Settlement Revenue"
@@ -329,15 +398,15 @@ function CommandDashboard() {
         delta="Verified Realtime"
         deltaKind="success"
         icon={TrendingUp}
-        sub="GCash, Maya & Landbank"
+        sub="GCash, Maya & Landbank (Paid / Settled)"
       />
       <KpiCard
         label="Pending Citations"
         value={kpis.pending.toLocaleString()}
-        delta={kpis.pending > 0 ? `${kpis.pending} Unpaid` : "Cleared"}
+        delta={kpis.pending > 0 ? `${kpis.pending} Active` : "Cleared"}
         deltaKind={kpis.pending > 0 ? "warning" : "success"}
         icon={Clock}
-        sub="Awaiting LTO Tagging"
+        sub="Awaiting Settlement / LTO Tag"
       />
 
       {/* MAIN VISUAL AREA (GIS Map + CCTV Grid + Citations Table) */}
@@ -392,11 +461,10 @@ function CommandDashboard() {
             </button>
           </div>
 
-          {/* Simulated Location Pins */}
-          <MapPin top="34%" left="42%" tone="danger" label="EDSA Congestion" />
-          <MapPin top="52%" left="55%" tone="warning" label="Commonwealth Cam #04" />
-          <MapPin top="46%" left="30%" tone="accent" label="Patrol Unit #12" />
-          <MapPin top="62%" left="48%" tone="success" label="Tandang Sora Flow" />
+          {/* Dynamic Database-Driven Location Pins */}
+          {dynamicMapPins.map((pin, idx) => (
+            <MapPin key={idx} top={pin.top} left={pin.left} tone={pin.tone} label={pin.label} />
+          ))}
 
           {/* Map Footer Bar */}
           <div className="absolute bottom-4 left-6 right-6 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
@@ -599,7 +667,7 @@ function KpiCard({
   }[deltaKind];
 
   return (
-    <div className="panel col-span-1 rounded-3xl border border-border bg-panel p-6 shadow-xl lg:col-span-3 transition-all hover:border-primary/40 hover:shadow-2xl">
+    <div className="panel col-span-1 sm:col-span-6 xl:col-span-3 rounded-3xl border border-border bg-panel p-5 sm:p-6 shadow-xl transition-all hover:border-primary/40 hover:shadow-2xl">
       <div className="flex items-center justify-between">
         <p className="font-mono-tab text-[10px] font-bold uppercase tracking-widest text-subtle">
           {label}
@@ -667,7 +735,7 @@ function MapPin({
     success: "bg-success",
   }[tone];
   return (
-    <span className="pointer-events-none absolute group cursor-pointer" style={{ top, left }} aria-hidden>
+    <div className="absolute group z-10 -translate-x-1/2 -translate-y-1/2 cursor-pointer" style={{ top, left }}>
       <span className="relative flex size-3.5">
         <span
           className={cn(
@@ -682,7 +750,12 @@ function MapPin({
           )}
         />
       </span>
-    </span>
+      {label && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden whitespace-nowrap rounded-lg border border-border bg-panel-elevated/95 px-2 py-0.5 text-[10px] font-mono-tab font-semibold text-foreground shadow-lg backdrop-blur-md group-hover:block transition-all">
+          {label}
+        </span>
+      )}
+    </div>
   );
 }
 

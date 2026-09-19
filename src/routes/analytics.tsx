@@ -95,7 +95,9 @@ function AnalyticsPage() {
       const b = buckets.get(dayKey(c.issued_at));
       if (!b) continue;
       b.citations += 1;
-      if (c.status === "paid") b.revenue += Number(c.amount);
+      if (c.status === "paid" || c.status === "settled") {
+        b.revenue += Number(c.amount || 0);
+      }
     }
     return [...buckets.values()];
   }, [scopedViolations, scopedCitations, days]);
@@ -103,7 +105,8 @@ function AnalyticsPage() {
   const offenseMix = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of scopedViolations) {
-      map.set(v.violation_type, (map.get(v.violation_type) ?? 0) + 1);
+      const type = v.violation_type || "General Violation";
+      map.set(type, (map.get(type) ?? 0) + 1);
     }
     return [...map.entries()]
       .map(([name, value]) => ({ name, value }))
@@ -113,17 +116,20 @@ function AnalyticsPage() {
 
   const officerPerf = useMemo(
     () =>
-      officers.slice(0, 8).map((o) => ({ name: o.badge_number, citations: o.citations_issued })),
+      officers.slice(0, 8).map((o) => ({ 
+        name: `${o.badge_number} (${o.full_name?.split(" ")[0] || "Officer"})`, 
+        citations: o.citations_issued || 0 
+      })),
     [officers],
   );
 
   const kpis = useMemo(() => {
-    const paid = scopedCitations.filter((c) => c.status === "paid");
-    const revenue = paid.reduce((s, c) => s + Number(c.amount), 0);
-    const billed = scopedCitations.reduce((s, c) => s + Number(c.amount), 0);
+    const paid = scopedCitations.filter((c) => c.status === "paid" || c.status === "settled");
+    const revenue = paid.reduce((s, c) => s + Number(c.amount || 0), 0);
+    const billed = scopedCitations.reduce((s, c) => s + Number(c.amount || 0), 0);
     const avgConf =
       scopedViolations.length > 0
-        ? scopedViolations.reduce((s, v) => s + Number(v.confidence), 0) / scopedViolations.length
+        ? scopedViolations.reduce((s, v) => s + Number(v.confidence || 0), 0) / scopedViolations.length
         : 0;
     return {
       detections: scopedViolations.length,
