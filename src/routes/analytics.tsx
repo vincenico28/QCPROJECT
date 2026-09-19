@@ -17,6 +17,9 @@ import {
 } from "recharts";
 import { Download, TrendingUp, ShieldAlert, Banknote, Gauge, Flame } from "lucide-react";
 import { useViolations, useCitations, useOfficers, formatPeso } from "@/lib/data/traffic";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/analytics")({
@@ -60,8 +63,33 @@ function dayKey(iso: string) {
 }
 
 function AnalyticsPage() {
+  const qc = useQueryClient();
   const [range, setRange] = useState<(typeof RANGES)[number]["key"]>("14d");
   const days = RANGES.find((r) => r.key === range)!.days;
+
+  // Realtime updates for analytics
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel(`realtime-analytics_${Math.random().toString(36).slice(2, 8)}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "violations" }, () => {
+          qc.invalidateQueries({ queryKey: ["violations"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "citations" }, () => {
+          qc.invalidateQueries({ queryKey: ["citations"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "officers" }, () => {
+          qc.invalidateQueries({ queryKey: ["officers"] });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn("[Analytics Realtime Warning]:", err);
+    }
+  }, [qc]);
 
   const { data: violations = [], isLoading } = useViolations(500);
   const { data: citations = [] } = useCitations(500);
@@ -114,14 +142,74 @@ function AnalyticsPage() {
       .slice(0, 5);
   }, [scopedViolations]);
 
-  const officerPerf = useMemo(
-    () =>
-      officers.slice(0, 8).map((o) => ({ 
-        name: `${o.badge_number} (${o.full_name?.split(" ")[0] || "Officer"})`, 
-        citations: o.citations_issued || 0 
-      })),
-    [officers],
-  );
+  const officerPerf = useMemo(() => {
+    // Sort officers by citations_issued descending
+    return [...officers]
+      .sort((a, b) => (b.citations_issued || 0) - (a.citations_issued || 0))
+      .slice(0, 8)
+      .map((o) => ({
+        name: `${o.badge_number} (${o.full_name?.split(" ")[0] || "Officer"})`,
+        citations: o.citations_issued || 0,
+      }));
+  }, [officers]);
+
+  // Dynamically compute 24-hour incident density from live database detections
+  const hourlySpectrum = useMemo(() => {
+    const hours = ["06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"];
+    const counts = new Map<string, number>();
+    hours.forEach((h) => counts.set(h, 0));
+
+    for (const v of scopedViolations) {
+      if (!v.detected_at) continue;
+      const hStr = new Date(v.detected_at).getHours().toString().padStart(2, "0");
+      if (counts.has(hStr)) {
+        counts.set(hStr, (counts.get(hStr) || 0) + 1);
+      }
+    }
+
+    let peakH = "18";
+    let maxV = -1;
+    const result = hours.map((h) => {
+      const vol = counts.get(h) || 0;
+      if (vol > maxV) {
+        maxV = vol;
+        peakH = h;
+      }
+      return { hour: `${h}h`, volume: vol };
+    });
+
+    return { data: result, peakHour: `${peakH}:00` };
+  }, [scopedViolations]);
+
+  // Dynamically derive corridor distribution from locations in scopedViolations
+  const corridorBreakdown = useMemo(() => {
+    const total = scopedViolations.length || 1;
+    const locations = [
+      { name: "Commonwealth Ave", keyword: "commonwealth", defaultShare: 42, baseSpeed: 58, level: "Critical (Level 4)", tone: "text-red-400" },
+      { name: "Tandang Sora Corridor", keyword: "tandang sora", defaultShare: 24, baseSpeed: 32, level: "Elevated (Level 3)", tone: "text-amber-400" },
+      { name: "Visayas Ave Bypass", keyword: "visayas", defaultShare: 16, baseSpeed: 41, level: "Moderate (Level 2)", tone: "text-sky-400" },
+      { name: "Culiat Central / Katipunan", keyword: "culiat", defaultShare: 12, baseSpeed: 44, level: "Normal (Level 1)", tone: "text-emerald-400" },
+      { name: "Quirino Highway Ingress", keyword: "quirino", defaultShare: 6, baseSpeed: 36, level: "Moderate (Level 2)", tone: "text-amber-400" },
+    ];
+
+    return locations.map((loc) => {
+      const matchCount = scopedViolations.filter((v) =>
+        (v.location || "").toLowerCase().includes(loc.keyword)
+      ).length;
+      const sharePct = scopedViolations.length > 0 ? (matchCount / total) * 100 : loc.defaultShare;
+      const compliance = Math.min(96, Math.max(72, Math.round(100 - (sharePct / 2))));
+
+      return {
+        name: loc.name,
+        share: `${sharePct.toFixed(1)}%`,
+        risk: loc.level,
+        avgSpeed: `${loc.baseSpeed} km/h`,
+        compliance: `${compliance}%`,
+        trendTone: loc.tone,
+        incidents: matchCount,
+      };
+    });
+  }, [scopedViolations]);
 
   const kpis = useMemo(() => {
     const paid = scopedCitations.filter((c) => c.status === "paid" || c.status === "settled");
@@ -377,13 +465,7 @@ function AnalyticsPage() {
               sub="Multi-lane arterial radar breakdown"
             />
             <div className="flex flex-col gap-3">
-              {[
-                { name: "Commonwealth Ave", share: "42.8%", risk: "Critical (Level 4)", avgSpeed: "58 km/h", compliance: "78%", trendTone: "text-red-400" },
-                { name: "Tandang Sora Underpass", share: "24.1%", risk: "Elevated (Level 3)", avgSpeed: "32 km/h", compliance: "84%", trendTone: "text-amber-400" },
-                { name: "Visayas Ave Bypass", share: "16.5%", risk: "Moderate (Level 2)", avgSpeed: "41 km/h", compliance: "89%", trendTone: "text-sky-400" },
-                { name: "Katipunan Ext (Culiat)", share: "11.4%", risk: "Normal (Level 1)", avgSpeed: "44 km/h", compliance: "93%", trendTone: "text-emerald-400" },
-                { name: "Quirino Highway Ingress", share: "5.2%", risk: "Moderate (Level 2)", avgSpeed: "36 km/h", compliance: "87%", trendTone: "text-amber-400" },
-              ].map((corridor) => (
+              {corridorBreakdown.map((corridor) => (
                 <div
                   key={corridor.name}
                   className="flex items-center justify-between rounded-2xl border border-border bg-panel-elevated/60 p-3.5 transition-all hover:border-primary/40"
@@ -391,7 +473,7 @@ function AnalyticsPage() {
                   <div>
                     <p className="text-xs font-bold text-foreground">{corridor.name}</p>
                     <p className="font-mono-tab text-[10px] text-muted-foreground mt-0.5">
-                      Avg Velocity: {corridor.avgSpeed} · Driver Compliance: {corridor.compliance}
+                      Avg Velocity: {corridor.avgSpeed} · Driver Compliance: {corridor.compliance} ({corridor.incidents} incidents)
                     </p>
                   </div>
                   <div className="text-right">
@@ -417,29 +499,12 @@ function AnalyticsPage() {
           <div>
             <ChartHeading
               title="24-Hour Peak Violation Spectrum"
-              sub="Hourly incident density (06:00 - 21:00 windows)"
+              sub={`Hourly incident density (${scopedViolations.length} total detections)`}
             />
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={[
-                    { hour: "06h", volume: 45 },
-                    { hour: "07h", volume: 112 },
-                    { hour: "08h", volume: 168 },
-                    { hour: "09h", volume: 135 },
-                    { hour: "10h", volume: 88 },
-                    { hour: "11h", volume: 74 },
-                    { hour: "12h", volume: 68 },
-                    { hour: "13h", volume: 72 },
-                    { hour: "14h", volume: 85 },
-                    { hour: "15h", volume: 96 },
-                    { hour: "16h", volume: 124 },
-                    { hour: "17h", volume: 184 },
-                    { hour: "18h", volume: 210 },
-                    { hour: "19h", volume: 178 },
-                    { hour: "20h", volume: 122 },
-                    { hour: "21h", volume: 76 },
-                  ]}
+                  data={hourlySpectrum.data}
                   margin={{ top: 10, right: 8, left: -20, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -465,7 +530,7 @@ function AnalyticsPage() {
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between font-mono-tab text-[10px] text-muted-foreground border-t border-border/60 pt-3">
-            <span className="text-amber-400 font-semibold">Peak: 18:00 (Evening Rush)</span>
+            <span className="text-amber-400 font-semibold">Peak: {hourlySpectrum.peakHour} (High Density Window)</span>
             <span>Algorithm: Poisson Surge Model</span>
           </div>
         </section>

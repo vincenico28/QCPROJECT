@@ -42,34 +42,36 @@ function FinanceAnalyticsPage() {
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
              <div className="panel rounded-xl border border-border p-5">
-                <p className="text-sm font-semibold text-muted-foreground">YTD Revenue</p>
+                <p className="text-sm font-semibold text-muted-foreground">YTD Budget Revenue</p>
                 <p className="text-3xl font-black text-white mt-1">{formatPeso(data.ytdTotal)}</p>
                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
                    <ArrowUpRight className="size-3" />
-                   +14% vs last year
+                   6-Month LGU Treasury Target
+                </div>
+             </div>
+             <div className="panel rounded-xl border border-border p-5">
+                <p className="text-sm font-semibold text-muted-foreground">Live Settled Citations</p>
+                <p className="text-3xl font-black text-emerald-400 mt-1">
+                  {formatPeso(data.liveMetrics?.liveCitationsRevenue || 0)}
+                </p>
+                <div className="flex items-center gap-1 mt-2 text-xs font-mono-tab text-emerald-400">
+                   {data.liveMetrics?.totalPaidCitationsCount || 0} paid citations settled
+                </div>
+             </div>
+             <div className="panel rounded-xl border border-border p-5">
+                <p className="text-sm font-semibold text-muted-foreground">Verified Payments Collected</p>
+                <p className="text-3xl font-black text-white mt-1">
+                  {formatPeso(data.liveMetrics?.livePaymentsRevenue || 0)}
+                </p>
+                <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                   {data.liveMetrics?.verifiedPaymentsCount || 0} verified GCash/Maya/OTC
                 </div>
              </div>
              <div className="panel rounded-xl border border-border p-5">
                 <p className="text-sm font-semibold text-muted-foreground">Projected Automation Savings</p>
-                <p className="text-3xl font-black text-emerald-400 mt-1">{formatPeso(data.projectedSavings)}</p>
+                <p className="text-3xl font-black text-cyan-400 mt-1">{formatPeso(data.projectedSavings)}</p>
                 <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                    Derived from AI dispatch efficiency
-                </div>
-             </div>
-             <div className="panel rounded-xl border border-border p-5">
-                <p className="text-sm font-semibold text-muted-foreground">Citation Revenue Trend</p>
-                <p className="text-3xl font-black text-white mt-1">Declining</p>
-                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
-                   <ArrowDownRight className="size-3" />
-                   Positive indicator of citizen compliance
-                </div>
-             </div>
-             <div className="panel rounded-xl border border-border p-5">
-                <p className="text-sm font-semibold text-muted-foreground">EV Charging Revenue</p>
-                <p className="text-3xl font-black text-white mt-1">+155%</p>
-                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
-                   <ArrowUpRight className="size-3" />
-                   Fastest growing sector
                 </div>
              </div>
           </div>

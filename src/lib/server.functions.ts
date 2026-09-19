@@ -2469,17 +2469,50 @@ export const serverFetchFinanceAnalytics = createServerFn({ method: "GET" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     try {
-      const [revReq, budReq] = await Promise.all([
+      const [revReq, budReq, citsReq, paysReq] = await Promise.all([
         supabaseAdmin.from("revenue_reports").select("*"),
-        supabaseAdmin.from("budget_allocations").select("*")
+        supabaseAdmin.from("budget_allocations").select("*"),
+        supabaseAdmin.from("citations").select("amount, status, issued_at"),
+        supabaseAdmin.from("payments").select("amount, status, submitted_date, method"),
       ]);
+
+      const revenueReports = revReq.data || [];
+      const budgetAllocations = budReq.data || [];
+      const citations = citsReq.data || [];
+      const payments = paysReq.data || [];
+
+      // Calculate actual verified payments & paid citations
+      const paidCits = citations.filter(
+        (c: any) => c.status === "paid" || c.status === "settled"
+      );
+      const liveCitationsRevenue = paidCits.reduce(
+        (sum: number, c: any) => sum + Number(c.amount || 0),
+        0
+      );
+
+      const verifiedPayments = payments.filter(
+        (p: any) => p.status === "verified" || p.status === "settled" || p.status === "completed"
+      );
+      const livePaymentsRevenue = verifiedPayments.reduce(
+        (sum: number, p: any) => sum + Number(p.amount || 0),
+        0
+      );
+
       return {
-        revenue: revReq.data || [],
-        budget: budReq.data || [],
+        revenue: revenueReports,
+        budget: budgetAllocations,
+        liveMetrics: {
+          totalPaidCitationsCount: paidCits.length,
+          totalCitationsIssuedCount: citations.length,
+          liveCitationsRevenue,
+          livePaymentsRevenue,
+          verifiedPaymentsCount: verifiedPayments.length,
+          pendingPaymentsCount: payments.filter((p: any) => p.status === "pending_verification").length,
+        },
       };
     } catch (err) {
       console.error("[Supabase Error: Fetch Finance Analytics]", err);
-      return { revenue: [], budget: [] };
+      return { revenue: [], budget: [], liveMetrics: null };
     }
   });
 
