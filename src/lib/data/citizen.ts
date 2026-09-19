@@ -8,6 +8,8 @@ import {
   serverSaveCitizenProfile,
   serverCitizenLogin,
   serverResetCitizenPassword,
+  serverDispatchPasswordResetOtp,
+  serverVerifyAndResetPassword,
   serverAddCitizenVehicle,
   serverRemoveCitizenVehicle,
   serverRedeemCitizenVoucher,
@@ -323,6 +325,39 @@ export function useCitizenAuth() {
     return fresh as CitizenProfile;
   };
 
+  const sendPasswordResetOtp = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new Error("Please enter your registered email address.");
+    }
+    return await serverDispatchPasswordResetOtp({
+      data: { email: cleanEmail, portal: "citizen" },
+    });
+  };
+
+  const resetPasswordWithOtp = async (email: string, code: string, newPassword: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = code.trim();
+    const cleanPassword = newPassword.trim();
+    if (!cleanEmail) {
+      throw new Error("Email address is required.");
+    }
+    if (cleanCode.length !== 6) {
+      throw new Error("Please enter the complete 6-digit verification code.");
+    }
+    if (cleanPassword.length < 6) {
+      throw new Error("New password must be at least 6 characters.");
+    }
+    return await serverVerifyAndResetPassword({
+      data: {
+        email: cleanEmail,
+        code: cleanCode,
+        newPassword: cleanPassword,
+        portal: "citizen",
+      },
+    });
+  };
+
   const resetPassword = async (email: string, newPassword: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = newPassword.trim();
@@ -348,6 +383,8 @@ export function useCitizenAuth() {
     isAuthenticated,
     login,
     signup,
+    sendPasswordResetOtp,
+    resetPasswordWithOtp,
     resetPassword,
     logout,
   };

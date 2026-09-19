@@ -508,3 +508,130 @@ export async function send2FAOtpEmail({
   console.error(`[2FA OTP] SMTP credentials not found in environment (SMTP_USER or SMTP_PASS missing). Cannot dispatch to ${recipientEmail}`);
   throw new Error("SMTP credentials missing on server. Please configure SMTP_USER and SMTP_PASS in your hosting environment.");
 }
+
+/**
+ * Sends a 6-digit Password Reset OTP code directly via SMTP for Citizen Portal or Command Center.
+ */
+export async function sendPasswordResetOtpEmail({
+  recipientEmail,
+  otpCode,
+  portalType,
+}: {
+  recipientEmail: string;
+  otpCode: string;
+  portalType: "citizen" | "command_center";
+}): Promise<EmailDispatchResult> {
+  const isCitizen = portalType === "citizen";
+  const portalName = isCitizen ? "Citizen Portal" : "Command Center";
+  const subject = `[QC Flow Guardian] ${portalName} Password Reset Code: ${otpCode}`;
+
+  const primaryColor = isCitizen ? "#047857" : "#0f766e";
+  const gradientHeader = isCitizen
+    ? "linear-gradient(135deg, #065f46 0%, #047857 100%)"
+    : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)";
+  const badgeBarColor = isCitizen ? "#10b981" : "#0284c7";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${portalName} Password Reset Code</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #0b0f19; color: #f8fafc; }
+    .container { max-width: 540px; margin: 30px auto; background: #161e2e; border-radius: 20px; overflow: hidden; border: 1px solid #283548; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+    .header { background: ${gradientHeader}; color: #ffffff; padding: 28px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+    .header p { margin: 4px 0 0; font-size: 11px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; }
+    .badge-bar { background-color: ${badgeBarColor}; color: #ffffff; padding: 8px 16px; font-size: 11px; font-weight: 700; text-align: center; letter-spacing: 0.1em; text-transform: uppercase; }
+    .body { padding: 32px 24px; text-align: center; }
+    .title { font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
+    .subtitle { font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; text-align: left; }
+    .otp-box { background: #0b0f19; border: 2px solid ${badgeBarColor}; border-radius: 14px; padding: 22px; margin: 0 auto 24px; display: inline-block; }
+    .otp-code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 38px; font-weight: 800; color: #38bdf8; letter-spacing: 0.25em; text-indent: 0.25em; }
+    .expiry { font-size: 11px; color: #cbd5e1; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 10px; }
+    .warning-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 14px 16px; font-size: 11px; color: #fca5a5; line-height: 1.5; text-align: left; margin-bottom: 24px; }
+    .footer { background-color: #0b0f19; padding: 20px; font-size: 10px; color: #64748b; text-align: center; border-top: 1px solid #283548; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Quezon City Traffic Operations</h1>
+      <p>Barangay Culiat · Flow Guardian Platform</p>
+    </div>
+    <div class="badge-bar">
+      🔑 ${portalName} · 6-Digit Password Reset Verification
+    </div>
+    <div class="body">
+      <div class="title">Password Reset Authorization Code</div>
+      <div class="subtitle">
+        A password reset request was initiated for your ${portalName} account (<strong>${recipientEmail}</strong>).<br /><br />
+        Please enter the 6-digit verification code below in the portal window to authorize setting a new password:
+      </div>
+
+      <div class="otp-box">
+        <div class="otp-code">${otpCode}</div>
+        <div class="expiry">Valid for 10 minutes</div>
+      </div>
+
+      <div class="warning-box">
+        <strong>SECURITY NOTICE:</strong> Do not share this 6-digit code with anyone. QC LGU administrators or traffic personnel will never ask for your verification code. If you did not initiate this password reset, your account is still secure and you can disregard this message.
+      </div>
+    </div>
+    <div class="footer">
+      This is an automated security transmission from the Quezon City DPOS Traffic Operations Platform.<br />
+      Barangay Culiat, Quezon City · Republic of the Philippines
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const smtpHost = process.env.SMTP_HOST?.trim() || "smtp.gmail.com";
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const smtpPass = process.env.SMTP_PASS?.trim().replace(/\s+/g, "");
+  const smtpFrom = process.env.SMTP_FROM?.trim() || `Quezon City Traffic System <${smtpUser || "escalavincenico28@gmail.com"}>`;
+
+  if (smtpUser && smtpPass) {
+    try {
+      console.log(`[Password Reset OTP] Transmitting 6-digit code via SMTP (${smtpHost}) to ${recipientEmail} (${portalType})...`);
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: recipientEmail,
+        subject,
+        text: `Your QC Flow Guardian (${portalName}) 6-Digit Password Reset Code is: ${otpCode}. Valid for 10 minutes. Do NOT share this code.`,
+        html,
+      });
+
+      console.log(`[Password Reset OTP] Successfully sent to ${recipientEmail}! MessageId: ${info.messageId}`);
+      return {
+        success: true,
+        delivered: true,
+        provider: "smtp",
+        messageId: info.messageId,
+        subject,
+        html,
+      };
+    } catch (err: any) {
+      console.error("[Password Reset OTP] SMTP transmission error:", err?.message || err);
+      throw new Error(`SMTP Error: ${err?.message || "Failed to transmit password reset email via SMTP"}`);
+    }
+  }
+
+  console.error(`[Password Reset OTP] SMTP credentials not found in environment (SMTP_USER or SMTP_PASS missing). Cannot dispatch to ${recipientEmail}`);
+  throw new Error("SMTP credentials missing on server. Please configure SMTP_USER and SMTP_PASS in your hosting environment.");
+}

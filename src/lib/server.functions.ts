@@ -4034,3 +4034,225 @@ export const serverVerify2FAOtp = createServerFn({ method: "POST" })
     };
   });
 
+// -------------------------------------------------------------
+// PASSWORD RESET 6-DIGIT OTP DISPATCH & VERIFY (CITIZEN & COMMAND CENTER)
+// -------------------------------------------------------------
+const passwordResetOtpStore = new Map<
+  string,
+  { code: string; expiresAt: number; attempts: number; portal: "citizen" | "command_center" }
+>();
+
+const sendPasswordResetOtpSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  portal: z.enum(["citizen", "command_center"]),
+});
+
+export const serverDispatchPasswordResetOtp = createServerFn({ method: "POST" })
+  .validator((data: unknown) => sendPasswordResetOtpSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanEmail = data.email.toLowerCase().trim();
+    const portal = data.portal;
+    const storeKey = `${portal}:${cleanEmail}`;
+
+    // 1. Verify existence of account
+    if (portal === "citizen") {
+      const { data: profiles, error } = await supabaseAdmin
+        .from("citizen_profiles")
+        .select("id, full_name")
+        .ilike("email", cleanEmail)
+        .limit(1);
+
+      if (error || !profiles || profiles.length === 0) {
+        throw new Error("No citizen account found with this email address. Please check your email or register a new profile.");
+      }
+    } else {
+      // Command Center: Verify user in Supabase Auth
+      try {
+        const { data: authUsers, error: usersErr } = await supabaseAdmin.auth.admin.listUsers();
+        if (usersErr) {
+          console.warn("[Password Reset OTP] Could not list auth users:", usersErr);
+        } else {
+          const userExists = authUsers.users.some(
+            (u) => u.email?.toLowerCase().trim() === cleanEmail
+          );
+          if (!userExists) {
+            throw new Error("No official command center personnel account found with this email address.");
+          }
+        }
+      } catch (err: any) {
+        if (err.message?.includes("No official command center personnel account")) {
+          throw err;
+        }
+        console.warn("[Password Reset OTP] Non-fatal auth check warning:", err);
+      }
+    }
+
+    // 2. Generate secure 6-digit numeric OTP code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    passwordResetOtpStore.set(storeKey, {
+      code: otpCode,
+      expiresAt,
+      attempts: 0,
+      portal,
+    });
+
+    console.log(`[Password Reset OTP Engine] Generated 6-digit code for ${cleanEmail} (${portal}): ${otpCode}`);
+
+    // 3. Dispatch via SMTP
+    try {
+      const { sendPasswordResetOtpEmail } = await import("@/lib/email.service.server");
+      const result = await sendPasswordResetOtpEmail({
+        recipientEmail: cleanEmail,
+        otpCode,
+        portalType: portal,
+      });
+
+      // 4. Audit Log
+      try {
+        await supabaseAdmin.from("audit_logs").insert({
+          actor_name: cleanEmail,
+          actor_role: portal === "citizen" ? "citizen_user" : "command_personnel",
+          action: "PASSWORD_RESET_OTP_ISSUED",
+          target_resource: portal === "citizen" ? "Citizen Portal Auth" : "Command Center Auth",
+          details: `6-digit Password Reset OTP dispatched via ${result.provider}. Message ID: ${result.messageId || "N/A"}`,
+        });
+      } catch {
+        // Non-blocking
+      }
+
+      return {
+        success: true,
+        expiresInSeconds: 600,
+        provider: result.provider,
+        message: `A 6-digit verification code has been dispatched via SMTP to ${cleanEmail}.`,
+      };
+    } catch (err: any) {
+      console.error("[Password Reset OTP Engine] Failed to dispatch OTP:", err);
+      throw new Error(`Failed to transmit password reset code: ${err?.message || err}`);
+    }
+  });
+
+const verifyAndResetPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  code: z.string().min(6, "Code must be 6 digits").max(6, "Code must be 6 digits"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  portal: z.enum(["citizen", "command_center"]),
+});
+
+export const serverVerifyAndResetPassword = createServerFn({ method: "POST" })
+  .validator((data: unknown) => verifyAndResetPasswordSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanEmail = data.email.toLowerCase().trim();
+    const cleanCode = data.code.trim();
+    const cleanPassword = data.newPassword.trim();
+    const portal = data.portal;
+    const storeKey = `${portal}:${cleanEmail}`;
+
+    const stored = passwordResetOtpStore.get(storeKey);
+
+    if (!stored) {
+      throw new Error("No active password reset code found. Please request a new 6-digit code.");
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      passwordResetOtpStore.delete(storeKey);
+      throw new Error("This verification code has expired. Please request a new code.");
+    }
+
+    stored.attempts += 1;
+    if (stored.attempts > 5) {
+      passwordResetOtpStore.delete(storeKey);
+      throw new Error("Too many invalid attempts. For your security, please request a new verification code.");
+    }
+
+    if (stored.code !== cleanCode) {
+      throw new Error("Invalid 6-digit verification code. Please check your inbox and enter the exact 6 digits.");
+    }
+
+    // OTP Code is verified! Proceed with password update:
+    if (portal === "citizen") {
+      const { hashPassword, setFallbackPasswordHash } = await import("@/lib/citizen-auth.server");
+
+      const { data: profiles, error } = await supabaseAdmin
+        .from("citizen_profiles")
+        .select("id")
+        .ilike("email", cleanEmail)
+        .limit(1);
+
+      if (error || !profiles || profiles.length === 0) {
+        throw new Error("No citizen account found for this email address.");
+      }
+
+      const newHash = hashPassword(cleanPassword);
+      setFallbackPasswordHash(cleanEmail, newHash);
+
+      try {
+        await supabaseAdmin
+          .from("citizen_profiles")
+          .update({ password_hash: newHash, updated_at: new Date().toISOString() } as any)
+          .eq("id", profiles[0].id);
+      } catch (updateErr: any) {
+        console.warn("[Password Reset OTP] Could not persist password_hash to citizen_profiles:", updateErr?.message);
+      }
+
+      // Check if user also has a Supabase Auth record and sync it
+      try {
+        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const authUser = authUsers?.users.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+        if (authUser) {
+          await supabaseAdmin.auth.admin.updateUserById(authUser.id, { password: cleanPassword });
+        }
+      } catch {
+        // Non-blocking sync
+      }
+    } else {
+      // Command Center: Update Supabase Auth user password
+      const { data: authUsers, error: usersErr } = await supabaseAdmin.auth.admin.listUsers();
+      if (usersErr || !authUsers) {
+        throw new Error("Failed to access system authentication records.");
+      }
+
+      const targetUser = authUsers.users.find(
+        (u) => u.email?.toLowerCase().trim() === cleanEmail
+      );
+
+      if (!targetUser) {
+        throw new Error("No command center user account found with this email address.");
+      }
+
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+        password: cleanPassword,
+      });
+
+      if (updateErr) {
+        throw new Error(`Failed to update password: ${updateErr.message}`);
+      }
+    }
+
+    // Clean up used OTP
+    passwordResetOtpStore.delete(storeKey);
+
+    // Audit Log
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_name: cleanEmail,
+        actor_role: portal === "citizen" ? "citizen_user" : "command_personnel",
+        action: "PASSWORD_RESET_COMPLETED",
+        target_resource: portal === "citizen" ? "Citizen Portal Auth" : "Command Center Auth",
+        details: `Password successfully reset via 6-digit OTP verification.`,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return {
+      success: true,
+      message: "Password updated successfully. You may now sign in with your new password.",
+    };
+  });
+
+

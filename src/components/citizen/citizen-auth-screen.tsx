@@ -1,12 +1,12 @@
-import { useState } from "react";
-import { User, Loader2, Mail, Lock, Phone, MapPin, Car, ArrowRight, UserPlus, LogIn, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { User, Loader2, Mail, Lock, Phone, MapPin, Car, ArrowRight, UserPlus, LogIn, CheckCircle2, KeyRound, ArrowLeft, RotateCw, ShieldCheck } from "lucide-react";
 import { useCitizenAuth } from "@/lib/data/citizen";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 
 export function CitizenAuthScreen() {
-  const { login, signup, resetPassword } = useCitizenAuth();
+  const { login, signup, sendPasswordResetOtp, resetPasswordWithOtp } = useCitizenAuth();
   const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [busy, setBusy] = useState(false);
 
@@ -26,8 +26,30 @@ export function CitizenAuthScreen() {
 
   // Reset Password State
   const [resetEmail, setResetEmail] = useState("");
+  const [resetStep, setResetStep] = useState<"request" | "verify">("request");
+  const [resetOtpDigits, setResetOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
+  const [resetCooldown, setResetCooldown] = useState(0);
+  const resetInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
+  // Countdown timer for resend cooldown
+  useEffect(() => {
+    if (resetCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResetCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resetCooldown]);
+
+  // Focus first empty OTP box when entering verify step
+  useEffect(() => {
+    if (mode === "reset" && resetStep === "verify") {
+      const firstEmpty = resetOtpDigits.findIndex((d) => !d);
+      const targetIndex = firstEmpty !== -1 ? firstEmpty : 0;
+      resetInputRefs.current[targetIndex]?.focus();
+    }
+  }, [mode, resetStep]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,15 +102,73 @@ export function CitizenAuthScreen() {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendResetOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const cleanEmail = resetEmail.trim();
-    const cleanPassword = newPassword.trim();
-    if (!cleanEmail || !cleanPassword) {
-      toast.error("Please enter your email and new password.");
+    if (!cleanEmail) {
+      toast.error("Please enter your registered email address.");
       return;
     }
-    if (cleanPassword.length < 6) {
+    setBusy(true);
+    try {
+      await sendPasswordResetOtp(cleanEmail);
+      setResetStep("verify");
+      setResetCooldown(60);
+      toast.success(`6-digit code dispatched to ${cleanEmail}. Please check your inbox.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to dispatch verification code.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleOtpDigitChange = (index: number, value: string) => {
+    // Handle pasting 6-digit code
+    if (value.length > 1) {
+      const cleanPasted = value.replace(/\D/g, "").slice(0, 6);
+      if (cleanPasted) {
+        const nextDigits = [...resetOtpDigits];
+        for (let i = 0; i < cleanPasted.length; i++) {
+          if (index + i < 6) nextDigits[index + i] = cleanPasted[i];
+        }
+        setResetOtpDigits(nextDigits);
+        const nextFocus = Math.min(index + cleanPasted.length, 5);
+        resetInputRefs.current[nextFocus]?.focus();
+        return;
+      }
+    }
+
+    const singleDigit = value.slice(-1).replace(/\D/g, "");
+    const nextDigits = [...resetOtpDigits];
+    nextDigits[index] = singleDigit;
+    setResetOtpDigits(nextDigits);
+
+    if (singleDigit && index < 5) {
+      resetInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !resetOtpDigits[index] && index > 0) {
+      resetInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerifyAndResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = resetEmail.trim();
+    const code = resetOtpDigits.join("").trim();
+    const cleanPassword = newPassword.trim();
+
+    if (!cleanEmail) {
+      toast.error("Email address is missing.");
+      return;
+    }
+    if (code.length !== 6) {
+      toast.error("Please enter the complete 6-digit verification code sent to your email.");
+      return;
+    }
+    if (!cleanPassword || cleanPassword.length < 6) {
       toast.error("New password must be at least 6 characters long.");
       return;
     }
@@ -96,15 +176,20 @@ export function CitizenAuthScreen() {
       toast.error("Passwords do not match. Please verify.");
       return;
     }
+
     setBusy(true);
     try {
-      await resetPassword(cleanEmail, cleanPassword);
+      await resetPasswordWithOtp(cleanEmail, code, cleanPassword);
       toast.success("Password updated successfully! You can now sign in.");
       setSignInEmail(cleanEmail);
       setSignInPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setResetOtpDigits(["", "", "", "", "", ""]);
+      setResetStep("request");
       setMode("signin");
     } catch (err: any) {
-      toast.error(err.message || "Failed to reset password");
+      toast.error(err.message || "Failed to reset password. Please check your 6-digit code.");
     } finally {
       setBusy(false);
     }
@@ -224,6 +309,8 @@ export function CitizenAuthScreen() {
                   type="button"
                   onClick={() => {
                     setResetEmail(signInEmail);
+                    setResetStep("request");
+                    setResetOtpDigits(["", "", "", "", "", ""]);
                     setMode("reset");
                   }}
                   className="text-[11px] font-medium text-primary hover:underline"
@@ -370,13 +457,17 @@ export function CitizenAuthScreen() {
               Create Citizen Account
             </button>
           </form>
-        ) : (
-          /* RESET PASSWORD FORM */
-          <form onSubmit={handleResetPassword} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
+        ) : resetStep === "request" ? (
+          /* RESET PASSWORD STEP 1: REQUEST 6-DIGIT OTP */
+          <form onSubmit={handleSendResetOtp} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b border-border pb-3">
               <KeyRound className="size-4 text-primary" />
-              Update or Set Account Password
+              Reset Account Password via 6-Digit OTP
             </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Enter the email address registered with your citizen motorist account. We will dispatch a secure 6-digit verification code directly to your email.
+            </p>
 
             <label className="flex flex-col gap-1.5">
               <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
@@ -392,44 +483,123 @@ export function CitizenAuthScreen() {
               />
             </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-                <Lock className="size-3 text-primary" /> New Password (Min. 6 characters)
-              </span>
-              <input
-                type="password"
-                required
-                minLength={6}
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
+            <button
+              type="submit"
+              disabled={busy || !resetEmail.trim()}
+              className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+              Send 6-Digit Verification Code
+            </button>
+          </form>
+        ) : (
+          /* RESET PASSWORD STEP 2: VERIFY 6-DIGIT OTP & SET NEW PASSWORD */
+          <form onSubmit={handleVerifyAndResetPassword} className="rounded-2xl border border-border bg-panel p-6 shadow-xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <KeyRound className="size-4 text-primary" />
+                Verify 6-Digit OTP & Set Password
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetStep("request")}
+                className="text-[11px] font-medium text-primary hover:underline"
+              >
+                Change Email
+              </button>
+            </div>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
-                <Lock className="size-3 text-primary" /> Confirm New Password
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground leading-relaxed">
+              A 6-digit verification code has been dispatched via SMTP to <strong className="text-foreground font-mono-tab">{resetEmail}</strong>. Valid for 10 minutes.
+            </div>
+
+            {/* 6-Digit OTP Boxes */}
+            <div>
+              <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle mb-2">
+                <KeyRound className="size-3 text-primary" /> 6-Digit Verification Code
               </span>
-              <input
-                type="password"
-                required
-                minLength={6}
-                placeholder="••••••••"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
+              <div className="flex justify-between gap-1.5 sm:gap-2">
+                {resetOtpDigits.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => {
+                      resetInputRefs.current[i] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpDigitChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    className="size-11 sm:size-12 rounded-xl border border-border bg-background text-center font-mono-tab text-xl font-bold text-foreground transition-all focus:border-primary focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                  <Lock className="size-3 text-primary" /> New Password (Min. 6)
+                </span>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-center gap-1.5 font-mono-tab text-[10px] font-semibold uppercase tracking-widest text-subtle">
+                  <Lock className="size-3 text-primary" /> Confirm Password
+                </span>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+            </div>
 
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || resetOtpDigits.some((d) => !d) || !newPassword || !confirmNewPassword}
               className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all disabled:opacity-50"
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-              Save New Password
+              Verify Code & Update Password
             </button>
+
+            <div className="flex items-center justify-between pt-2 border-t border-border/60">
+              <button
+                type="button"
+                disabled={busy || resetCooldown > 0}
+                onClick={() => handleSendResetOtp()}
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline disabled:opacity-50 disabled:no-underline font-mono-tab text-[11px]"
+              >
+                <RotateCw className="size-3" />
+                {resetCooldown > 0 ? `Resend code in ${resetCooldown}s` : "Resend 6-digit code"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setResetStep("request");
+                  setMode("signin");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono-tab text-[11px]"
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         )}
       </main>
