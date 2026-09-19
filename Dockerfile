@@ -15,9 +15,19 @@ RUN npm install --no-audit
 # Copy application source code
 COPY . .
 
-# Build standalone node-server bundle
-ENV NITRO_PRESET=node-server
-ENV NODE_ENV=production
+# Build-time environment variables for Vite static client bundle
+ARG VITE_AI_SERVICE_URL="https://ai-detection-back-end.hostforgeplatforms.com"
+ARG VITE_SUPABASE_URL="https://wcprajgotifqgwdjnpss.supabase.co"
+ARG VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_Xw_6U8zHYrNcuU--0tbbmQ_QTDbsQew"
+ARG VITE_SUPABASE_PROJECT_ID="wcprajgotifqgwdjnpss"
+
+ENV VITE_AI_SERVICE_URL=${VITE_AI_SERVICE_URL} \
+    VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
+    VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY} \
+    VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID} \
+    NITRO_PRESET=node-server \
+    NODE_ENV=production
+
 RUN npm run build
 
 # ==============================================================================

@@ -100,9 +100,28 @@ type MicroserviceHealth = {
   db_connected: boolean;
 };
 
-const DEFAULT_MICROSERVICE_URL =
-  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_AI_SERVICE_URL) ||
-  "http://127.0.0.1:8000";
+const HOSTFORGE_AI_ONLINE_URL = "https://ai-detection-back-end.hostforgeplatforms.com";
+
+const getInitialMicroserviceUrl = () => {
+  if (typeof window !== "undefined") {
+    const saved = localStorage.getItem("qc_ai_microservice_url");
+    if (saved && saved.trim()) return saved.trim();
+  }
+  const envUrl = typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_AI_SERVICE_URL;
+  if (envUrl && envUrl.trim() && !envUrl.includes("127.0.0.1") && !envUrl.includes("localhost")) {
+    return envUrl.trim();
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+    if (!isLocal) {
+      return HOSTFORGE_AI_ONLINE_URL;
+    }
+  }
+  return envUrl || "http://127.0.0.1:8000";
+};
+
+const DEFAULT_MICROSERVICE_URL = getInitialMicroserviceUrl();
 
 const REGISTERED_TEST_VEHICLES = [
   { plate: "NBA-1121", model: "Ford Raptor black", color: "Black" },
@@ -279,13 +298,18 @@ export function Live4kWebcamEngine({
   }, [cameraCode]);
 
   // 1. Health Check Poller for Python AI Microservice
-  const checkMicroserviceHealth = useCallback(async () => {
+  const checkMicroserviceHealth = useCallback(async (overrideUrl?: string) => {
+    const targetUrl = (typeof overrideUrl === "string" ? overrideUrl : microserviceUrl).trim();
+    if (!targetUrl) return;
     try {
-      const res = await fetch(`${microserviceUrl}/health`, { method: "GET", cache: "no-cache" });
+      const res = await fetch(`${targetUrl}/health`, { method: "GET", cache: "no-cache" });
       if (res.ok) {
         const data = await res.json();
         setMicroserviceHealth(data);
         setMicroserviceConnected(true);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("qc_ai_microservice_url", targetUrl);
+        }
       } else {
         setMicroserviceConnected(false);
       }
@@ -943,7 +967,7 @@ export function Live4kWebcamEngine({
               <span className="font-mono-tab text-[10px] text-muted-foreground">
                 {microserviceConnected
                   ? `${microserviceHealth?.model || "YOLOv8n + OpenCV 5.0.0"} · Real Ingestion`
-                  : "Connect to http://127.0.0.1:8000"}
+                  : `Connecting to ${microserviceUrl || "AI Microservice"}...`}
               </span>
             </div>
           </div>
@@ -992,7 +1016,7 @@ export function Live4kWebcamEngine({
           </button>
 
           <button
-            onClick={checkMicroserviceHealth}
+            onClick={() => checkMicroserviceHealth()}
             className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-panel-elevated p-2 text-xs text-muted-foreground transition-colors hover:text-foreground hover:rotate-180"
             title="Refresh AI Microservice Health"
           >
@@ -1549,18 +1573,29 @@ export function Live4kWebcamEngine({
 
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-muted-foreground">Microservice URL:</label>
+                <label className="text-muted-foreground whitespace-nowrap">Microservice URL:</label>
                 <input
                   type="text"
                   value={microserviceUrl}
                   onChange={(e) => setMicroserviceUrl(e.target.value)}
+                  placeholder="https://ai-detection-back-end.hostforgeplatforms.com"
                   className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-foreground"
                 />
                 <button
-                  onClick={checkMicroserviceHealth}
-                  className="rounded-lg bg-primary px-3 py-1.5 text-white font-bold"
+                  onClick={() => checkMicroserviceHealth(microserviceUrl)}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-white font-bold hover:bg-primary/90 transition-colors"
                 >
                   Ping
+                </button>
+                <button
+                  onClick={() => {
+                    setMicroserviceUrl(HOSTFORGE_AI_ONLINE_URL);
+                    checkMicroserviceHealth(HOSTFORGE_AI_ONLINE_URL);
+                  }}
+                  className="rounded-lg border border-border bg-panel-elevated px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Reset to official HostForge AI Cloud endpoint"
+                >
+                  HostForge
                 </button>
               </div>
 

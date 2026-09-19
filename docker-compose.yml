@@ -6,6 +6,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_AI_SERVICE_URL=${VITE_AI_SERVICE_URL:-https://ai-detection-back-end.hostforgeplatforms.com}
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://wcprajgotifqgwdjnpss.supabase.co}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-sb_publishable_Xw_6U8zHYrNcuU--0tbbmQ_QTDbsQew}
+        - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID:-wcprajgotifqgwdjnpss}
     container_name: qc-flow-guardian-web
     restart: unless-stopped
     ports:
@@ -17,8 +22,8 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NITRO_PRESET=node-server
-      # Change localhost to your HostForge server IP or domain in production
-      - VITE_AI_SERVICE_URL=http://localhost:8000
+      # Set VITE_AI_SERVICE_URL to HostForge AI endpoint or override via .env
+      - VITE_AI_SERVICE_URL=${VITE_AI_SERVICE_URL:-https://ai-detection-back-end.hostforgeplatforms.com}
     depends_on:
       ai-service:
         condition: service_started
